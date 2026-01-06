@@ -32,6 +32,25 @@ binding = "AI"
 remote = true
 
 # =============================================================================
+# QUEUE BINDINGS
+# =============================================================================
+# Cloudflare Queues for durable async job processing.
+# Free tier: 1 million operations/month
+# Message limit: 128 KB (we only send job IDs, so ~30 bytes)
+
+# Producer binding - sends messages to the queue
+[[queues.producers]]
+binding = "JOB_QUEUE"
+queue = "zehire-jobs-dev"
+
+# Consumer binding - processes messages from the queue
+[[queues.consumers]]
+queue = "zehire-jobs-dev"
+max_batch_size = 1
+max_retries = 3
+dead_letter_queue = "zehire-jobs-dlq-dev"
+
+# =============================================================================
 # ENVIRONMENT: STAGING
 # =============================================================================
 [env.staging]
@@ -49,6 +68,17 @@ database_id = "REPLACE_WITH_STAGING_DATABASE_ID"
 ENVIRONMENT = "staging"
 LOG_LEVEL = "debug"
 LLM_PROVIDER = "workers-ai"  # "workers-ai" (free) or "anthropic" (paid)
+
+# Staging queue bindings
+[[env.staging.queues.producers]]
+binding = "JOB_QUEUE"
+queue = "zehire-jobs-staging"
+
+[[env.staging.queues.consumers]]
+queue = "zehire-jobs-staging"
+max_batch_size = 1
+max_retries = 3
+dead_letter_queue = "zehire-jobs-dlq-staging"
 
 # =============================================================================
 # ENVIRONMENT: PRODUCTION
@@ -68,6 +98,17 @@ database_id = "REPLACE_WITH_PRODUCTION_DATABASE_ID"
 ENVIRONMENT = "production"
 LOG_LEVEL = "info"
 LLM_PROVIDER = "workers-ai"  # "workers-ai" (free) or "anthropic" (paid)
+
+# Production queue bindings
+[[env.production.queues.producers]]
+binding = "JOB_QUEUE"
+queue = "zehire-jobs-production"
+
+[[env.production.queues.consumers]]
+queue = "zehire-jobs-production"
+max_batch_size = 1
+max_retries = 3
+dead_letter_queue = "zehire-jobs-dlq-production"
 
 # =============================================================================
 # SECRETS (set via wrangler secret put)

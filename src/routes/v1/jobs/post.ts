@@ -1,7 +1,7 @@
 /**
  * POST /v1/jobs
  * =============
- * Create a new job and start async processing.
+ * Create a new job and queue for async processing.
  *
  * Returns immediately with job ID. Client should poll GET /v1/jobs/:id
  * to check processing status and retrieve results.
@@ -9,7 +9,6 @@
 
 import type { Context } from "hono";
 import { CreateJobInputSchema, JobRepository, JobService } from "../../../domain/jobs";
-import { createLLMClient } from "../../../lib/llm";
 import type { Env } from "../../../types/bindings";
 
 /**
@@ -45,12 +44,11 @@ export async function createJob(c: Context<{ Bindings: Env }>): Promise<Response
 
   // Create service with dependencies
   const repository = new JobRepository(c.env.DB);
-  const llmClient = createLLMClient({ env: c.env });
-  const service = new JobService(repository, llmClient);
+  const service = new JobService(repository, c.env.JOB_QUEUE);
 
-  // Create job and start processing
-  const result = await service.createJob(input, c.executionCtx);
+  // Create job and queue for processing
+  const result = await service.createJob(input);
 
-  // Return 202 Accepted (processing started, not complete)
+  // Return 202 Accepted (processing queued, not complete)
   return c.json(result, 202);
 }

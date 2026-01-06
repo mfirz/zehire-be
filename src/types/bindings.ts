@@ -33,6 +33,16 @@ export interface Env {
   AI: Ai;
 
   // ==========================================================================
+  // QUEUE BINDINGS
+  // ==========================================================================
+
+  /**
+   * Job processing queue for durable async job processing.
+   * Free tier: 1 million operations/month
+   */
+  JOB_QUEUE: Queue<JobQueueMessage>;
+
+  // ==========================================================================
   // KV BINDINGS (Future)
   // ==========================================================================
 
@@ -160,3 +170,19 @@ export type JobErrorCode = (typeof JOB_ERROR_CODES)[number];
 export const LLM_PROVIDERS = ["workers-ai", "anthropic"] as const;
 
 export type LLMProvider = (typeof LLM_PROVIDERS)[number];
+
+// =============================================================================
+// QUEUE MESSAGE TYPES
+// =============================================================================
+
+/**
+ * Message payload for job processing queue.
+ * Keep this small - full job data is in D1.
+ */
+export interface JobQueueMessage {
+  /** Job ID to process */
+  jobId: string;
+
+  /** Timestamp when message was created (for debugging) */
+  createdAt: string;
+}

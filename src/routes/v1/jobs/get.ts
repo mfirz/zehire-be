@@ -12,7 +12,6 @@
 
 import type { Context } from "hono";
 import { JobRepository, JobService } from "../../../domain/jobs";
-import { createLLMClient } from "../../../lib/llm";
 import type { Env } from "../../../types/bindings";
 
 export async function getJob(c: Context<{ Bindings: Env }>): Promise<Response> {
@@ -24,8 +23,7 @@ export async function getJob(c: Context<{ Bindings: Env }>): Promise<Response> {
 
   // Create service with dependencies
   const repository = new JobRepository(c.env.DB);
-  const llmClient = createLLMClient({ env: c.env });
-  const service = new JobService(repository, llmClient);
+  const service = new JobService(repository, c.env.JOB_QUEUE);
 
   // Get job status
   const result = await service.getJobStatus(jobId);

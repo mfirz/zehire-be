@@ -10,6 +10,9 @@ export { JobRepository } from "./repository";
 // Service
 export { JobService } from "./service";
 
+// Processor (for queue consumer)
+export { JobProcessor } from "./processor";
+
 // Schemas and types
 export {
   CreateJobInputSchema,
