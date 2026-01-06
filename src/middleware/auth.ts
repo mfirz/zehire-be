@@ -20,7 +20,10 @@ import type { Env } from "../types/bindings";
  * app.use("/v1/*", apiKeyAuth);
  * ```
  */
-export async function apiKeyAuth(c: Context<{ Bindings: Env }>, next: Next): Promise<Response | void> {
+export async function apiKeyAuth(
+  c: Context<{ Bindings: Env }>,
+  next: Next
+): Promise<Response | void> {
   const authHeader = c.req.header("Authorization");
 
   if (!authHeader) {
@@ -52,7 +55,7 @@ export async function apiKeyAuth(c: Context<{ Bindings: Env }>, next: Next): Pro
   const providedKey = match[1];
   const expectedKey = c.env.API_KEY;
 
-  console.log("providedKey", providedKey, expectedKey)
+  console.log("providedKey", providedKey, expectedKey);
 
   // Constant-time comparison to prevent timing attacks
   // providedKey is guaranteed to exist by the regex match above

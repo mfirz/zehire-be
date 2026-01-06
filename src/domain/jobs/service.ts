@@ -12,12 +12,7 @@
 
 import type { Env } from "../../types/bindings";
 import { JobRepository } from "./repository";
-import type {
-  CreateJobInput,
-  CreateJobResponse,
-  JobRow,
-  JobStatusResponse,
-} from "./schemas";
+import type { CreateJobInput, CreateJobResponse, JobRow, JobStatusResponse } from "./schemas";
 import { JobContextSchema, RenderedQuestionSchema, ResolvedArchetypeSchema } from "./schemas";
 
 // =============================================================================

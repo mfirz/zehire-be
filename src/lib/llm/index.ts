@@ -11,7 +11,11 @@ import { createWorkersAIClient } from "./workers-ai";
 
 // Re-export individual clients
 export { createAnthropicClient, type AnthropicClientOptions } from "./anthropic";
-export { createWorkersAIClient, WORKERS_AI_MODELS, type WorkersAIClientOptions } from "./workers-ai";
+export {
+  createWorkersAIClient,
+  WORKERS_AI_MODELS,
+  type WorkersAIClientOptions,
+} from "./workers-ai";
 
 // =============================================================================
 // LLM CLIENT FACTORY

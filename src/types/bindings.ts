@@ -90,6 +90,65 @@ export interface Env {
    * - "anthropic": Paid Anthropic Claude (requires ANTHROPIC_API_KEY)
    */
   LLM_PROVIDER?: "workers-ai" | "anthropic";
+
+  // ==========================================================================
+  // AUTH CONFIGURATION
+  // ==========================================================================
+
+  /**
+   * Base URL of the application (for magic link generation).
+   * Example: "https://app.zehire.com" or "http://localhost:8787"
+   */
+  APP_BASE_URL: string;
+
+  /**
+   * Magic link token TTL in minutes.
+   * Default: 15 minutes
+   */
+  AUTH_TOKEN_TTL_MINUTES: string;
+
+  /**
+   * Session TTL in minutes.
+   * Default: 1440 (24 hours)
+   */
+  AUTH_SESSION_TTL_MINUTES?: string;
+
+  /**
+   * Secret key for signing JWTs.
+   * Set via: wrangler secret put AUTH_JWT_SECRET
+   */
+  AUTH_JWT_SECRET: string;
+
+  // ==========================================================================
+  // AWS SES CONFIGURATION
+  // ==========================================================================
+
+  /**
+   * AWS Access Key ID for SES.
+   * Set via: wrangler secret put AWS_ACCESS_KEY_ID
+   */
+  AWS_ACCESS_KEY_ID?: string;
+
+  /**
+   * AWS Secret Access Key for SES.
+   * Set via: wrangler secret put AWS_SECRET_ACCESS_KEY
+   */
+  AWS_SECRET_ACCESS_KEY?: string;
+
+  /**
+   * AWS Region for SES (e.g., "us-east-1").
+   */
+  AWS_REGION?: string;
+
+  /**
+   * Verified sender email address for SES.
+   */
+  SES_FROM_EMAIL?: string;
+
+  /**
+   * Optional SES configuration set name.
+   */
+  SES_CONFIGURATION_SET?: string;
 }
 
 // =============================================================================

@@ -12,9 +12,9 @@
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "db:migrate:local": "wrangler d1 execute zehire-db-dev --local --file=./migrations/0001_create_jobs_table.sql",
-    "db:migrate:staging": "wrangler d1 execute zehire-db-staging --env staging --file=./migrations/0001_create_jobs_table.sql",
-    "db:migrate:production": "wrangler d1 execute zehire-db-production --env production --file=./migrations/0001_create_jobs_table.sql"
+    "db:migrate:local": "wrangler d1 execute zehire-db-dev --local --file=./migrations/0001_create_jobs_table.sql && wrangler d1 execute zehire-db-dev --local --file=./migrations/0002_create_auth_tables.sql",
+    "db:migrate:staging": "wrangler d1 execute zehire-db-staging --env staging --file=./migrations/0001_create_jobs_table.sql && wrangler d1 execute zehire-db-staging --env staging --file=./migrations/0002_create_auth_tables.sql",
+    "db:migrate:production": "wrangler d1 execute zehire-db-production --env production --file=./migrations/0001_create_jobs_table.sql && wrangler d1 execute zehire-db-production --env production --file=./migrations/0002_create_auth_tables.sql"
   },
   "dependencies": {
     "hono": "^4.6.14",

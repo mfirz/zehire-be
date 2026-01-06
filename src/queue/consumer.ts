@@ -14,8 +14,8 @@
  */
 
 import type { MessageBatch } from "@cloudflare/workers-types";
-import { JobRepository } from "../domain/jobs/repository";
 import { JobProcessor } from "../domain/jobs/processor";
+import { JobRepository } from "../domain/jobs/repository";
 import { createLLMClient } from "../lib/llm";
 import type { Env, JobQueueMessage } from "../types/bindings";
 
@@ -23,10 +23,7 @@ import type { Env, JobQueueMessage } from "../types/bindings";
  * Queue consumer handler.
  * Called by Cloudflare Workers runtime when messages are available.
  */
-export async function handleQueue(
-  batch: MessageBatch<JobQueueMessage>,
-  env: Env
-): Promise<void> {
+export async function handleQueue(batch: MessageBatch<JobQueueMessage>, env: Env): Promise<void> {
   const repository = new JobRepository(env.DB);
   const llmClient = createLLMClient({ env });
   const processor = new JobProcessor(repository, llmClient);

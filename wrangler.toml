@@ -68,6 +68,9 @@ database_id = "REPLACE_WITH_STAGING_DATABASE_ID"
 ENVIRONMENT = "staging"
 LOG_LEVEL = "debug"
 LLM_PROVIDER = "workers-ai"  # "workers-ai" (free) or "anthropic" (paid)
+APP_BASE_URL = "https://staging.zehire.com"
+AUTH_TOKEN_TTL_MINUTES = "15"
+AUTH_SESSION_TTL_MINUTES = "1440"  # 24 hours
 
 # Staging queue bindings
 [[env.staging.queues.producers]]
@@ -98,6 +101,9 @@ database_id = "REPLACE_WITH_PRODUCTION_DATABASE_ID"
 ENVIRONMENT = "production"
 LOG_LEVEL = "info"
 LLM_PROVIDER = "workers-ai"  # "workers-ai" (free) or "anthropic" (paid)
+APP_BASE_URL = "https://app.zehire.com"
+AUTH_TOKEN_TTL_MINUTES = "15"
+AUTH_SESSION_TTL_MINUTES = "1440"  # 24 hours
 
 # Production queue bindings
 [[env.production.queues.producers]]
@@ -115,7 +121,15 @@ dead_letter_queue = "zehire-jobs-dlq-production"
 # =============================================================================
 # Required secrets for each environment:
 #
-# ANTHROPIC_API_KEY - API key for Claude LLM calls
+# API_KEY - API key for client authentication
+#   wrangler secret put API_KEY --env staging
+#   wrangler secret put API_KEY --env production
+#
+# AUTH_JWT_SECRET - Secret for signing JWT session tokens
+#   wrangler secret put AUTH_JWT_SECRET --env staging
+#   wrangler secret put AUTH_JWT_SECRET --env production
+#
+# ANTHROPIC_API_KEY - API key for Claude LLM calls (optional if using Workers AI)
 #   wrangler secret put ANTHROPIC_API_KEY --env staging
 #   wrangler secret put ANTHROPIC_API_KEY --env production
 #
