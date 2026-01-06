@@ -50,32 +50,32 @@ All errors follow a consistent format:
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `error.code` | string | Machine-readable error code |
-| `error.message` | string | Human-readable description |
+| Field           | Type   | Description                 |
+| --------------- | ------ | --------------------------- |
+| `error.code`    | string | Machine-readable error code |
+| `error.message` | string | Human-readable description  |
 
 ### Common Error Codes
 
-| HTTP Status | Code | Description |
-|-------------|------|-------------|
-| 400 | `VALIDATION_ERROR` | Request body failed validation |
-| 401 | `UNAUTHORIZED` | Missing or invalid authentication |
-| 403 | `FORBIDDEN` | Authenticated but not permitted |
-| 404 | `NOT_FOUND` | Resource does not exist |
-| 500 | `INTERNAL_ERROR` | Unexpected server error |
+| HTTP Status | Code               | Description                       |
+| ----------- | ------------------ | --------------------------------- |
+| 400         | `VALIDATION_ERROR` | Request body failed validation    |
+| 401         | `UNAUTHORIZED`     | Missing or invalid authentication |
+| 403         | `FORBIDDEN`        | Authenticated but not permitted   |
+| 404         | `NOT_FOUND`        | Resource does not exist           |
+| 500         | `INTERNAL_ERROR`   | Unexpected server error           |
 
 ## Endpoint Index
 
 ### v1
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/v1/` | API root |
-| POST | `/v1/jobs` | Create a job |
+| Method | Path       | Description  |
+| ------ | ---------- | ------------ |
+| GET    | `/v1/`     | API root     |
+| POST   | `/v1/jobs` | Create a job |
 
 ### Internal
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/internal/health` | Health check |
+| Method | Path               | Description  |
+| ------ | ------------------ | ------------ |
+| GET    | `/internal/health` | Health check |

@@ -9,17 +9,16 @@
 // =============================================================================
 // FULL PIPELINE
 // =============================================================================
-import { resolveArchetypes, type ResolveArchetypesOptions } from "./resolver"
-import type { JobContext, SignalId } from "./types"
+import { resolveArchetypes, type ResolveArchetypesOptions } from "./resolver";
+import type { ArchetypeResolutionResult, JobContext, SignalId } from "./types";
 import {
-  JOB_DOMAINS,
-  RISK_LEVELS,
-  EXPERIENCE_LEVELS,
   COLLABORATION_LEVELS,
   DECISION_IMPACTS,
+  EXPERIENCE_LEVELS,
+  JOB_DOMAINS,
+  RISK_LEVELS,
   SIGNAL_IDS,
-} from "./types"
-import type { ArchetypeResolutionResult } from "./types"
+} from "./types";
 
 // =============================================================================
 // INPUT TYPES
@@ -30,19 +29,19 @@ import type { ArchetypeResolutionResult } from "./types"
  */
 export interface JobPostingInput {
   /** Job title (e.g., "Senior Software Engineer") */
-  title: string
+  title: string;
 
   /** Full job description */
-  description: string
+  description: string;
 
   /** Optional: Company name for additional context */
-  companyName?: string
+  companyName?: string;
 
   /** Optional: Department or team */
-  department?: string
+  department?: string;
 
   /** Optional: Location (can affect regulatory context) */
-  location?: string
+  location?: string;
 }
 
 // =============================================================================
@@ -60,7 +59,7 @@ Key principles:
 - Infer from explicit statements first, then from implicit signals
 - When uncertain, choose moderate/middle values (medium risk, mid experience)
 - primarySignals should be ordered by importance to the role (max 5)
-- regulatedEnvironment = true only for healthcare, finance, legal, government, or roles explicitly mentioning compliance/regulation`
+- regulatedEnvironment = true only for healthcare, finance, legal, government, or roles explicitly mentioning compliance/regulation`;
 
 /**
  * Build the user prompt with job details and expected schema.
@@ -74,7 +73,7 @@ export function buildInferencePrompt(input: JobPostingInput): string {
     input.location ? `Location: ${input.location}` : null,
   ]
     .filter(Boolean)
-    .join("\n\n")
+    .join("\n\n");
 
   return `Analyze this job posting and return a JSON object with the following structure:
 
@@ -139,7 +138,7 @@ PEOPLE MANAGEMENT: True if role manages direct reports.
 
 REGULATED ENVIRONMENT: True for healthcare, finance, legal, government, or explicit compliance/regulatory mentions.
 
-Return only the JSON object, no explanation.`
+Return only the JSON object, no explanation.`;
 }
 
 // =============================================================================
@@ -152,64 +151,50 @@ Return only the JSON object, no explanation.`
  */
 export function parseJobContextResponse(response: string): JobContext {
   // Extract JSON from response (handle markdown code blocks)
-  let jsonStr = response.trim()
+  let jsonStr = response.trim();
   if (jsonStr.startsWith("```")) {
     jsonStr = jsonStr
       .replace(/```json?\n?/g, "")
       .replace(/```$/g, "")
-      .trim()
+      .trim();
   }
 
-  let parsed: unknown
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(jsonStr)
+    parsed = JSON.parse(jsonStr);
   } catch {
-    throw new Error(`Invalid JSON in LLM response: ${response.slice(0, 200)}`)
+    throw new Error(`Invalid JSON in LLM response: ${response.slice(0, 200)}`);
   }
 
   if (typeof parsed !== "object" || parsed === null) {
-    throw new Error("LLM response is not an object")
+    throw new Error("LLM response is not an object");
   }
 
-  const obj = parsed as Record<string, unknown>
+  const obj = parsed as Record<string, unknown>;
 
   // Validate each field
-  const domain = validateEnum(obj.domain, JOB_DOMAINS, "domain")
-  const riskLevel = validateEnum(obj.riskLevel, RISK_LEVELS, "riskLevel")
-  const experienceLevel = validateEnum(
-    obj.experienceLevel,
-    EXPERIENCE_LEVELS,
-    "experienceLevel"
-  )
+  const domain = validateEnum(obj.domain, JOB_DOMAINS, "domain");
+  const riskLevel = validateEnum(obj.riskLevel, RISK_LEVELS, "riskLevel");
+  const experienceLevel = validateEnum(obj.experienceLevel, EXPERIENCE_LEVELS, "experienceLevel");
   const collaborationRequired = validateEnum(
     obj.collaborationRequired,
     COLLABORATION_LEVELS,
     "collaborationRequired"
-  )
-  const decisionImpact = validateEnum(
-    obj.decisionImpact,
-    DECISION_IMPACTS,
-    "decisionImpact"
-  )
+  );
+  const decisionImpact = validateEnum(obj.decisionImpact, DECISION_IMPACTS, "decisionImpact");
 
-  const primarySignals = validateSignalArray(obj.primarySignals)
+  const primarySignals = validateSignalArray(obj.primarySignals);
 
-  const customerFacing = validateBoolean(obj.customerFacing, "customerFacing")
-  const peopleManagement = validateBoolean(
-    obj.peopleManagement,
-    "peopleManagement"
-  )
-  const regulatedEnvironment = validateBoolean(
-    obj.regulatedEnvironment,
-    "regulatedEnvironment"
-  )
+  const customerFacing = validateBoolean(obj.customerFacing, "customerFacing");
+  const peopleManagement = validateBoolean(obj.peopleManagement, "peopleManagement");
+  const regulatedEnvironment = validateBoolean(obj.regulatedEnvironment, "regulatedEnvironment");
 
   const specialization =
     obj.specialization === null || obj.specialization === undefined
       ? null
       : typeof obj.specialization === "string"
         ? obj.specialization
-        : null
+        : null;
 
   return {
     domain,
@@ -222,47 +207,41 @@ export function parseJobContextResponse(response: string): JobContext {
     peopleManagement,
     regulatedEnvironment,
     experienceLevel,
-  }
+  };
 }
 
-function validateEnum<T extends string>(
-  value: unknown,
-  allowed: readonly T[],
-  field: string
-): T {
+function validateEnum<T extends string>(value: unknown, allowed: readonly T[], field: string): T {
   if (typeof value !== "string" || !allowed.includes(value as T)) {
-    throw new Error(
-      `Invalid ${field}: "${value}". Must be one of: ${allowed.join(", ")}`
-    )
+    throw new Error(`Invalid ${field}: "${value}". Must be one of: ${allowed.join(", ")}`);
   }
-  return value as T
+  return value as T;
 }
 
 function validateBoolean(value: unknown, field: string): boolean {
   if (typeof value !== "boolean") {
-    throw new Error(`Invalid ${field}: expected boolean, got ${typeof value}`)
+    throw new Error(`Invalid ${field}: expected boolean, got ${typeof value}`);
   }
-  return value
+  return value;
 }
 
 function validateSignalArray(value: unknown): SignalId[] {
   if (!Array.isArray(value)) {
-    throw new Error("primarySignals must be an array")
+    throw new Error("primarySignals must be an array");
   }
 
   if (value.length < 1 || value.length > 5) {
-    throw new Error("primarySignals must have 1-5 items")
+    throw new Error("primarySignals must have 1-5 items");
   }
 
-  const signals: SignalId[] = []
+  const signals: SignalId[] = [];
   for (const item of value) {
     if (typeof item !== "string" || !SIGNAL_IDS.includes(item as SignalId)) {
-      throw new Error(`Invalid signal: "${item}"`)
+      throw new Error(`Invalid signal: "${item}"`);
     }
-    signals.push(item as SignalId)
+    signals.push(item as SignalId);
   }
 
-  return signals
+  return signals;
 }
 
 // =============================================================================
@@ -274,11 +253,11 @@ function validateSignalArray(value: unknown): SignalId[] {
  */
 export interface LLMClient {
   complete(params: {
-    system: string
-    user: string
-    temperature?: number
-    maxTokens?: number
-  }): Promise<string>
+    system: string;
+    user: string;
+    temperature?: number;
+    maxTokens?: number;
+  }): Promise<string>;
 }
 
 /**
@@ -308,16 +287,16 @@ export async function inferJobContext(
   client: LLMClient,
   input: JobPostingInput
 ): Promise<JobContext> {
-  const userPrompt = buildInferencePrompt(input)
+  const userPrompt = buildInferencePrompt(input);
 
   const response = await client.complete({
     system: JOB_CONTEXT_SYSTEM_PROMPT,
     user: userPrompt,
     temperature: 0, // Deterministic for consistency
     maxTokens: 1024,
-  })
+  });
 
-  return parseJobContextResponse(response)
+  return parseJobContextResponse(response);
 }
 
 /**
@@ -341,10 +320,10 @@ export async function resolveArchetypesFromJobPosting(
   input: JobPostingInput,
   options?: Omit<ResolveArchetypesOptions, "jobContext">
 ): Promise<ArchetypeResolutionResult> {
-  const jobContext = await inferJobContext(client, input)
+  const jobContext = await inferJobContext(client, input);
 
   return resolveArchetypes({
     jobContext,
     ...options,
-  })
+  });
 }

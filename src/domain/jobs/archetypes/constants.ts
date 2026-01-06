@@ -4,7 +4,7 @@
  * Configuration constants for archetype resolution and selection.
  */
 
-import type { ExperienceLevel, RiskLevel } from "./types"
+import type { ExperienceLevel, RiskLevel } from "./types";
 
 // =============================================================================
 // ARCHETYPE SELECTION LIMITS
@@ -14,12 +14,12 @@ import type { ExperienceLevel, RiskLevel } from "./types"
  * Maximum archetypes per job (candidate fatigue protection).
  * Research shows >5 questions significantly reduces completion rates.
  */
-export const MAX_ARCHETYPES_PER_JOB = 5
+export const MAX_ARCHETYPES_PER_JOB = 5;
 
 /**
  * Minimum archetypes per job (ensures signal diversity).
  */
-export const MIN_ARCHETYPES_PER_JOB = 2
+export const MIN_ARCHETYPES_PER_JOB = 2;
 
 // =============================================================================
 // ARCHETYPE PRIORITY ORDER
@@ -83,7 +83,7 @@ export const ARCHETYPE_PRIORITY: readonly string[] = [
   "difficult_conversation",
   "strategic_alignment",
   "crisis_leadership",
-] as const
+] as const;
 
 // =============================================================================
 // EXPERIENCE LEVEL ORDERING
@@ -98,16 +98,13 @@ export const EXPERIENCE_LEVEL_ORDER: Record<ExperienceLevel, number> = {
   mid: 1,
   senior: 2,
   executive: 3,
-}
+};
 
 /**
  * Check if experience level meets minimum requirement.
  */
-export function meetsExperienceLevel(
-  actual: ExperienceLevel,
-  minimum: ExperienceLevel
-): boolean {
-  return EXPERIENCE_LEVEL_ORDER[actual] >= EXPERIENCE_LEVEL_ORDER[minimum]
+export function meetsExperienceLevel(actual: ExperienceLevel, minimum: ExperienceLevel): boolean {
+  return EXPERIENCE_LEVEL_ORDER[actual] >= EXPERIENCE_LEVEL_ORDER[minimum];
 }
 
 // =============================================================================
@@ -122,13 +119,13 @@ export const RISK_LEVEL_ORDER: Record<RiskLevel, number> = {
   low: 0,
   medium: 1,
   high: 2,
-}
+};
 
 /**
  * Check if risk level meets minimum requirement.
  */
 export function meetsRiskLevel(actual: RiskLevel, minimum: RiskLevel): boolean {
-  return RISK_LEVEL_ORDER[actual] >= RISK_LEVEL_ORDER[minimum]
+  return RISK_LEVEL_ORDER[actual] >= RISK_LEVEL_ORDER[minimum];
 }
 
 // =============================================================================
@@ -156,9 +153,8 @@ export const SELECTION_REASONS = {
   primarySignal: "Activated to capture primary signal for role",
 
   // Experience-based
-  experienceLevel: (level: string) =>
-    `Activated for ${level}+ experience level`,
-} as const
+  experienceLevel: (level: string) => `Activated for ${level}+ experience level`,
+} as const;
 
 // =============================================================================
 // EXCLUSION REASON TEMPLATES
@@ -178,16 +174,14 @@ export const EXCLUSION_REASONS = {
     `Excluded — only activates for domains: ${domains.join(", ")}`,
   domainExcluded: (domains: string[]) =>
     `Excluded — not applicable for domains: ${domains.join(", ")}`,
-  experienceTooLow: (required: string) =>
-    `Excluded — requires ${required}+ experience level`,
-  riskTooLow: (required: string) =>
-    `Excluded — requires ${required}+ risk level`,
+  experienceTooLow: (required: string) => `Excluded — requires ${required}+ experience level`,
+  riskTooLow: (required: string) => `Excluded — requires ${required}+ risk level`,
   notRegulated: "Excluded — requires regulated environment",
   noCollaboration: "Excluded — requires high collaboration",
   notCustomerFacing: "Excluded — requires customer-facing role",
   noPeopleManagement: "Excluded — requires people management",
   signalNotPrimary: "Excluded — required signal not primary for this role",
-} as const
+} as const;
 
 // =============================================================================
 // DOMAIN GROUPS
@@ -201,30 +195,14 @@ export const DOMAIN_GROUPS = {
   technical: ["technology", "engineering"] as const,
 
   /** Domains with high regulatory requirements */
-  regulated: [
-    "healthcare",
-    "finance",
-    "legal",
-    "government",
-  ] as const,
+  regulated: ["healthcare", "finance", "legal", "government"] as const,
 
   /** Operational domains with execution pressure */
-  operational: [
-    "operations",
-    "retail",
-    "logistics",
-    "manufacturing",
-    "hospitality",
-  ] as const,
+  operational: ["operations", "retail", "logistics", "manufacturing", "hospitality"] as const,
 
   /** Domains with high customer interaction */
-  customerIntensive: [
-    "retail",
-    "hospitality",
-    "sales",
-    "consulting",
-  ] as const,
-} as const
+  customerIntensive: ["retail", "hospitality", "sales", "consulting"] as const,
+} as const;
 
 // =============================================================================
 // QUESTION RENDERING DEFAULTS
@@ -236,4 +214,4 @@ export const DOMAIN_GROUPS = {
 export const DEFAULT_RENDERING_CONSTRAINTS = {
   minAnswerWords: 30,
   maxQuestionLength: 500,
-} as const
+} as const;

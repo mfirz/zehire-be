@@ -8,9 +8,74 @@ compatibility_flags = ["nodejs_compat"]
 port = 8787
 local_protocol = "http"
 
-# Environment-specific configurations
+# =============================================================================
+# D1 DATABASE BINDINGS
+# =============================================================================
+# D1 is bound per-environment to allow separate databases for dev/staging/prod.
+# The binding name "DB" must match the Env interface in src/types/bindings.ts.
+
+# Local development uses a local D1 instance (SQLite file)
+[[d1_databases]]
+binding = "DB"
+database_name = "zehire-db-dev"
+database_id = "local"  # Placeholder for local development
+
+# =============================================================================
+# WORKERS AI BINDING
+# =============================================================================
+# Workers AI provides free LLM inference on Cloudflare's edge.
+# Free tier: 10,000 neurons/day
+# Models: @cf/meta/llama-3.1-8b-instruct, @cf/mistral/mistral-7b-instruct-v0.1
+# Note: AI runs remotely even in local dev (uses your free quota)
+[ai]
+binding = "AI"
+remote = true
+
+# =============================================================================
+# ENVIRONMENT: STAGING
+# =============================================================================
 [env.staging]
 name = "zehire-be-staging"
 
+# Staging D1 database
+# Create with: wrangler d1 create zehire-db-staging
+# Then replace database_id with the actual ID from the output
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "zehire-db-staging"
+database_id = "REPLACE_WITH_STAGING_DATABASE_ID"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+LOG_LEVEL = "debug"
+LLM_PROVIDER = "workers-ai"  # "workers-ai" (free) or "anthropic" (paid)
+
+# =============================================================================
+# ENVIRONMENT: PRODUCTION
+# =============================================================================
 [env.production]
 name = "zehire-be"
+
+# Production D1 database
+# Create with: wrangler d1 create zehire-db-production
+# Then replace database_id with the actual ID from the output
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "zehire-db-production"
+database_id = "REPLACE_WITH_PRODUCTION_DATABASE_ID"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+LOG_LEVEL = "info"
+LLM_PROVIDER = "workers-ai"  # "workers-ai" (free) or "anthropic" (paid)
+
+# =============================================================================
+# SECRETS (set via wrangler secret put)
+# =============================================================================
+# Required secrets for each environment:
+#
+# ANTHROPIC_API_KEY - API key for Claude LLM calls
+#   wrangler secret put ANTHROPIC_API_KEY --env staging
+#   wrangler secret put ANTHROPIC_API_KEY --env production
+#
+# =============================================================================

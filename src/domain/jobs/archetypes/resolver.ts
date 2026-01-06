@@ -11,40 +11,37 @@
  */
 import {
   ARCHETYPE_PRIORITY,
+  EXCLUSION_REASONS,
   MAX_ARCHETYPES_PER_JOB,
-  MIN_ARCHETYPES_PER_JOB,
   meetsExperienceLevel,
   meetsRiskLevel,
+  MIN_ARCHETYPES_PER_JOB,
   SELECTION_REASONS,
-  EXCLUSION_REASONS,
-} from "./constants"
-import { ARCHETYPE_REGISTRY, findArchetype } from "./registry"
+} from "./constants";
+import { ARCHETYPE_REGISTRY, findArchetype } from "./registry";
 import type {
   Archetype,
   ArchetypeRegistry,
   ArchetypeResolutionResult,
   JobContext,
   ResolvedArchetype,
-} from "./types"
+} from "./types";
 
 // =============================================================================
 // ACTIVATION RULE EVALUATION
 // =============================================================================
 
 interface ActivationResult {
-  activated: boolean
-  reason: string
+  activated: boolean;
+  reason: string;
 }
 
 /**
  * Evaluate activation rules against job context.
  * Returns whether the archetype should be activated and why.
  */
-function evaluateActivationRules(
-  archetype: Archetype,
-  jobContext: JobContext
-): ActivationResult {
-  const rules = archetype.activationRules
+function evaluateActivationRules(archetype: Archetype, jobContext: JobContext): ActivationResult {
+  const rules = archetype.activationRules;
 
   // Check domain restrictions first (onlyDomains)
   if (rules.onlyDomains && rules.onlyDomains.length > 0) {
@@ -52,7 +49,7 @@ function evaluateActivationRules(
       return {
         activated: false,
         reason: EXCLUSION_REASONS.domainMismatch(rules.onlyDomains),
-      }
+      };
     }
   }
 
@@ -62,22 +59,17 @@ function evaluateActivationRules(
       return {
         activated: false,
         reason: EXCLUSION_REASONS.domainExcluded(rules.excludeDomains),
-      }
+      };
     }
   }
 
   // Check minimum experience level
   if (rules.minExperienceLevel) {
-    if (
-      !meetsExperienceLevel(
-        jobContext.experienceLevel,
-        rules.minExperienceLevel
-      )
-    ) {
+    if (!meetsExperienceLevel(jobContext.experienceLevel, rules.minExperienceLevel)) {
       return {
         activated: false,
         reason: EXCLUSION_REASONS.experienceTooLow(rules.minExperienceLevel),
-      }
+      };
     }
   }
 
@@ -87,7 +79,7 @@ function evaluateActivationRules(
       return {
         activated: false,
         reason: EXCLUSION_REASONS.riskTooLow(rules.whenRiskLevelAtLeast),
-      }
+      };
     }
   }
 
@@ -96,18 +88,15 @@ function evaluateActivationRules(
     return {
       activated: false,
       reason: EXCLUSION_REASONS.notRegulated,
-    }
+    };
   }
 
   // Check collaboration requirement
-  if (
-    rules.whenCollaborationRequired &&
-    jobContext.collaborationRequired !== "high"
-  ) {
+  if (rules.whenCollaborationRequired && jobContext.collaborationRequired !== "high") {
     return {
       activated: false,
       reason: EXCLUSION_REASONS.noCollaboration,
-    }
+    };
   }
 
   // Check people management requirement
@@ -115,7 +104,7 @@ function evaluateActivationRules(
     return {
       activated: false,
       reason: EXCLUSION_REASONS.noPeopleManagement,
-    }
+    };
   }
 
   // Check customer-facing requirement
@@ -123,22 +112,19 @@ function evaluateActivationRules(
     return {
       activated: false,
       reason: EXCLUSION_REASONS.notCustomerFacing,
-    }
+    };
   }
 
   // Check primary signal requirement
-  if (
-    rules.whenPrimarySignalIncludes &&
-    rules.whenPrimarySignalIncludes.length > 0
-  ) {
+  if (rules.whenPrimarySignalIncludes && rules.whenPrimarySignalIncludes.length > 0) {
     const hasRequiredSignal = rules.whenPrimarySignalIncludes.some((signal) =>
       jobContext.primarySignals.includes(signal)
-    )
+    );
     if (!hasRequiredSignal) {
       return {
         activated: false,
         reason: EXCLUSION_REASONS.signalNotPrimary,
-      }
+      };
     }
   }
 
@@ -146,83 +132,64 @@ function evaluateActivationRules(
   return {
     activated: true,
     reason: determineSelectionReason(archetype, jobContext),
-  }
+  };
 }
 
 /**
  * Determine the most specific selection reason for an activated archetype.
  */
-function determineSelectionReason(
-  archetype: Archetype,
-  jobContext: JobContext
-): string {
-  const rules = archetype.activationRules
+function determineSelectionReason(archetype: Archetype, jobContext: JobContext): string {
+  const rules = archetype.activationRules;
 
   // Anchor archetype
   if (archetype.id === "situational_uncertainty_story") {
-    return SELECTION_REASONS.anchor
+    return SELECTION_REASONS.anchor;
   }
 
   // High risk activation
-  if (
-    rules.whenRiskLevelAtLeast === "high" &&
-    jobContext.riskLevel === "high"
-  ) {
-    return SELECTION_REASONS.highRisk
+  if (rules.whenRiskLevelAtLeast === "high" && jobContext.riskLevel === "high") {
+    return SELECTION_REASONS.highRisk;
   }
 
   // Regulated environment
   if (rules.requiresRegulation && jobContext.regulatedEnvironment) {
-    return SELECTION_REASONS.regulated
+    return SELECTION_REASONS.regulated;
   }
 
   // Technical domain
-  if (
-    rules.onlyDomains?.includes("technology") ||
-    rules.onlyDomains?.includes("engineering")
-  ) {
-    if (
-      jobContext.domain === "technology" ||
-      jobContext.domain === "engineering"
-    ) {
-      return SELECTION_REASONS.technicalDomain
+  if (rules.onlyDomains?.includes("technology") || rules.onlyDomains?.includes("engineering")) {
+    if (jobContext.domain === "technology" || jobContext.domain === "engineering") {
+      return SELECTION_REASONS.technicalDomain;
     }
   }
 
   // Operational domain
-  if (
-    rules.onlyDomains?.some((d) =>
-      ["operations", "retail", "logistics"].includes(d)
-    )
-  ) {
-    return SELECTION_REASONS.operationalDomain
+  if (rules.onlyDomains?.some((d) => ["operations", "retail", "logistics"].includes(d))) {
+    return SELECTION_REASONS.operationalDomain;
   }
 
   // Leadership/Executive
-  if (
-    rules.minExperienceLevel === "senior" ||
-    rules.minExperienceLevel === "executive"
-  ) {
-    return SELECTION_REASONS.experienceLevel(rules.minExperienceLevel)
+  if (rules.minExperienceLevel === "senior" || rules.minExperienceLevel === "executive") {
+    return SELECTION_REASONS.experienceLevel(rules.minExperienceLevel);
   }
 
   // Collaboration
   if (rules.whenCollaborationRequired) {
-    return SELECTION_REASONS.collaboration
+    return SELECTION_REASONS.collaboration;
   }
 
   // Customer-facing
   if (rules.whenCustomerFacing) {
-    return SELECTION_REASONS.customerFacing
+    return SELECTION_REASONS.customerFacing;
   }
 
   // People management
   if (rules.whenPeopleManagement) {
-    return SELECTION_REASONS.peopleManagement
+    return SELECTION_REASONS.peopleManagement;
   }
 
   // Default activation
-  return SELECTION_REASONS.default
+  return SELECTION_REASONS.default;
 }
 
 // =============================================================================
@@ -235,21 +202,21 @@ function determineSelectionReason(
  */
 function sortByPriority(archetypes: ResolvedArchetype[]): ResolvedArchetype[] {
   return [...archetypes].sort((a, b) => {
-    const aIndex = ARCHETYPE_PRIORITY.indexOf(a.id)
-    const bIndex = ARCHETYPE_PRIORITY.indexOf(b.id)
+    const aIndex = ARCHETYPE_PRIORITY.indexOf(a.id);
+    const bIndex = ARCHETYPE_PRIORITY.indexOf(b.id);
 
     // If both are in priority list, sort by position
     if (aIndex !== -1 && bIndex !== -1) {
-      return aIndex - bIndex
+      return aIndex - bIndex;
     }
 
     // Priority list items come before non-listed items
-    if (aIndex !== -1) return -1
-    if (bIndex !== -1) return 1
+    if (aIndex !== -1) return -1;
+    if (bIndex !== -1) return 1;
 
     // Both not in list — maintain original order
-    return 0
-  })
+    return 0;
+  });
 }
 
 // =============================================================================
@@ -258,16 +225,16 @@ function sortByPriority(archetypes: ResolvedArchetype[]): ResolvedArchetype[] {
 
 export interface ResolveArchetypesOptions {
   /** Job context from LLM inference */
-  jobContext: JobContext
+  jobContext: JobContext;
 
   /** Archetype registry to use (defaults to canonical registry) */
-  registry?: ArchetypeRegistry
+  registry?: ArchetypeRegistry;
 
   /** Maximum archetypes to return (defaults to MAX_ARCHETYPES_PER_JOB) */
-  maxArchetypes?: number
+  maxArchetypes?: number;
 
   /** Include audit trail of excluded archetypes */
-  includeExcluded?: boolean
+  includeExcluded?: boolean;
 }
 
 /**
@@ -297,42 +264,40 @@ export interface ResolveArchetypesOptions {
  * // ["situational_uncertainty_story", "explaining_complexity", "technical_depth_probe", ...]
  * ```
  */
-export function resolveArchetypes(
-  options: ResolveArchetypesOptions
-): ArchetypeResolutionResult {
+export function resolveArchetypes(options: ResolveArchetypesOptions): ArchetypeResolutionResult {
   const {
     jobContext,
     registry = ARCHETYPE_REGISTRY,
     maxArchetypes = MAX_ARCHETYPES_PER_JOB,
     includeExcluded = true,
-  } = options
+  } = options;
 
-  const activated: ResolvedArchetype[] = []
-  const excluded: Array<{ id: string; reason: string }> = []
+  const activated: ResolvedArchetype[] = [];
+  const excluded: Array<{ id: string; reason: string }> = [];
 
   // Evaluate each archetype
   for (const archetype of registry.archetypes) {
-    const result = evaluateActivationRules(archetype, jobContext)
+    const result = evaluateActivationRules(archetype, jobContext);
 
     if (result.activated) {
       activated.push({
         ...archetype,
         selectionReason: result.reason,
-      })
+      });
     } else if (includeExcluded) {
       excluded.push({
         id: archetype.id,
         reason: result.reason,
-      })
+      });
     }
   }
 
   // Sort by priority
-  const sorted = sortByPriority(activated)
+  const sorted = sortByPriority(activated);
 
   // Apply capacity limit
-  const selected = sorted.slice(0, maxArchetypes)
-  const capacityExcluded = sorted.slice(maxArchetypes)
+  const selected = sorted.slice(0, maxArchetypes);
+  const capacityExcluded = sorted.slice(maxArchetypes);
 
   // Add capacity-excluded archetypes to excluded list
   if (includeExcluded) {
@@ -340,7 +305,7 @@ export function resolveArchetypes(
       excluded.push({
         id: archetype.id,
         reason: EXCLUSION_REASONS.capacityReached,
-      })
+      });
     }
   }
 
@@ -349,7 +314,7 @@ export function resolveArchetypes(
     console.warn(
       `Only ${selected.length} archetypes activated for job context. ` +
         `Consider reviewing job context or activation rules.`
-    )
+    );
   }
 
   return {
@@ -357,7 +322,7 @@ export function resolveArchetypes(
     archetypes: selected,
     excluded,
     resolvedAt: new Date().toISOString(),
-  }
+  };
 }
 
 // =============================================================================
@@ -369,22 +334,19 @@ export function resolveArchetypes(
  * Useful for quick lookups without full resolution details.
  */
 export function resolveArchetypeIds(jobContext: JobContext): string[] {
-  const result = resolveArchetypes({ jobContext, includeExcluded: false })
-  return result.archetypes.map((a) => a.id)
+  const result = resolveArchetypes({ jobContext, includeExcluded: false });
+  return result.archetypes.map((a) => a.id);
 }
 
 /**
  * Check if a specific archetype would be activated for a job context.
  */
-export function wouldActivate(
-  archetypeId: string,
-  jobContext: JobContext
-): boolean {
-  const archetype = findArchetype(archetypeId)
-  if (!archetype) return false
+export function wouldActivate(archetypeId: string, jobContext: JobContext): boolean {
+  const archetype = findArchetype(archetypeId);
+  if (!archetype) return false;
 
-  const result = evaluateActivationRules(archetype, jobContext)
-  return result.activated
+  const result = evaluateActivationRules(archetype, jobContext);
+  return result.activated;
 }
 
 /**
@@ -394,24 +356,24 @@ export function wouldActivate(
 export function getActivationStatus(
   jobContext: JobContext
 ): Map<string, { activated: boolean; reason: string }> {
-  const result = resolveArchetypes({ jobContext, includeExcluded: true })
-  const status = new Map<string, { activated: boolean; reason: string }>()
+  const result = resolveArchetypes({ jobContext, includeExcluded: true });
+  const status = new Map<string, { activated: boolean; reason: string }>();
 
   for (const archetype of result.archetypes) {
     status.set(archetype.id, {
       activated: true,
       reason: archetype.selectionReason,
-    })
+    });
   }
 
   for (const excluded of result.excluded) {
     status.set(excluded.id, {
       activated: false,
       reason: excluded.reason,
-    })
+    });
   }
 
-  return status
+  return status;
 }
 
 // =============================================================================
@@ -423,32 +385,32 @@ export function getActivationStatus(
  * Ensures the selected archetypes capture the primary signals.
  */
 export function analyzeSignalCoverage(result: ArchetypeResolutionResult): {
-  coveredSignals: string[]
-  uncoveredPrimarySignals: string[]
-  signalFrequency: Map<string, number>
+  coveredSignals: string[];
+  uncoveredPrimarySignals: string[];
+  signalFrequency: Map<string, number>;
 } {
-  const signalFrequency = new Map<string, number>()
+  const signalFrequency = new Map<string, number>();
 
   for (const archetype of result.archetypes) {
     for (const signal of archetype.signals) {
-      signalFrequency.set(signal, (signalFrequency.get(signal) || 0) + 1)
+      signalFrequency.set(signal, (signalFrequency.get(signal) || 0) + 1);
     }
   }
 
-  const coveredSignals = Array.from(signalFrequency.keys())
+  const coveredSignals = Array.from(signalFrequency.keys());
   const uncoveredPrimarySignals = result.jobContext.primarySignals.filter(
     (signal) => !signalFrequency.has(signal)
-  )
+  );
 
   return {
     coveredSignals,
     uncoveredPrimarySignals,
     signalFrequency,
-  }
+  };
 }
 
 // =============================================================================
 // EXPORTS
 // =============================================================================
 
-export { evaluateActivationRules, sortByPriority }
+export { evaluateActivationRules, sortByPriority };

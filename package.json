@@ -6,15 +6,22 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production",
     "build": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:migrate:local": "wrangler d1 execute zehire-db-dev --local --file=./migrations/0001_create_jobs_table.sql",
+    "db:migrate:staging": "wrangler d1 execute zehire-db-staging --env staging --file=./migrations/0001_create_jobs_table.sql",
+    "db:migrate:production": "wrangler d1 execute zehire-db-production --env production --file=./migrations/0001_create_jobs_table.sql"
   },
   "dependencies": {
-    "hono": "^4.6.14"
+    "hono": "^4.6.14",
+    "nanoid": "^5.0.9",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241218.0",
@@ -24,7 +31,7 @@
     "prettier": "^3.4.2",
     "prettier-plugin-organize-imports": "^4.1.0",
     "typescript": "^5.7.2",
-    "wrangler": "^3.99.0"
+    "wrangler": "^4.54.0"
   },
   "engines": {
     "node": ">=18.0.0"

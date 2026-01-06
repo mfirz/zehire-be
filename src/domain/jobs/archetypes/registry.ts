@@ -11,7 +11,7 @@
  * - Decision safety over prediction accuracy
  */
 
-import type { Archetype, ArchetypeRegistry } from "./types"
+import type { Archetype, ArchetypeRegistry } from "./types";
 
 /**
  * All archetypes defined in the system.
@@ -486,7 +486,7 @@ const archetypes: Archetype[] = [
       minAnswerWords: 100,
     },
   },
-]
+];
 
 /**
  * The canonical archetype registry.
@@ -501,46 +501,46 @@ export const ARCHETYPE_REGISTRY: ArchetypeRegistry = {
     "Canonical, job-agnostic context question archetypes used by Zehire to extract evaluative signals without ranking or scoring.",
   lastUpdated: "2026-01-06",
   archetypes,
-}
+};
 
 /**
  * Lookup map for O(1) archetype retrieval by ID.
  */
 export const ARCHETYPE_BY_ID: ReadonlyMap<string, Archetype> = new Map(
   archetypes.map((a) => [a.id, a])
-)
+);
 
 /**
  * Get an archetype by ID.
  * @throws Error if archetype not found
  */
 export function getArchetype(id: string): Archetype {
-  const archetype = ARCHETYPE_BY_ID.get(id)
+  const archetype = ARCHETYPE_BY_ID.get(id);
   if (!archetype) {
-    throw new Error(`Archetype not found: ${id}`)
+    throw new Error(`Archetype not found: ${id}`);
   }
-  return archetype
+  return archetype;
 }
 
 /**
  * Get an archetype by ID, returning undefined if not found.
  */
 export function findArchetype(id: string): Archetype | undefined {
-  return ARCHETYPE_BY_ID.get(id)
+  return ARCHETYPE_BY_ID.get(id);
 }
 
 /**
  * Get all archetypes in a category.
  */
 export function getArchetypesByCategory(category: string): Archetype[] {
-  return archetypes.filter((a) => a.category === category)
+  return archetypes.filter((a) => a.category === category);
 }
 
 /**
  * Get all archetypes that extract a specific signal.
  */
 export function getArchetypesBySignal(signalId: string): Archetype[] {
-  return archetypes.filter((a) => a.signals.includes(signalId as any))
+  return archetypes.filter((a) => a.signals.includes(signalId as any));
 }
 
-export default ARCHETYPE_REGISTRY
+export default ARCHETYPE_REGISTRY;

@@ -44,139 +44,126 @@
 // =============================================================================
 
 export type {
-  // Core types
-  SignalId,
-  ArchetypeCategory,
-  QuestionFormat,
-  RiskLevel,
-  ExperienceLevel,
-  CollaborationLevel,
-  DecisionImpact,
-  JobDomain,
-
-  // Job context
-  JobContext,
-
   // Archetype definitions
   ActivationRules,
-  RenderingConstraints,
   Archetype,
+  ArchetypeCategory,
   ArchetypeRegistry,
-
+  ArchetypeResolutionResult,
+  CollaborationLevel,
+  DecisionImpact,
+  ExperienceLevel,
+  // Job context
+  JobContext,
+  JobDomain,
+  QuestionFormat,
+  RenderingConstraints,
   // Resolution output
   ResolvedArchetype,
-  ArchetypeResolutionResult,
-} from "./types"
+  RiskLevel,
+  // Core types
+  SignalId,
+} from "./types";
 
 // =============================================================================
 // CONSTANT EXPORTS
 // =============================================================================
 
 export {
+  ARCHETYPE_CATEGORIES,
+  CATEGORY_METADATA,
+  COLLABORATION_LEVELS,
+  DECISION_IMPACTS,
+  EXPERIENCE_LEVELS,
+  FORMAT_METADATA,
+  JOB_DOMAINS,
+  QUESTION_FORMATS,
+  // Level definitions
+  RISK_LEVELS,
   // Signal & category metadata
   SIGNAL_IDS,
   SIGNAL_METADATA,
-  ARCHETYPE_CATEGORIES,
-  CATEGORY_METADATA,
-  QUESTION_FORMATS,
-  FORMAT_METADATA,
-
-  // Level definitions
-  RISK_LEVELS,
-  EXPERIENCE_LEVELS,
-  COLLABORATION_LEVELS,
-  DECISION_IMPACTS,
-  JOB_DOMAINS,
-} from "./types"
+} from "./types";
 
 export {
+  // Priority
+  ARCHETYPE_PRIORITY,
+  // Defaults
+  DEFAULT_RENDERING_CONSTRAINTS,
+  // Domain groups
+  DOMAIN_GROUPS,
+  EXCLUSION_REASONS,
+  // Level ordering
+  EXPERIENCE_LEVEL_ORDER,
   // Limits
   MAX_ARCHETYPES_PER_JOB,
   MIN_ARCHETYPES_PER_JOB,
-
-  // Priority
-  ARCHETYPE_PRIORITY,
-
-  // Level ordering
-  EXPERIENCE_LEVEL_ORDER,
   RISK_LEVEL_ORDER,
-  meetsExperienceLevel,
-  meetsRiskLevel,
-
   // Reason templates
   SELECTION_REASONS,
-  EXCLUSION_REASONS,
-
-  // Domain groups
-  DOMAIN_GROUPS,
-
-  // Defaults
-  DEFAULT_RENDERING_CONSTRAINTS,
-} from "./constants"
+  meetsExperienceLevel,
+  meetsRiskLevel,
+} from "./constants";
 
 // =============================================================================
 // REGISTRY EXPORTS
 // =============================================================================
 
 export {
-  ARCHETYPE_REGISTRY,
   ARCHETYPE_BY_ID,
-  getArchetype,
+  ARCHETYPE_REGISTRY,
   findArchetype,
+  getArchetype,
   getArchetypesByCategory,
   getArchetypesBySignal,
-} from "./registry"
+} from "./registry";
 
 // Default export is the registry
-export { default as registry } from "./registry"
+export { default as registry } from "./registry";
 
 // =============================================================================
 // RESOLVER EXPORTS
 // =============================================================================
 
-export type { ResolveArchetypesOptions } from "./resolver"
+export type { ResolveArchetypesOptions } from "./resolver";
 
 export {
-  resolveArchetypes,
-  resolveArchetypeIds,
-  wouldActivate,
-  getActivationStatus,
   analyzeSignalCoverage,
 
   // Lower-level utilities (for testing/debugging)
   evaluateActivationRules,
+  getActivationStatus,
+  resolveArchetypeIds,
+  resolveArchetypes,
   sortByPriority,
-} from "./resolver"
+  wouldActivate,
+} from "./resolver";
 
 // =============================================================================
 // INFERENCE EXPORTS
 // =============================================================================
 
-export type { JobPostingInput, LLMClient } from "./inference"
+export type { JobPostingInput, LLMClient } from "./inference";
 
 export {
   JOB_CONTEXT_SYSTEM_PROMPT,
   buildInferencePrompt,
-  parseJobContextResponse,
   inferJobContext,
+  parseJobContextResponse,
   resolveArchetypesFromJobPosting,
-} from "./inference"
+} from "./inference";
 
 // =============================================================================
 // RENDERER EXPORTS
 // =============================================================================
 
-export type {
-  RenderedQuestion,
-  RenderQuestionsResult,
-  RenderQuestionsOptions,
-} from "./renderer"
+export type { RenderQuestionsOptions, RenderQuestionsResult, RenderedQuestion } from "./renderer";
 
 export {
   QUESTION_RENDER_SYSTEM_PROMPT,
   buildQuestionRenderPrompt,
-  validateRenderedQuestion,
+  generateQuestionsForJob,
   renderQuestion,
   renderQuestions,
-  generateQuestionsForJob,
-} from "./renderer"
+  validateRenderedQuestion,
+} from "./renderer";

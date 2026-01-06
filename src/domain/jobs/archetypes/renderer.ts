@@ -8,24 +8,21 @@
  * Each archetype produces exactly one question, tailored to the
  * specific job context while respecting rendering constraints.
  */
-import { DEFAULT_RENDERING_CONSTRAINTS } from "./constants"
-import type { LLMClient } from "./inference"
+import type { LLMClient } from "./inference";
 // =============================================================================
 // FULL PIPELINE
 // =============================================================================
 
-import {
-  resolveArchetypesFromJobPosting,
-  type JobPostingInput,
-} from "./inference"
+import { resolveArchetypesFromJobPosting, type JobPostingInput } from "./inference";
 import type {
   Archetype,
   JobContext,
-  RenderingConstraints,
   QuestionFormat,
+  RenderingConstraints,
+  ResolvedArchetype,
   SignalId,
-} from "./types"
-import { FORMAT_METADATA, SIGNAL_METADATA } from "./types"
+} from "./types";
+import { FORMAT_METADATA, SIGNAL_METADATA } from "./types";
 
 // =============================================================================
 // OUTPUT TYPES
@@ -36,23 +33,23 @@ import { FORMAT_METADATA, SIGNAL_METADATA } from "./types"
  */
 export interface RenderedQuestion {
   /** Source archetype ID */
-  archetypeId: string
+  archetypeId: string;
 
   /** The actual question text */
-  questionText: string
+  questionText: string;
 
   /** Signals this question is designed to extract */
-  signals: SignalId[]
+  signals: SignalId[];
 
   /** Hint for minimum answer length (shown to candidate) */
-  minAnswerWords?: number
+  minAnswerWords?: number;
 
   /** Internal metadata for evaluation */
   metadata: {
-    category: string
-    formats: QuestionFormat[]
-    renderingConstraints: RenderingConstraints
-  }
+    category: string;
+    formats: QuestionFormat[];
+    renderingConstraints: RenderingConstraints;
+  };
 }
 
 /**
@@ -60,13 +57,13 @@ export interface RenderedQuestion {
  */
 export interface RenderQuestionsResult {
   /** Job context used for rendering */
-  jobContext: JobContext
+  jobContext: JobContext;
 
   /** Rendered questions in order */
-  questions: RenderedQuestion[]
+  questions: RenderedQuestion[];
 
   /** Timestamp of rendering */
-  renderedAt: string
+  renderedAt: string;
 }
 
 // =============================================================================
@@ -92,30 +89,21 @@ Your questions must NOT:
 4. Be compound questions (multiple questions in one)
 5. Use jargon the candidate might not understand
 
-Write questions that reveal how candidates think, not just what they've done.`
+Write questions that reveal how candidates think, not just what they've done.`;
 
 /**
  * Build the prompt for rendering a single question.
  */
-export function buildQuestionRenderPrompt(
-  archetype: Archetype,
-  jobContext: JobContext
-): string {
+export function buildQuestionRenderPrompt(archetype: Archetype, jobContext: JobContext): string {
   const formatInstructions = archetype.formats
-    .map(
-      (f) => `- ${FORMAT_METADATA[f].label}: ${FORMAT_METADATA[f].instruction}`
-    )
-    .join("\n")
+    .map((f) => `- ${FORMAT_METADATA[f].label}: ${FORMAT_METADATA[f].instruction}`)
+    .join("\n");
 
   const signalDescriptions = archetype.signals
-    .map(
-      (s) => `- ${SIGNAL_METADATA[s].label}: ${SIGNAL_METADATA[s].description}`
-    )
-    .join("\n")
+    .map((s) => `- ${SIGNAL_METADATA[s].label}: ${SIGNAL_METADATA[s].description}`)
+    .join("\n");
 
-  const constraints = buildConstraintInstructions(
-    archetype.renderingConstraints
-  )
+  const constraints = buildConstraintInstructions(archetype.renderingConstraints);
 
   return `Write a single interview question for this role and archetype.
 
@@ -143,52 +131,44 @@ ${constraints}
 
 ## Output
 Return ONLY the question text. No preamble, no explanation, no quotes around it.
-Just the question itself, ready to show to a candidate.`
+Just the question itself, ready to show to a candidate.`;
 }
 
 /**
  * Build human-readable constraint instructions.
  */
-function buildConstraintInstructions(
-  constraints: RenderingConstraints
-): string {
-  const rules: string[] = []
+function buildConstraintInstructions(constraints: RenderingConstraints): string {
+  const rules: string[] = [];
 
   if (constraints.requiresRealExample) {
-    rules.push("- MUST ask about a real past experience (not hypothetical)")
+    rules.push("- MUST ask about a real past experience (not hypothetical)");
   }
 
   if (constraints.forbidYesNo) {
-    rules.push("- MUST NOT be answerable with yes/no")
+    rules.push("- MUST NOT be answerable with yes/no");
   }
 
   if (constraints.singleQuestion) {
-    rules.push("- MUST be exactly one question (no multi-part questions)")
+    rules.push("- MUST be exactly one question (no multi-part questions)");
   }
 
   if (constraints.forbidPureTheory) {
-    rules.push(
-      "- MUST NOT allow purely theoretical answers — require concrete examples"
-    )
+    rules.push("- MUST NOT allow purely theoretical answers — require concrete examples");
   }
 
   if (constraints.minAnswerWords) {
-    rules.push(
-      `- Should invite a response of at least ${constraints.minAnswerWords} words`
-    )
+    rules.push(`- Should invite a response of at least ${constraints.minAnswerWords} words`);
   }
 
   if (constraints.maxQuestionLength) {
-    rules.push(
-      `- Question must be under ${constraints.maxQuestionLength} characters`
-    )
+    rules.push(`- Question must be under ${constraints.maxQuestionLength} characters`);
   }
 
   if (rules.length === 0) {
-    rules.push("- No specific constraints")
+    rules.push("- No specific constraints");
   }
 
-  return rules.join("\n")
+  return rules.join("\n");
 }
 
 // =============================================================================
@@ -202,16 +182,13 @@ export function validateRenderedQuestion(
   questionText: string,
   constraints: RenderingConstraints
 ): { valid: boolean; issues: string[] } {
-  const issues: string[] = []
+  const issues: string[] = [];
 
   // Check max length
-  if (
-    constraints.maxQuestionLength &&
-    questionText.length > constraints.maxQuestionLength
-  ) {
+  if (constraints.maxQuestionLength && questionText.length > constraints.maxQuestionLength) {
     issues.push(
       `Question exceeds max length: ${questionText.length} > ${constraints.maxQuestionLength}`
-    )
+    );
   }
 
   // Check for yes/no patterns (basic heuristic)
@@ -219,34 +196,32 @@ export function validateRenderedQuestion(
     const yesNoPatterns = [
       /^(do|did|does|are|is|was|were|have|has|had|can|could|would|will|should)\s+you\b/i,
       /^(have|has)\s+you\s+ever\b/i,
-    ]
+    ];
     for (const pattern of yesNoPatterns) {
       if (pattern.test(questionText.trim())) {
-        issues.push("Question appears to be yes/no format")
-        break
+        issues.push("Question appears to be yes/no format");
+        break;
       }
     }
   }
 
   // Check for multiple questions (basic heuristic)
   if (constraints.singleQuestion) {
-    const questionMarks = (questionText.match(/\?/g) || []).length
+    const questionMarks = (questionText.match(/\?/g) || []).length;
     if (questionMarks > 1) {
-      issues.push(
-        `Multiple questions detected: ${questionMarks} question marks`
-      )
+      issues.push(`Multiple questions detected: ${questionMarks} question marks`);
     }
   }
 
   // Check if it's too short to be meaningful
   if (questionText.trim().length < 20) {
-    issues.push("Question is too short")
+    issues.push("Question is too short");
   }
 
   return {
     valid: issues.length === 0,
     issues,
-  }
+  };
 }
 
 // =============================================================================
@@ -261,54 +236,51 @@ export async function renderQuestion(
   archetype: Archetype,
   jobContext: JobContext,
   options?: {
-    maxRetries?: number
+    maxRetries?: number;
   }
 ): Promise<RenderedQuestion> {
-  const maxRetries = options?.maxRetries ?? 2
+  const maxRetries = options?.maxRetries ?? 2;
 
-  let lastError: Error | null = null
-  let questionText: string | null = null
+  let lastError: Error | null = null;
+  let questionText: string | null = null;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const prompt = buildQuestionRenderPrompt(archetype, jobContext)
+    const prompt = buildQuestionRenderPrompt(archetype, jobContext);
 
     const response = await client.complete({
       system: QUESTION_RENDER_SYSTEM_PROMPT,
       user: prompt,
       temperature: attempt * 0.2, // Increase temperature on retries for variety
       maxTokens: 512,
-    })
+    });
 
-    questionText = response.trim()
+    questionText = response.trim();
 
     // Remove quotes if LLM wrapped the question
     if (
       (questionText.startsWith('"') && questionText.endsWith('"')) ||
       (questionText.startsWith("'") && questionText.endsWith("'"))
     ) {
-      questionText = questionText.slice(1, -1)
+      questionText = questionText.slice(1, -1);
     }
 
-    const validation = validateRenderedQuestion(
-      questionText,
-      archetype.renderingConstraints
-    )
+    const validation = validateRenderedQuestion(questionText, archetype.renderingConstraints);
 
     if (validation.valid) {
-      break
+      break;
     }
 
-    lastError = new Error(`Validation failed: ${validation.issues.join(", ")}`)
+    lastError = new Error(`Validation failed: ${validation.issues.join(", ")}`);
 
     if (attempt < maxRetries) {
       console.warn(
         `Question validation failed for ${archetype.id}, retrying (${attempt + 1}/${maxRetries}): ${validation.issues.join(", ")}`
-      )
+      );
     }
   }
 
   if (!questionText) {
-    throw lastError ?? new Error("Failed to render question")
+    throw lastError ?? new Error("Failed to render question");
   }
 
   return {
@@ -323,7 +295,7 @@ export async function renderQuestion(
       formats: archetype.formats, // Primary format used
       renderingConstraints: archetype.renderingConstraints,
     },
-  }
+  };
 }
 
 // =============================================================================
@@ -332,19 +304,19 @@ export async function renderQuestion(
 
 export interface RenderQuestionsOptions {
   /** LLM client for rendering */
-  client: LLMClient
+  client: LLMClient;
 
   /** Archetypes to render (from resolveArchetypes) */
-  archetypes: Archetype[]
+  archetypes: Archetype[];
 
   /** Job context for tailoring questions */
-  jobContext: JobContext
+  jobContext: JobContext;
 
   /** Max retries per question (default: 2) */
-  maxRetries?: number
+  maxRetries?: number;
 
   /** Render in parallel (default: false for rate limiting) */
-  parallel?: boolean
+  parallel?: boolean;
 }
 
 /**
@@ -366,31 +338,23 @@ export interface RenderQuestionsOptions {
 export async function renderQuestions(
   options: RenderQuestionsOptions
 ): Promise<RenderQuestionsResult> {
-  const {
-    client,
-    archetypes,
-    jobContext,
-    maxRetries = 2,
-    parallel = false,
-  } = options
+  const { client, archetypes, jobContext, maxRetries = 2, parallel = false } = options;
 
-  let questions: RenderedQuestion[]
+  let questions: RenderedQuestion[];
 
   if (parallel) {
     // Parallel rendering (faster, but may hit rate limits)
     questions = await Promise.all(
-      archetypes.map((archetype) =>
-        renderQuestion(client, archetype, jobContext, { maxRetries })
-      )
-    )
+      archetypes.map((archetype) => renderQuestion(client, archetype, jobContext, { maxRetries }))
+    );
   } else {
     // Sequential rendering (slower, but safer for rate limits)
-    questions = []
+    questions = [];
     for (const archetype of archetypes) {
       const question = await renderQuestion(client, archetype, jobContext, {
         maxRetries,
-      })
-      questions.push(question)
+      });
+      questions.push(question);
     }
   }
 
@@ -398,7 +362,7 @@ export async function renderQuestions(
     jobContext,
     questions,
     renderedAt: new Date().toISOString(),
-  }
+  };
 }
 
 /**
@@ -423,18 +387,18 @@ export async function generateQuestionsForJob(
   client: LLMClient,
   jobPosting: JobPostingInput,
   options?: {
-    maxRetries?: number
-    parallel?: boolean
+    maxRetries?: number;
+    parallel?: boolean;
   }
 ): Promise<{
-  jobContext: JobContext
-  archetypes: Archetype[]
-  questions: RenderedQuestion[]
-  resolvedAt: string
-  renderedAt: string
+  jobContext: JobContext;
+  archetypes: ResolvedArchetype[];
+  questions: RenderedQuestion[];
+  resolvedAt: string;
+  renderedAt: string;
 }> {
   // Step 1: Infer context and resolve archetypes
-  const resolution = await resolveArchetypesFromJobPosting(client, jobPosting)
+  const resolution = await resolveArchetypesFromJobPosting(client, jobPosting);
 
   // Step 2: Render questions
   const rendered = await renderQuestions({
@@ -445,7 +409,7 @@ export async function generateQuestionsForJob(
       maxRetries: options.maxRetries,
     }),
     ...(options?.parallel !== undefined && { parallel: options.parallel }),
-  })
+  });
 
   return {
     jobContext: resolution.jobContext,
@@ -453,5 +417,5 @@ export async function generateQuestionsForJob(
     questions: rendered.questions,
     resolvedAt: resolution.resolvedAt,
     renderedAt: rendered.renderedAt,
-  }
+  };
 }

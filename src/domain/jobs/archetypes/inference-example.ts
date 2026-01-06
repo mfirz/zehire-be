@@ -5,12 +5,12 @@
  */
 import {
   buildInferencePrompt,
-  parseJobContextResponse,
   JOB_CONTEXT_SYSTEM_PROMPT,
   type JobPostingInput,
   type LLMClient,
+  parseJobContextResponse,
   resolveArchetypesFromJobPosting,
-} from "./index"
+} from "./index";
 
 // =============================================================================
 // EXAMPLE JOB POSTINGS
@@ -41,7 +41,7 @@ const seniorEngineerJob: JobPostingInput = {
   `,
   companyName: "TechCorp",
   department: "Engineering",
-}
+};
 
 const icuNurseJob: JobPostingInput = {
   title: "ICU Registered Nurse",
@@ -65,7 +65,7 @@ const icuNurseJob: JobPostingInput = {
   companyName: "Memorial Hospital",
   department: "Critical Care",
   location: "California, USA",
-}
+};
 
 const retailManagerJob: JobPostingInput = {
   title: "Store Manager",
@@ -86,7 +86,7 @@ const retailManagerJob: JobPostingInput = {
     - Experience with POS systems
   `,
   companyName: "Fashion Outlet",
-}
+};
 
 // =============================================================================
 // MOCK LLM CLIENT (for demonstration)
@@ -152,109 +152,96 @@ const mockResponses: Record<string, string> = {
     regulatedEnvironment: false,
     experienceLevel: "mid",
   }),
-}
+};
 
 const mockLLMClient: LLMClient = {
   async complete({ user }) {
     // Extract job title from prompt to return mock response
-    const titleMatch = user.match(/Job Title: (.+)/)?.[1]
+    const titleMatch = user.match(/Job Title: (.+)/)?.[1];
     if (titleMatch && mockResponses[titleMatch]) {
-      return mockResponses[titleMatch]
+      return mockResponses[titleMatch];
     }
-    throw new Error(`No mock response for: ${titleMatch}`)
+    throw new Error(`No mock response for: ${titleMatch}`);
   },
-}
+};
 
 // =============================================================================
 // DEMONSTRATION
 // =============================================================================
 
 function printDivider(title: string) {
-  console.log("\n" + "=".repeat(70))
-  console.log(title)
-  console.log("=".repeat(70))
+  console.log("\n" + "=".repeat(70));
+  console.log(title);
+  console.log("=".repeat(70));
 }
 
 async function demonstrateInference() {
-  printDivider("1. BUILD INFERENCE PROMPT")
+  printDivider("1. BUILD INFERENCE PROMPT");
 
-  const prompt = buildInferencePrompt(seniorEngineerJob)
-  console.log("System Prompt (first 500 chars):")
-  console.log(JOB_CONTEXT_SYSTEM_PROMPT.slice(0, 500) + "...")
-  console.log("\nUser Prompt (first 1000 chars):")
-  console.log(prompt.slice(0, 1000) + "...")
+  const prompt = buildInferencePrompt(seniorEngineerJob);
+  console.log("System Prompt (first 500 chars):");
+  console.log(JOB_CONTEXT_SYSTEM_PROMPT.slice(0, 500) + "...");
+  console.log("\nUser Prompt (first 1000 chars):");
+  console.log(prompt.slice(0, 1000) + "...");
 
-  printDivider("2. PARSE LLM RESPONSE")
+  printDivider("2. PARSE LLM RESPONSE");
 
-  const mockResponse = mockResponses["Senior Software Engineer"]
-  console.log("Raw LLM Response:")
-  console.log(mockResponse)
+  const mockResponse = mockResponses["Senior Software Engineer"];
+  console.log("Raw LLM Response:");
+  console.log(mockResponse);
 
-  const jobContext = parseJobContextResponse(mockResponse!)
-  console.log("\nParsed JobContext:")
-  console.log(JSON.stringify(jobContext, null, 2))
+  const jobContext = parseJobContextResponse(mockResponse!);
+  console.log("\nParsed JobContext:");
+  console.log(JSON.stringify(jobContext, null, 2));
 
-  printDivider("3. FULL PIPELINE — Senior Software Engineer")
+  printDivider("3. FULL PIPELINE — Senior Software Engineer");
 
-  const engineerResult = await resolveArchetypesFromJobPosting(
-    mockLLMClient,
-    seniorEngineerJob
-  )
+  const engineerResult = await resolveArchetypesFromJobPosting(mockLLMClient, seniorEngineerJob);
 
-  console.log("Inferred Context:")
-  console.log(`  Domain: ${engineerResult.jobContext.domain}`)
-  console.log(`  Risk Level: ${engineerResult.jobContext.riskLevel}`)
-  console.log(`  Experience: ${engineerResult.jobContext.experienceLevel}`)
-  console.log(
-    `  Primary Signals: ${engineerResult.jobContext.primarySignals.join(", ")}`
-  )
+  console.log("Inferred Context:");
+  console.log(`  Domain: ${engineerResult.jobContext.domain}`);
+  console.log(`  Risk Level: ${engineerResult.jobContext.riskLevel}`);
+  console.log(`  Experience: ${engineerResult.jobContext.experienceLevel}`);
+  console.log(`  Primary Signals: ${engineerResult.jobContext.primarySignals.join(", ")}`);
 
-  console.log("\nSelected Archetypes:")
+  console.log("\nSelected Archetypes:");
   for (const arch of engineerResult.archetypes) {
-    console.log(`  • ${arch.id}`)
-    console.log(`    Signals: ${arch.signals.join(", ")}`)
+    console.log(`  • ${arch.id}`);
+    console.log(`    Signals: ${arch.signals.join(", ")}`);
   }
 
-  printDivider("4. FULL PIPELINE — ICU Nurse")
+  printDivider("4. FULL PIPELINE — ICU Nurse");
 
-  const nurseResult = await resolveArchetypesFromJobPosting(
-    mockLLMClient,
-    icuNurseJob
-  )
+  const nurseResult = await resolveArchetypesFromJobPosting(mockLLMClient, icuNurseJob);
 
-  console.log("Inferred Context:")
-  console.log(`  Domain: ${nurseResult.jobContext.domain}`)
-  console.log(`  Risk Level: ${nurseResult.jobContext.riskLevel}`)
-  console.log(`  Regulated: ${nurseResult.jobContext.regulatedEnvironment}`)
-  console.log(`  Decision Impact: ${nurseResult.jobContext.decisionImpact}`)
+  console.log("Inferred Context:");
+  console.log(`  Domain: ${nurseResult.jobContext.domain}`);
+  console.log(`  Risk Level: ${nurseResult.jobContext.riskLevel}`);
+  console.log(`  Regulated: ${nurseResult.jobContext.regulatedEnvironment}`);
+  console.log(`  Decision Impact: ${nurseResult.jobContext.decisionImpact}`);
 
-  console.log("\nSelected Archetypes:")
+  console.log("\nSelected Archetypes:");
   for (const arch of nurseResult.archetypes) {
-    console.log(`  • ${arch.id}`)
-    console.log(`    Signals: ${arch.signals.join(", ")}`)
+    console.log(`  • ${arch.id}`);
+    console.log(`    Signals: ${arch.signals.join(", ")}`);
   }
 
-  printDivider("5. FULL PIPELINE — Store Manager")
+  printDivider("5. FULL PIPELINE — Store Manager");
 
-  const managerResult = await resolveArchetypesFromJobPosting(
-    mockLLMClient,
-    retailManagerJob
-  )
+  const managerResult = await resolveArchetypesFromJobPosting(mockLLMClient, retailManagerJob);
 
-  console.log("Inferred Context:")
-  console.log(`  Domain: ${managerResult.jobContext.domain}`)
-  console.log(
-    `  People Management: ${managerResult.jobContext.peopleManagement}`
-  )
-  console.log(`  Customer Facing: ${managerResult.jobContext.customerFacing}`)
+  console.log("Inferred Context:");
+  console.log(`  Domain: ${managerResult.jobContext.domain}`);
+  console.log(`  People Management: ${managerResult.jobContext.peopleManagement}`);
+  console.log(`  Customer Facing: ${managerResult.jobContext.customerFacing}`);
 
-  console.log("\nSelected Archetypes:")
+  console.log("\nSelected Archetypes:");
   for (const arch of managerResult.archetypes) {
-    console.log(`  • ${arch.id}`)
-    console.log(`    Signals: ${arch.signals.join(", ")}`)
+    console.log(`  • ${arch.id}`);
+    console.log(`    Signals: ${arch.signals.join(", ")}`);
   }
 
-  printDivider("DONE")
+  printDivider("DONE");
 }
 
 // =============================================================================
@@ -290,4 +277,4 @@ const productionLLMClient: LLMClient = {
 */
 
 // Run demonstration
-demonstrateInference().catch(console.error)
+demonstrateInference().catch(console.error);

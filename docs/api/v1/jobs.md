@@ -17,9 +17,9 @@ Content-Type: application/json
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `title` | string | Yes | Job title (1-200 characters) |
+| Field   | Type   | Required | Description                  |
+| ------- | ------ | -------- | ---------------------------- |
+| `title` | string | Yes      | Job title (1-200 characters) |
 
 ## Response
 
@@ -34,10 +34,10 @@ Job successfully created.
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Unique job identifier (prefixed with `job_`) |
-| `title` | string | Job title as provided |
+| Field   | Type   | Description                                  |
+| ------- | ------ | -------------------------------------------- |
+| `id`    | string | Unique job identifier (prefixed with `job_`) |
+| `title` | string | Job title as provided                        |
 
 ### 400 Bad Request
 
