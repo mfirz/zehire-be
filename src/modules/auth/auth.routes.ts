@@ -154,9 +154,12 @@ export function createAuthRoutes(): Hono<{ Bindings: Env }> {
   // ===========================================================================
   auth.get("/me", async (c) => {
     const authService = createAuthService(c.env);
+
+    // Try Authorization header first, then Cookie
+    const authHeader = c.req.header("Authorization") ?? null;
     const cookieHeader = c.req.header("Cookie") ?? null;
 
-    const user = await authService.verifySession(cookieHeader);
+    const user = await authService.verifySessionFromHeaders(authHeader, cookieHeader);
 
     if (!user) {
       return c.json(
@@ -175,6 +178,7 @@ export function createAuthRoutes(): Hono<{ Bindings: Env }> {
         id: user.userId,
         email: user.email,
         role: user.role,
+        orgId: user.orgId,
       },
     });
   });

@@ -194,6 +194,29 @@ export class AuthService {
     return this.sessionService.verifySession(token);
   }
 
+  /**
+   * Verify session from Authorization header or Cookie.
+   * Tries Authorization header first, falls back to Cookie.
+   */
+  async verifySessionFromHeaders(
+    authHeader: string | null,
+    cookieHeader: string | null
+  ): Promise<UserClaims | null> {
+    // Try Authorization header first (Bearer token)
+    const bearerToken = this.sessionService.extractTokenFromAuthHeader(authHeader);
+    if (bearerToken) {
+      return this.sessionService.verifySession(bearerToken);
+    }
+
+    // Fall back to Cookie
+    const cookieToken = this.sessionService.extractTokenFromCookie(cookieHeader);
+    if (cookieToken) {
+      return this.sessionService.verifySession(cookieToken);
+    }
+
+    return null;
+  }
+
   // ===========================================================================
   // PRIVATE METHODS
   // ===========================================================================
