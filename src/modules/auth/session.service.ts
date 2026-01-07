@@ -15,7 +15,7 @@
  * - HMAC-SHA256 signature
  * - HttpOnly cookie (not accessible via JavaScript)
  * - Secure flag (HTTPS only in production)
- * - SameSite=Strict (CSRF protection)
+ * - SameSite=Lax (CSRF protection while allowing magic link navigation)
  * - Short-lived tokens with configurable TTL
  */
 
@@ -119,7 +119,7 @@ export class SessionService {
       `${this.config.cookieName}=${token}`,
       "HttpOnly",
       "Path=/",
-      `SameSite=Strict`,
+      `SameSite=Lax`,
       `Max-Age=${this.config.ttlSeconds}`,
     ];
 
@@ -140,7 +140,7 @@ export class SessionService {
       `${this.config.cookieName}=`,
       "HttpOnly",
       "Path=/",
-      "SameSite=Strict",
+      "SameSite=Lax",
       "Max-Age=0",
     ];
 
