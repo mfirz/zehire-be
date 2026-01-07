@@ -69,6 +69,10 @@ export type TokenValidationResult =
 export interface SessionPayload {
   /** Subject (user ID) */
   sub: string;
+  /** Issuer */
+  iss: "zehire";
+  /** Audience */
+  aud: "zehire-api";
   /** User email */
   email: string;
   /** User role */

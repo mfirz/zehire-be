@@ -35,7 +35,36 @@ Exceptions are explicitly documented per endpoint.
 
 ## Authentication
 
-Authentication requirements are documented per endpoint. Unauthenticated endpoints are marked as `Public`.
+Protected endpoints require JWT authentication via the `Authorization` header:
+
+```
+Authorization: Bearer <jwt>
+```
+
+JWTs are issued via the magic link authentication flow (`/auth/login` → `/auth/callback`).
+
+### JWT Claims
+
+| Claim   | Type   | Description              |
+| ------- | ------ | ------------------------ |
+| `sub`   | string | User ID                  |
+| `iss`   | string | Issuer (`zehire`)        |
+| `aud`   | string | Audience (`zehire-api`)  |
+| `email` | string | User email address       |
+| `role`  | string | User role                |
+| `iat`   | number | Issued at (Unix timestamp) |
+| `exp`   | number | Expiration (Unix timestamp) |
+
+### Authentication Errors
+
+| HTTP Status | Code           | Description                          |
+| ----------- | -------------- | ------------------------------------ |
+| 401         | `UNAUTHORIZED` | Missing, invalid, or expired JWT     |
+| 403         | `FORBIDDEN`    | Valid JWT but insufficient permissions |
+
+See [Authentication Guide](./authentication.md) for complete details.
+
+Unauthenticated (public) endpoints are explicitly marked as `Public`.
 
 ## Error Responses
 
@@ -67,14 +96,24 @@ All errors follow a consistent format:
 
 ## Endpoint Index
 
-### v1
+### Authentication (Public)
 
-| Method | Path       | Description  |
-| ------ | ---------- | ------------ |
-| GET    | `/v1/`     | API root     |
-| POST   | `/v1/jobs` | Create a job |
+| Method | Path             | Description             |
+| ------ | ---------------- | ----------------------- |
+| POST   | `/auth/login`    | Initiate magic link auth |
+| GET    | `/auth/callback` | Complete authentication |
+| POST   | `/auth/logout`   | Clear session           |
+| GET    | `/auth/me`       | Get current user        |
 
-### Internal
+### v1 (Protected)
+
+| Method | Path            | Auth     | Description           |
+| ------ | --------------- | -------- | --------------------- |
+| GET    | `/v1/`          | Public   | API root              |
+| POST   | `/v1/jobs`      | Required | Create a job          |
+| GET    | `/v1/jobs/:id`  | Required | Get job status/results |
+
+### Internal (Public)
 
 | Method | Path               | Description  |
 | ------ | ------------------ | ------------ |

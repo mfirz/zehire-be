@@ -156,6 +156,15 @@ export interface Env {
 // =============================================================================
 
 import type { Hono } from "hono";
+import type { UserClaims } from "../modules/auth/auth.types";
+
+/**
+ * Variables available in the Hono context for authenticated routes.
+ */
+export interface AuthVariables {
+  /** Authenticated user claims extracted from JWT */
+  user: UserClaims;
+}
 
 /**
  * Type-safe Hono app with Zehire bindings.
@@ -174,6 +183,25 @@ import type { Hono } from "hono";
  * ```
  */
 export type AppType = Hono<{ Bindings: Env }>;
+
+/**
+ * Type-safe Hono app with Zehire bindings and authenticated user context.
+ * Use this type for routes that require authentication.
+ *
+ * @example
+ * ```typescript
+ * import type { AuthenticatedAppType } from "@/types/bindings";
+ *
+ * const app: AuthenticatedAppType = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
+ *
+ * app.get("/jobs/:id", async (c) => {
+ *   const user = c.get("user");  // Type-safe user claims
+ *   const db = c.env.DB;
+ *   // ...
+ * });
+ * ```
+ */
+export type AuthenticatedAppType = Hono<{ Bindings: Env; Variables: AuthVariables }>;
 
 // =============================================================================
 // D1 TYPE HELPERS

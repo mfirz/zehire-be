@@ -2,18 +2,21 @@
  * Jobs Routes
  * ===========
  * Route definitions for /v1/jobs endpoints.
+ *
+ * All endpoints require JWT authentication.
+ * User claims are available via `c.get("user")` in handlers.
  */
 
 import { Hono } from "hono";
-import { apiKeyAuth } from "../../../middleware/auth";
-import type { Env } from "../../../types/bindings";
+import { jwtAuth } from "../../../middleware/auth";
+import type { AuthVariables, Env } from "../../../types/bindings";
 import { getJob } from "./get";
 import { createJob } from "./post";
 
-const jobs = new Hono<{ Bindings: Env }>();
+const jobs = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
-// Apply API key auth to all jobs routes
-jobs.use("/*", apiKeyAuth);
+// Apply JWT auth to all jobs routes
+jobs.use("/*", jwtAuth);
 
 // POST /v1/jobs - Create a new job
 jobs.post("/", createJob);

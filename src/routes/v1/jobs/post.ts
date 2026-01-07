@@ -3,13 +3,15 @@
  * =============
  * Create a new job and queue for async processing.
  *
+ * Requires JWT authentication. User ID is extracted from the JWT.
+ *
  * Returns immediately with job ID. Client should poll GET /v1/jobs/:id
  * to check processing status and retrieve results.
  */
 
 import type { Context } from "hono";
 import { CreateJobInputSchema, JobRepository, JobService } from "../../../domain/jobs";
-import type { Env } from "../../../types/bindings";
+import type { AuthVariables, Env } from "../../../types/bindings";
 
 /**
  * Request body for job creation.
@@ -25,7 +27,7 @@ import type { Env } from "../../../types/bindings";
  * }
  * ```
  */
-export async function createJob(c: Context<{ Bindings: Env }>): Promise<Response> {
+export async function createJob(c: Context<{ Bindings: Env; Variables: AuthVariables }>): Promise<Response> {
   // Parse and validate request body
   const body: unknown = await c.req.json();
   const parseResult = CreateJobInputSchema.safeParse(body);

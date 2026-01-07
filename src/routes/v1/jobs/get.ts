@@ -3,6 +3,8 @@
  * ================
  * Get job status and results (if completed).
  *
+ * Requires JWT authentication.
+ *
  * Response varies by status:
  * - pending: Basic job info, waiting for processing
  * - processing: Job is being processed
@@ -12,9 +14,9 @@
 
 import type { Context } from "hono";
 import { JobRepository, JobService } from "../../../domain/jobs";
-import type { Env } from "../../../types/bindings";
+import type { AuthVariables, Env } from "../../../types/bindings";
 
-export async function getJob(c: Context<{ Bindings: Env }>): Promise<Response> {
+export async function getJob(c: Context<{ Bindings: Env; Variables: AuthVariables }>): Promise<Response> {
   const jobId = c.req.param("id");
 
   if (!jobId) {

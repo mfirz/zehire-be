@@ -55,6 +55,8 @@ export class SessionService {
 
     const payload: SessionPayload = {
       sub: user.userId,
+      iss: "zehire",
+      aud: "zehire-api",
       email: user.email,
       role: user.role,
       iat: now,
@@ -75,6 +77,11 @@ export class SessionService {
       const payload = await this.verifyJwt(token);
 
       if (!payload) {
+        return null;
+      }
+
+      // Verify issuer and audience
+      if (payload.iss !== "zehire" || payload.aud !== "zehire-api") {
         return null;
       }
 
@@ -156,6 +163,27 @@ export class SessionService {
     }
 
     return sessionCookie.substring(this.config.cookieName.length + 1);
+  }
+
+  /**
+   * Extract JWT from Authorization header.
+   *
+   * Expects format: Bearer <token>
+   *
+   * @param authHeader - Authorization header value
+   * @returns Token if found and valid format, null otherwise
+   */
+  extractTokenFromAuthHeader(authHeader: string | null): string | null {
+    if (!authHeader) {
+      return null;
+    }
+
+    const match = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (!match || !match[1]) {
+      return null;
+    }
+
+    return match[1];
   }
 
   // ===========================================================================

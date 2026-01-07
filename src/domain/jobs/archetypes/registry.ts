@@ -495,7 +495,7 @@ const archetypes: Archetype[] = [
  * - MINOR: New archetypes added
  * - PATCH: Fixes to descriptions, constraints
  */
-export const ARCHETYPE_REGISTRY: ArchetypeRegistry = {
+const ARCHETYPE_REGISTRY: ArchetypeRegistry = {
   registryVersion: "1.1.0",
   description:
     "Canonical, job-agnostic context question archetypes used by Zehire to extract evaluative signals without ranking or scoring.",
