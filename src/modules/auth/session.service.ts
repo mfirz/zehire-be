@@ -59,6 +59,7 @@ export class SessionService {
       aud: "zehire-api",
       email: user.email,
       role: user.role,
+      org_id: user.orgId,
       iat: now,
       exp: now + this.config.ttlSeconds,
     };
@@ -91,10 +92,16 @@ export class SessionService {
         return null;
       }
 
+      // Reject tokens without org_id (old tokens before multi-tenancy)
+      if (!payload.org_id) {
+        return null;
+      }
+
       return {
         userId: payload.sub,
         email: payload.email,
         role: payload.role,
+        orgId: payload.org_id,
       };
     } catch {
       return null;

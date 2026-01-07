@@ -54,6 +54,7 @@ All JWTs are signed using HMAC-SHA256 (`HS256`).
   "sub": "user_abc123",
   "iss": "zehire",
   "aud": "zehire-api",
+  "org_id": "org_xyz789",
   "email": "user@example.com",
   "role": "recruiter",
   "iat": 1705312200,
@@ -61,15 +62,16 @@ All JWTs are signed using HMAC-SHA256 (`HS256`).
 }
 ```
 
-| Claim   | Type   | Description                     |
-| ------- | ------ | ------------------------------- |
-| `sub`   | string | Subject - User ID               |
-| `iss`   | string | Issuer - Always `zehire`        |
-| `aud`   | string | Audience - Always `zehire-api`  |
-| `email` | string | User's email address            |
-| `role`  | string | User role (`admin`, `recruiter`) |
-| `iat`   | number | Issued At (Unix timestamp)      |
-| `exp`   | number | Expiration (Unix timestamp)     |
+| Claim    | Type   | Description                      |
+| -------- | ------ | -------------------------------- |
+| `sub`    | string | Subject - User ID                |
+| `iss`    | string | Issuer - Always `zehire`         |
+| `aud`    | string | Audience - Always `zehire-api`   |
+| `org_id` | string | Organization ID (multi-tenancy)  |
+| `email`  | string | User's email address             |
+| `role`   | string | User role (`admin`, `recruiter`) |
+| `iat`    | number | Issued At (Unix timestamp)       |
+| `exp`    | number | Expiration (Unix timestamp)      |
 
 ### JWT Lifecycle
 

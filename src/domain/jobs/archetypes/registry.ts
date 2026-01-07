@@ -543,4 +543,8 @@ export function getArchetypesBySignal(signalId: string): Archetype[] {
   return archetypes.filter((a) => a.signals.includes(signalId as any));
 }
 
+// Named export for explicit imports
+export { ARCHETYPE_REGISTRY };
+
+// Default export for convenience
 export default ARCHETYPE_REGISTRY;

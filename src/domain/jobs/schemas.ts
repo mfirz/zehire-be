@@ -129,6 +129,7 @@ export type ResolvedArchetypeOutput = z.infer<typeof ResolvedArchetypeSchema>;
  */
 export const JobRowSchema = z.object({
   id: z.string(),
+  org_id: z.string().nullable(),
   status: z.enum(JOB_STATUSES),
   title: z.string(),
   description: z.string(),
@@ -148,6 +149,30 @@ export const JobRowSchema = z.object({
 });
 
 export type JobRow = z.infer<typeof JobRowSchema>;
+
+/**
+ * Schema for a job list item (minimal data for listing).
+ */
+export const JobListItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  status: z.enum(JOB_STATUSES),
+  createdAt: z.string(),
+});
+
+export type JobListItem = z.infer<typeof JobListItemSchema>;
+
+/**
+ * Schema for paginated job list response.
+ */
+export const JobListResponseSchema = z.object({
+  data: z.array(JobListItemSchema),
+  page: z.object({
+    nextCursor: z.string().nullable(),
+  }),
+});
+
+export type JobListResponse = z.infer<typeof JobListResponseSchema>;
 
 // =============================================================================
 // API RESPONSE SCHEMAS

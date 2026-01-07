@@ -15,7 +15,7 @@
 
 import type { MessageBatch } from "@cloudflare/workers-types";
 import { JobProcessor } from "../domain/jobs/processor";
-import { JobRepository } from "../domain/jobs/repository";
+import { JobRepository, OrgRepository } from "../domain/jobs/repository";
 import { createLLMClient } from "../lib/llm";
 import type { Env, JobQueueMessage } from "../types/bindings";
 
@@ -25,8 +25,9 @@ import type { Env, JobQueueMessage } from "../types/bindings";
  */
 export async function handleQueue(batch: MessageBatch<JobQueueMessage>, env: Env): Promise<void> {
   const repository = new JobRepository(env.DB);
+  const orgRepository = new OrgRepository(env.DB);
   const llmClient = createLLMClient({ env });
-  const processor = new JobProcessor(repository, llmClient);
+  const processor = new JobProcessor(repository, orgRepository, llmClient);
 
   for (const message of batch.messages) {
     const { jobId, createdAt } = message.body;

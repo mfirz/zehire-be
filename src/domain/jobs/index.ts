@@ -5,7 +5,7 @@
  */
 
 // Repository
-export { JobRepository } from "./repository";
+export { JobRepository, OrgRepository } from "./repository";
 
 // Service
 export { JobService } from "./service";
@@ -18,12 +18,15 @@ export {
   CreateJobInputSchema,
   CreateJobResponseSchema,
   JobContextSchema,
+  JobListResponseSchema,
   JobStatusResponseSchema,
   RenderedQuestionSchema,
   ResolvedArchetypeSchema,
   type CreateJobInput,
   type CreateJobResponse,
   type JobContextOutput,
+  type JobListItem,
+  type JobListResponse,
   type JobRow,
   type JobStatusResponse,
   type RenderedQuestionOutput,

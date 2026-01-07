@@ -23,6 +23,7 @@ export interface UserRow {
   id: string;
   email: string;
   role: UserRole;
+  org_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +35,7 @@ export interface UserClaims {
   userId: string;
   email: string;
   role: UserRole;
+  orgId: string;
 }
 
 // =============================================================================
@@ -77,6 +79,8 @@ export interface SessionPayload {
   email: string;
   /** User role */
   role: UserRole;
+  /** Organization ID */
+  org_id: string;
   /** Issued at (Unix timestamp) */
   iat: number;
   /** Expiration (Unix timestamp) */

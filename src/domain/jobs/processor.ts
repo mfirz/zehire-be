@@ -9,6 +9,7 @@
  * 3. Resolves archetypes
  * 4. Renders questions
  * 5. Updates job status in D1
+ * 6. Invalidates job list cache (increments version)
  *
  * Used by both:
  * - Queue consumer (production)
@@ -18,7 +19,7 @@
 import type { JobErrorCode } from "../../types/bindings";
 import type { LLMClient } from "./archetypes/inference";
 import { generateQuestionsForJob } from "./archetypes/renderer";
-import { JobRepository } from "./repository";
+import { JobRepository, OrgRepository } from "./repository";
 import type { JobContextOutput, RenderedQuestionOutput, ResolvedArchetypeOutput } from "./schemas";
 
 // =============================================================================
@@ -28,6 +29,7 @@ import type { JobContextOutput, RenderedQuestionOutput, ResolvedArchetypeOutput 
 export class JobProcessor {
   constructor(
     private readonly repository: JobRepository,
+    private readonly orgRepository: OrgRepository,
     private readonly llmClient: LLMClient
   ) {}
 
@@ -85,6 +87,11 @@ export class JobProcessor {
         processingDurationMs,
       });
 
+      // Invalidate job list cache for this org
+      if (job.org_id) {
+        await this.orgRepository.incrementJobsListVersion(job.org_id);
+      }
+
       console.log(`[Processor] Job ${jobId} completed in ${processingDurationMs}ms`);
     } catch (error) {
       // Determine error code based on error type
@@ -94,6 +101,11 @@ export class JobProcessor {
         message,
         code,
       });
+
+      // Invalidate job list cache for this org
+      if (job.org_id) {
+        await this.orgRepository.incrementJobsListVersion(job.org_id);
+      }
 
       // Re-throw for queue retry mechanism
       throw error;

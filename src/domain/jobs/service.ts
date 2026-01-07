@@ -38,11 +38,12 @@ export class JobService {
    * 3. Returns immediately with the job ID
    *
    * @param input - Validated job creation input
+   * @param orgId - Organization ID from authenticated user
    * @returns Job ID and status for immediate response
    */
-  async createJob(input: CreateJobInput): Promise<CreateJobResponse> {
+  async createJob(input: CreateJobInput, orgId: string): Promise<CreateJobResponse> {
     // Step 1: Create job in pending status
-    const job = await this.repository.create(input);
+    const job = await this.repository.create(input, orgId);
 
     // Step 2: Send to queue for processing
     await this.queue.send({

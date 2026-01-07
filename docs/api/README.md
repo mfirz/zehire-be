@@ -45,15 +45,16 @@ JWTs are issued via the magic link authentication flow (`/auth/login` → `/auth
 
 ### JWT Claims
 
-| Claim   | Type   | Description              |
-| ------- | ------ | ------------------------ |
-| `sub`   | string | User ID                  |
-| `iss`   | string | Issuer (`zehire`)        |
-| `aud`   | string | Audience (`zehire-api`)  |
-| `email` | string | User email address       |
-| `role`  | string | User role                |
-| `iat`   | number | Issued at (Unix timestamp) |
-| `exp`   | number | Expiration (Unix timestamp) |
+| Claim    | Type   | Description               |
+| -------- | ------ | ------------------------- |
+| `sub`    | string | User ID                   |
+| `iss`    | string | Issuer (`zehire`)         |
+| `aud`    | string | Audience (`zehire-api`)   |
+| `org_id` | string | Organization ID           |
+| `email`  | string | User email address        |
+| `role`   | string | User role                 |
+| `iat`    | number | Issued at (Unix timestamp) |
+| `exp`    | number | Expiration (Unix timestamp) |
 
 ### Authentication Errors
 
@@ -107,11 +108,12 @@ All errors follow a consistent format:
 
 ### v1 (Protected)
 
-| Method | Path            | Auth     | Description           |
-| ------ | --------------- | -------- | --------------------- |
-| GET    | `/v1/`          | Public   | API root              |
-| POST   | `/v1/jobs`      | Required | Create a job          |
-| GET    | `/v1/jobs/:id`  | Required | Get job status/results |
+| Method | Path            | Auth     | Description             |
+| ------ | --------------- | -------- | ----------------------- |
+| GET    | `/v1/`          | Public   | API root                |
+| GET    | `/v1/jobs`      | Required | List jobs (paginated)   |
+| POST   | `/v1/jobs`      | Required | Create a job            |
+| GET    | `/v1/jobs/:id`  | Required | Get job status/results  |
 
 ### Internal (Public)
 
