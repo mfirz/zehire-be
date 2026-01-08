@@ -190,6 +190,20 @@ export const JobListItemSchema = z.object({
 export type JobListItem = z.infer<typeof JobListItemSchema>;
 
 /**
+ * Schema for capacity status in job list response.
+ */
+export const CapacityStatusSchema = z.object({
+  /** Current count of published + paused jobs */
+  activeRoles: z.number(),
+  /** Max allowed from org.active_role_capacity */
+  capacity: z.number(),
+  /** activeRoles > capacity (soft state, no enforcement) */
+  isOverCapacity: z.boolean(),
+  /** activeRoles < capacity (can publish new roles) */
+  canActivate: z.boolean(),
+});
+
+/**
  * Schema for paginated job list response.
  */
 export const JobListResponseSchema = z.object({
@@ -197,6 +211,8 @@ export const JobListResponseSchema = z.object({
   page: z.object({
     nextCursor: z.string().nullable(),
   }),
+  /** Organization's capacity status (active roles vs limit) */
+  capacity: CapacityStatusSchema,
 });
 
 export type JobListResponse = z.infer<typeof JobListResponseSchema>;

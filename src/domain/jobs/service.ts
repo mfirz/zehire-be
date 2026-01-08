@@ -44,7 +44,13 @@ export type JobServiceError =
   | { code: "INVALID_STATE"; message: string }
   | { code: "REGENERATION_LIMIT_REACHED"; message: string }
   | { code: "REGENERATION_COOLDOWN"; message: string; retryAfter: number }
-  | { code: "QUESTIONS_NOT_READY"; message: string };
+  | { code: "QUESTIONS_NOT_READY"; message: string }
+  | {
+      code: "CAPACITY_EXCEEDED";
+      message: string;
+      activeRoles: number;
+      capacity: number;
+    };
 
 export type JobServiceResult<T> =
   | { success: true; data: T }
@@ -270,6 +276,20 @@ export class JobService {
       };
     }
 
+    // Check capacity before publishing
+    const capacityStatus = await this.orgRepository.getCapacityStatus(orgId);
+    if (!capacityStatus.canActivate) {
+      return {
+        success: false,
+        error: {
+          code: "CAPACITY_EXCEEDED",
+          message: `Your organization has reached its active role capacity (${capacityStatus.activeRoles}/${capacityStatus.capacity}). To publish a new role, close an existing one. Note: Pausing does not free up capacity.`,
+          activeRoles: capacityStatus.activeRoles,
+          capacity: capacityStatus.capacity,
+        },
+      };
+    }
+
     // Generate unique slug
     const slug = await generateUniqueSlug(this.repository, job.company_name, job.title);
 
@@ -351,6 +371,10 @@ export class JobService {
    * Resume a paused job.
    *
    * Restarts billing and makes public again.
+   *
+   * Note: No capacity check needed because paused jobs already count against
+   * capacity (they're "active" in terms of responsibility). Resume only
+   * changes visibility, not the active role count.
    *
    * @param jobId - Job ID
    * @param orgId - Organization ID for authorization

@@ -619,11 +619,48 @@ export class JobRepository {
 // ORG REPOSITORY
 // =============================================================================
 
+// =============================================================================
+// CAPACITY TYPES
+// =============================================================================
+
 /**
- * Organization repository for cache versioning operations.
+ * Organization capacity and billing info.
+ */
+export interface OrgCapacityInfo {
+  activeRoleCapacity: number;
+  billingWaived: boolean;
+  billingWaivedReason: string | null;
+  billingWaivedUntil: string | null;
+}
+
+/**
+ * Capacity status (computed, not stored).
+ * Used for UI warnings and enforcement.
+ */
+export interface CapacityStatus {
+  /** Current count of published + paused jobs */
+  activeRoles: number;
+  /** Max allowed from org.active_role_capacity */
+  capacity: number;
+  /** activeRoles > capacity (soft state, no enforcement) */
+  isOverCapacity: boolean;
+  /** activeRoles < capacity (can publish/resume) */
+  canActivate: boolean;
+}
+
+// =============================================================================
+// ORG REPOSITORY
+// =============================================================================
+
+/**
+ * Organization repository for capacity and cache operations.
  */
 export class OrgRepository {
   constructor(private readonly db: D1Database) {}
+
+  // ===========================================================================
+  // CACHE VERSIONING
+  // ===========================================================================
 
   /**
    * Get jobs_list_version for an organization.
@@ -651,6 +688,127 @@ export class OrgRepository {
         `
       )
       .bind(orgId)
+      .run();
+  }
+
+  // ===========================================================================
+  // CAPACITY MANAGEMENT
+  // ===========================================================================
+
+  /**
+   * Get organization capacity and billing info.
+   */
+  async getCapacityInfo(orgId: string): Promise<OrgCapacityInfo | null> {
+    const result = await this.db
+      .prepare(
+        `
+        SELECT
+          active_role_capacity,
+          billing_waived,
+          billing_waived_reason,
+          billing_waived_until
+        FROM orgs
+        WHERE id = ?
+        `
+      )
+      .bind(orgId)
+      .first<{
+        active_role_capacity: number;
+        billing_waived: number;
+        billing_waived_reason: string | null;
+        billing_waived_until: string | null;
+      }>();
+
+    if (!result) return null;
+
+    return {
+      activeRoleCapacity: result.active_role_capacity,
+      billingWaived: result.billing_waived === 1,
+      billingWaivedReason: result.billing_waived_reason,
+      billingWaivedUntil: result.billing_waived_until,
+    };
+  }
+
+  /**
+   * Get count of active roles (published + paused) for an organization.
+   * Active role = Zehire is "on the hook" for evaluative work.
+   */
+  async getActiveRoleCount(orgId: string): Promise<number> {
+    const result = await this.db
+      .prepare(
+        `
+        SELECT COUNT(*) as count
+        FROM jobs
+        WHERE org_id = ? AND status IN ('published', 'paused')
+        `
+      )
+      .bind(orgId)
+      .first<{ count: number }>();
+
+    return result?.count ?? 0;
+  }
+
+  /**
+   * Get full capacity status for an organization.
+   * Combines capacity info and active role count.
+   */
+  async getCapacityStatus(orgId: string): Promise<CapacityStatus> {
+    // Run both queries in parallel
+    const [capacityInfo, activeRoles] = await Promise.all([
+      this.getCapacityInfo(orgId),
+      this.getActiveRoleCount(orgId),
+    ]);
+
+    const capacity = capacityInfo?.activeRoleCapacity ?? 3;
+
+    return {
+      activeRoles,
+      capacity,
+      isOverCapacity: activeRoles > capacity,
+      canActivate: activeRoles < capacity,
+    };
+  }
+
+  /**
+   * Update organization's active role capacity.
+   * Used for sales upsell.
+   */
+  async updateCapacity(orgId: string, newCapacity: number): Promise<void> {
+    await this.db
+      .prepare(
+        `
+        UPDATE orgs
+        SET active_role_capacity = ?,
+            updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        WHERE id = ?
+        `
+      )
+      .bind(newCapacity, orgId)
+      .run();
+  }
+
+  /**
+   * Set billing waiver for an organization.
+   * Used for founding access.
+   */
+  async setBillingWaiver(
+    orgId: string,
+    waived: boolean,
+    reason?: string,
+    until?: string
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        `
+        UPDATE orgs
+        SET billing_waived = ?,
+            billing_waived_reason = ?,
+            billing_waived_until = ?,
+            updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        WHERE id = ?
+        `
+      )
+      .bind(waived ? 1 : 0, reason ?? null, until ?? null, orgId)
       .run();
   }
 }

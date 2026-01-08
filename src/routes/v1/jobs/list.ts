@@ -75,9 +75,14 @@ export async function listJobs(
     }
   }
 
-  // Get current jobs_list_version for cache key
+  // Get org repository for cache versioning and capacity
   const orgRepository = new OrgRepository(c.env.DB);
-  const jobsListVersion = await orgRepository.getJobsListVersion(orgId);
+
+  // Get version and capacity in parallel
+  const [jobsListVersion, capacityStatus] = await Promise.all([
+    orgRepository.getJobsListVersion(orgId),
+    orgRepository.getCapacityStatus(orgId),
+  ]);
 
   // Construct cache key with version
   // When version changes, this becomes a different cache key = automatic invalidation
@@ -88,8 +93,13 @@ export async function listJobs(
   const cachedResponse = await cache.match(cacheKey);
 
   if (cachedResponse) {
-    // Cache hit - return immediately
-    return cachedResponse;
+    // Cache hit - but we need to inject fresh capacity status
+    // Capacity can change independently of job list version
+    const cachedData = await cachedResponse.json() as JobListResponse;
+    return c.json({
+      ...cachedData,
+      capacity: capacityStatus,
+    }, 200);
   }
 
   // Cache miss - query database
@@ -106,6 +116,7 @@ export async function listJobs(
     page: {
       nextCursor,
     },
+    capacity: capacityStatus,
   };
 
   // Create response with cache headers

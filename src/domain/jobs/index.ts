@@ -5,7 +5,12 @@
  */
 
 // Repository
-export { JobRepository, OrgRepository } from "./repository";
+export {
+  JobRepository,
+  OrgRepository,
+  type CapacityStatus,
+  type OrgCapacityInfo,
+} from "./repository";
 
 // Service
 export { JobService, type JobServiceError, type JobServiceResult } from "./service";

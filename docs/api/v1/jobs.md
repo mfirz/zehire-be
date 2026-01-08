@@ -136,9 +136,21 @@ List jobs for the authenticated organization with cursor-based pagination.
   ],
   "page": {
     "nextCursor": "eyJjIjoiMjAyNi0wMS0wMVQwOTozMDowMFoiLCJpIjoieHl6Nzg5YWJjMDEyZGVmMzQifQ"
+  },
+  "capacity": {
+    "activeRoles": 1,
+    "capacity": 3,
+    "isOverCapacity": false,
+    "canActivate": true
   }
 }
 ```
+
+The `capacity` object shows the organization's active role usage:
+- `activeRoles`: Count of published + paused jobs
+- `capacity`: Maximum allowed active roles
+- `isOverCapacity`: True if activeRoles > capacity (soft warning)
+- `canActivate`: True if a new role can be published
 
 ---
 
@@ -565,6 +577,7 @@ https://yourapp.com/apply/acme-corp-senior-software-engineer-x7k3m
 | `NOT_FOUND` | Job not found or not owned by organization |
 | `INVALID_STATE` | Action not allowed for current job status |
 | `QUESTIONS_NOT_READY` | Questions must be completed before publishing |
+| `CAPACITY_EXCEEDED` | Organization has reached active role capacity |
 | `REGENERATION_LIMIT_REACHED` | Maximum 20 regenerations per job reached |
 | `REGENERATION_COOLDOWN` | Must wait before regenerating (check retryAfter) |
 | `INFERENCE_FAILED` | LLM inference step failed |
@@ -574,6 +587,25 @@ https://yourapp.com/apply/acme-corp-senior-software-engineer-x7k3m
 | `LLM_TIMEOUT` | LLM API timed out |
 | `VALIDATION_ERROR` | Input or output validation failed |
 | `INTERNAL_ERROR` | Unexpected internal error |
+
+### Capacity Exceeded Error
+
+When attempting to publish a job and the organization has reached its active role capacity:
+
+```json
+{
+  "error": {
+    "code": "CAPACITY_EXCEEDED",
+    "message": "Your organization has reached its active role capacity (3/3). To publish a new role, close an existing one. Note: Pausing does not free up capacity.",
+    "activeRoles": 3,
+    "capacity": 3
+  }
+}
+```
+
+Active roles include both `published` and `paused` jobs (Zehire is "on the hook" for evaluative work in both states). To free up capacity:
+- Close jobs that are no longer needed
+- Note: Pausing does NOT free up capacity (paused jobs are still active)
 
 ### Retryable vs Permanent Errors
 
