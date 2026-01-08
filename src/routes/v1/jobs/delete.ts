@@ -25,7 +25,7 @@ export async function deleteJob(
   // Create services
   const repository = new JobRepository(c.env.DB);
   const orgRepository = new OrgRepository(c.env.DB);
-  const service = new JobService(repository, orgRepository, c.env.JOB_QUEUE);
+  const service = new JobService(repository, orgRepository, c.env.JOB_QUEUE, c.env.DB);
 
   // Delete job
   const result = await service.deleteJob(jobId, orgId);

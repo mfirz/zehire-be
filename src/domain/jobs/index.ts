@@ -8,8 +8,13 @@
 export {
   JobRepository,
   OrgRepository,
+  BillingEventRepository,
+  BILLING_EVENT_TYPES,
   type CapacityStatus,
   type OrgCapacityInfo,
+  type BillingEvent,
+  type BillingEventType,
+  type RecordBillingEventInput,
 } from "./repository";
 
 // Service

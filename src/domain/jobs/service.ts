@@ -15,7 +15,7 @@
  */
 
 import type { Env } from "../../types/bindings";
-import { JobRepository, OrgRepository } from "./repository";
+import { BillingEventRepository, JobRepository, OrgRepository } from "./repository";
 import type {
   CreateJobInput,
   CreateJobResponse,
@@ -61,11 +61,16 @@ export type JobServiceResult<T> =
 // =============================================================================
 
 export class JobService {
+  private readonly billingEventRepository: BillingEventRepository;
+
   constructor(
     private readonly repository: JobRepository,
     private readonly orgRepository: OrgRepository,
-    private readonly queue: Env["JOB_QUEUE"]
-  ) {}
+    private readonly queue: Env["JOB_QUEUE"],
+    db: D1Database
+  ) {
+    this.billingEventRepository = new BillingEventRepository(db);
+  }
 
   // ===========================================================================
   // CREATE JOB (SYNC - NO QUEUE)
@@ -296,7 +301,13 @@ export class JobService {
     // Publish the job
     await this.repository.publish(jobId, slug);
 
-    // TODO: Record billing event (activated)
+    // Record billing event: job is now active (billing starts)
+    await this.billingEventRepository.record({
+      orgId,
+      jobId,
+      eventType: "activated",
+      metadata: { previousStatus: "draft", newStatus: "published", slug },
+    });
 
     // Invalidate cache
     if (job.org_id) {
@@ -345,7 +356,13 @@ export class JobService {
 
     await this.repository.pause(jobId);
 
-    // TODO: Record billing event (paused)
+    // Record billing event: paused (for audit, still active for billing)
+    await this.billingEventRepository.record({
+      orgId,
+      jobId,
+      eventType: "paused",
+      metadata: { previousStatus: "published", newStatus: "paused" },
+    });
 
     // Invalidate cache
     if (job.org_id) {
@@ -395,7 +412,13 @@ export class JobService {
 
     await this.repository.resume(jobId);
 
-    // TODO: Record billing event (resumed)
+    // Record billing event: resumed (for audit, still active for billing)
+    await this.billingEventRepository.record({
+      orgId,
+      jobId,
+      eventType: "resumed",
+      metadata: { previousStatus: "paused", newStatus: "published" },
+    });
 
     // Invalidate cache
     if (job.org_id) {
@@ -445,7 +468,13 @@ export class JobService {
 
     await this.repository.close(jobId);
 
-    // TODO: Record billing event (closed)
+    // Record billing event: deactivated (billing ends)
+    await this.billingEventRepository.record({
+      orgId,
+      jobId,
+      eventType: "deactivated",
+      metadata: { previousStatus: job.status, newStatus: "closed" },
+    });
 
     // Invalidate cache
     if (job.org_id) {

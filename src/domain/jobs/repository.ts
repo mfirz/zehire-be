@@ -10,7 +10,13 @@
  */
 
 import type { D1Database, D1Result } from "@cloudflare/workers-types";
-import { nanoid } from "nanoid";
+import { customAlphabet } from "nanoid";
+
+// Alphanumeric-only nanoid for IDs (easier to select/copy)
+const alphanumericId = customAlphabet(
+  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+  21
+);
 import type { JobErrorCode, JobStatus, QuestionsStatus } from "../../types/bindings";
 import type {
   CreateJobInput,
@@ -45,7 +51,7 @@ export class JobRepository {
    * Returns the created job row.
    */
   async create(input: CreateJobInput, orgId: string): Promise<JobRow> {
-    const id = nanoid(21);
+    const id = alphanumericId();
     const now = new Date().toISOString();
 
     const result = await this.db
@@ -810,5 +816,208 @@ export class OrgRepository {
       )
       .bind(waived ? 1 : 0, reason ?? null, until ?? null, orgId)
       .run();
+  }
+}
+
+// =============================================================================
+// BILLING EVENT TYPES
+// =============================================================================
+
+/**
+ * Billing event types.
+ *
+ * - activated: Job first published (billing starts)
+ * - paused: Job paused (audit only, still active for billing)
+ * - resumed: Job resumed from pause (audit only)
+ * - deactivated: Job closed (billing ends)
+ */
+export const BILLING_EVENT_TYPES = [
+  "activated",
+  "paused",
+  "resumed",
+  "deactivated",
+] as const;
+
+export type BillingEventType = (typeof BILLING_EVENT_TYPES)[number];
+
+/**
+ * Billing event record.
+ */
+export interface BillingEvent {
+  id: string;
+  orgId: string;
+  jobId: string;
+  eventType: BillingEventType;
+  occurredAt: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+/**
+ * Input for recording a billing event.
+ */
+export interface RecordBillingEventInput {
+  orgId: string;
+  jobId: string;
+  eventType: BillingEventType;
+  occurredAt?: string; // Defaults to now
+  metadata?: Record<string, unknown>;
+}
+
+// =============================================================================
+// BILLING EVENT REPOSITORY
+// =============================================================================
+
+/**
+ * Repository for billing event operations.
+ * Events are immutable - insert only, no updates or deletes.
+ */
+export class BillingEventRepository {
+  constructor(private readonly db: D1Database) {}
+
+  /**
+   * Record a billing event.
+   */
+  async record(input: RecordBillingEventInput): Promise<BillingEvent> {
+    const id = `evt${alphanumericId()}`;
+    const occurredAt =
+      input.occurredAt ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+    const metadata = input.metadata ? JSON.stringify(input.metadata) : null;
+
+    await this.db
+      .prepare(
+        `
+        INSERT INTO billing_events (id, org_id, job_id, event_type, occurred_at, metadata)
+        VALUES (?, ?, ?, ?, ?, ?)
+        `
+      )
+      .bind(id, input.orgId, input.jobId, input.eventType, occurredAt, metadata)
+      .run();
+
+    return {
+      id,
+      orgId: input.orgId,
+      jobId: input.jobId,
+      eventType: input.eventType,
+      occurredAt,
+      metadata: input.metadata ?? null,
+      createdAt: occurredAt,
+    };
+  }
+
+  /**
+   * Get all billing events for a job.
+   */
+  async getByJobId(jobId: string): Promise<BillingEvent[]> {
+    const result = await this.db
+      .prepare(
+        `
+        SELECT id, org_id, job_id, event_type, occurred_at, metadata, created_at
+        FROM billing_events
+        WHERE job_id = ?
+        ORDER BY occurred_at ASC
+        `
+      )
+      .bind(jobId)
+      .all<{
+        id: string;
+        org_id: string;
+        job_id: string;
+        event_type: string;
+        occurred_at: string;
+        metadata: string | null;
+        created_at: string;
+      }>();
+
+    return (result.results ?? []).map((row) => ({
+      id: row.id,
+      orgId: row.org_id,
+      jobId: row.job_id,
+      eventType: row.event_type as BillingEventType,
+      occurredAt: row.occurred_at,
+      metadata: row.metadata ? JSON.parse(row.metadata) : null,
+      createdAt: row.created_at,
+    }));
+  }
+
+  /**
+   * Get billing events for an org within a time range.
+   * Used for billing period calculation.
+   */
+  async getByOrgInRange(
+    orgId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<BillingEvent[]> {
+    const result = await this.db
+      .prepare(
+        `
+        SELECT id, org_id, job_id, event_type, occurred_at, metadata, created_at
+        FROM billing_events
+        WHERE org_id = ?
+          AND occurred_at >= ?
+          AND occurred_at < ?
+        ORDER BY occurred_at ASC
+        `
+      )
+      .bind(orgId, startDate, endDate)
+      .all<{
+        id: string;
+        org_id: string;
+        job_id: string;
+        event_type: string;
+        occurred_at: string;
+        metadata: string | null;
+        created_at: string;
+      }>();
+
+    return (result.results ?? []).map((row) => ({
+      id: row.id,
+      orgId: row.org_id,
+      jobId: row.job_id,
+      eventType: row.event_type as BillingEventType,
+      occurredAt: row.occurred_at,
+      metadata: row.metadata ? JSON.parse(row.metadata) : null,
+      createdAt: row.created_at,
+    }));
+  }
+
+  /**
+   * Get the most recent event for a job.
+   * Useful for determining current billing state.
+   */
+  async getLatestByJobId(jobId: string): Promise<BillingEvent | null> {
+    const result = await this.db
+      .prepare(
+        `
+        SELECT id, org_id, job_id, event_type, occurred_at, metadata, created_at
+        FROM billing_events
+        WHERE job_id = ?
+        ORDER BY occurred_at DESC
+        LIMIT 1
+        `
+      )
+      .bind(jobId)
+      .first<{
+        id: string;
+        org_id: string;
+        job_id: string;
+        event_type: string;
+        occurred_at: string;
+        metadata: string | null;
+        created_at: string;
+      }>();
+
+    if (!result) return null;
+
+    return {
+      id: result.id,
+      orgId: result.org_id,
+      jobId: result.job_id,
+      eventType: result.event_type as BillingEventType,
+      occurredAt: result.occurred_at,
+      metadata: result.metadata ? JSON.parse(result.metadata) : null,
+      createdAt: result.created_at,
+    };
   }
 }

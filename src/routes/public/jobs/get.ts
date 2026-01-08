@@ -48,8 +48,8 @@ export async function getPublicJob(c: Context<{ Bindings: Env }>): Promise<Respo
   // Create services (no queue needed for read-only operation)
   const repository = new JobRepository(c.env.DB);
   const orgRepository = new OrgRepository(c.env.DB);
-  // Queue is required by service but not used for this operation
-  const service = new JobService(repository, orgRepository, c.env.JOB_QUEUE);
+  // Queue and DB are required by service but not used for this operation
+  const service = new JobService(repository, orgRepository, c.env.JOB_QUEUE, c.env.DB);
 
   // Fetch public job
   const result = await service.getPublicJob(slug);

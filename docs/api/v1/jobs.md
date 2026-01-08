@@ -653,6 +653,45 @@ Public job endpoints are cached for 1 hour (`Cache-Control: public, max-age=3600
 
 ---
 
+## Billing Events
+
+Zehire records immutable billing events for every job state transition. These events are used for:
+- Prorated billing calculation (calendar month)
+- Audit trail of all job lifecycle changes
+- Analytics and reporting
+
+### Event Types
+
+| Event Type | Trigger | Billing Impact |
+|------------|---------|----------------|
+| `activated` | Job published (draft → published) | Billing starts |
+| `paused` | Job paused (published → paused) | No change (still active) |
+| `resumed` | Job resumed (paused → published) | No change (still active) |
+| `deactivated` | Job closed (any → closed) | Billing ends |
+
+### Active Time Calculation
+
+For billing purposes, "active time" is the duration between `activated` and `deactivated` events:
+
+```
+Active Time = deactivated_at - activated_at
+```
+
+**Important:** Pause/resume events are recorded for audit purposes but do NOT affect billing. Both `published` and `paused` jobs are considered "active" because Zehire is responsible for evaluating candidates in both states.
+
+### Prorated Billing Example
+
+If a job is:
+- Published on January 10
+- Closed on January 25
+
+The active time is 15 days. In a 31-day month, the charge would be:
+```
+Monthly Rate × (15 / 31) = prorated charge
+```
+
+---
+
 ## FAQ
 
 ### Why can't published jobs be edited?

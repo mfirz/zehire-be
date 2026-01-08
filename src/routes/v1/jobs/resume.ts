@@ -32,7 +32,7 @@ export async function resumeJob(
   // Create services
   const repository = new JobRepository(c.env.DB);
   const orgRepository = new OrgRepository(c.env.DB);
-  const service = new JobService(repository, orgRepository, c.env.JOB_QUEUE);
+  const service = new JobService(repository, orgRepository, c.env.JOB_QUEUE, c.env.DB);
 
   // Resume job
   const result = await service.resumeJob(jobId, orgId);

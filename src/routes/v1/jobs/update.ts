@@ -48,7 +48,7 @@ export async function updateJob(
   // Create services
   const repository = new JobRepository(c.env.DB);
   const orgRepository = new OrgRepository(c.env.DB);
-  const service = new JobService(repository, orgRepository, c.env.JOB_QUEUE);
+  const service = new JobService(repository, orgRepository, c.env.JOB_QUEUE, c.env.DB);
 
   // Update job
   const result = await service.updateJob(jobId, orgId, input);
