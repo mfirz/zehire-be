@@ -679,6 +679,24 @@ Active Time = deactivated_at - activated_at
 
 **Important:** Pause/resume events are recorded for audit purposes but do NOT affect billing. Both `published` and `paused` jobs are considered "active" because Zehire is responsible for evaluating candidates in both states.
 
+### Billing Calculation
+
+Billing is calculated at the end of each calendar month based on active time.
+
+**Formula:**
+```
+Job Charge = Monthly Rate × (active_ms / period_total_ms)
+```
+
+**Edge cases:**
+| Scenario | Handling |
+|----------|----------|
+| Job activated before period start | Use period start as active_from |
+| Job still active at period end | Use period end as active_to |
+| Job activated and closed within period | Use actual timestamps |
+| Job closed before period start | 0 charge |
+| Job activated after period end | 0 charge |
+
 ### Prorated Billing Example
 
 If a job is:
@@ -687,8 +705,17 @@ If a job is:
 
 The active time is 15 days. In a 31-day month, the charge would be:
 ```
-Monthly Rate × (15 / 31) = prorated charge
+$200 × (15 / 31) = $96.77
 ```
+
+### Billing Waivers (Founding Access)
+
+Founding access users see real billing but pay $0:
+- Full invoice is generated showing actual charges
+- 100% discount applied with reason "Founding Access"
+- Total = $0
+
+This reinforces that the work has real value while rewarding early adopters.
 
 ---
 
