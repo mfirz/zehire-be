@@ -45,22 +45,22 @@ JWTs are issued via the magic link authentication flow (`/auth/login` → `/auth
 
 ### JWT Claims
 
-| Claim    | Type   | Description               |
-| -------- | ------ | ------------------------- |
-| `sub`    | string | User ID                   |
-| `iss`    | string | Issuer (`zehire`)         |
-| `aud`    | string | Audience (`zehire-api`)   |
-| `org_id` | string | Organization ID           |
-| `email`  | string | User email address        |
-| `role`   | string | User role                 |
-| `iat`    | number | Issued at (Unix timestamp) |
+| Claim    | Type   | Description                 |
+| -------- | ------ | --------------------------- |
+| `sub`    | string | User ID                     |
+| `iss`    | string | Issuer (`zehire`)           |
+| `aud`    | string | Audience (`zehire-api`)     |
+| `org_id` | string | Organization ID             |
+| `email`  | string | User email address          |
+| `role`   | string | User role                   |
+| `iat`    | number | Issued at (Unix timestamp)  |
 | `exp`    | number | Expiration (Unix timestamp) |
 
 ### Authentication Errors
 
-| HTTP Status | Code           | Description                          |
-| ----------- | -------------- | ------------------------------------ |
-| 401         | `UNAUTHORIZED` | Missing, invalid, or expired JWT     |
+| HTTP Status | Code           | Description                            |
+| ----------- | -------------- | -------------------------------------- |
+| 401         | `UNAUTHORIZED` | Missing, invalid, or expired JWT       |
 | 403         | `FORBIDDEN`    | Valid JWT but insufficient permissions |
 
 See [Authentication Guide](./authentication.md) for complete details.
@@ -99,21 +99,21 @@ All errors follow a consistent format:
 
 ### Authentication (Public)
 
-| Method | Path             | Description             |
-| ------ | ---------------- | ----------------------- |
+| Method | Path             | Description              |
+| ------ | ---------------- | ------------------------ |
 | POST   | `/auth/login`    | Initiate magic link auth |
-| GET    | `/auth/callback` | Complete authentication |
-| POST   | `/auth/logout`   | Clear session           |
-| GET    | `/auth/me`       | Get current user        |
+| GET    | `/auth/callback` | Complete authentication  |
+| POST   | `/auth/logout`   | Clear session            |
+| GET    | `/auth/me`       | Get current user         |
 
 ### v1 (Protected)
 
-| Method | Path            | Auth     | Description             |
-| ------ | --------------- | -------- | ----------------------- |
-| GET    | `/v1/`          | Public   | API root                |
-| GET    | `/v1/jobs`      | Required | List jobs (paginated)   |
-| POST   | `/v1/jobs`      | Required | Create a job            |
-| GET    | `/v1/jobs/:id`  | Required | Get job status/results  |
+| Method | Path           | Auth     | Description            |
+| ------ | -------------- | -------- | ---------------------- |
+| GET    | `/v1/`         | Public   | API root               |
+| GET    | `/v1/jobs`     | Required | List jobs (paginated)  |
+| POST   | `/v1/jobs`     | Required | Create a job           |
+| GET    | `/v1/jobs/:id` | Required | Get job status/results |
 
 ### Internal (Public)
 

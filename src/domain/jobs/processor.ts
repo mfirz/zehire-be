@@ -36,8 +36,11 @@ export class JobProcessor {
   /**
    * Process a job by ID.
    *
-   * Fetches the job from D1, runs the LLM pipeline, and updates status.
+   * Fetches the job from D1, runs the LLM pipeline, and updates questions status.
    * Throws if processing fails (for queue retry mechanism).
+   *
+   * Note: This only updates questions_status, NOT the visibility status (draft/published).
+   * Jobs remain as drafts until explicitly published.
    */
   async processJob(jobId: string): Promise<void> {
     const startTime = Date.now();
@@ -49,15 +52,23 @@ export class JobProcessor {
       throw new Error(`Job ${jobId} not found`);
     }
 
-    // Skip if already processed
-    if (job.status === "completed" || job.status === "failed") {
-      console.log(`[Processor] Job ${jobId} already ${job.status}, skipping`);
+    // Skip if questions already processed (terminal state for question generation)
+    if (job.questions_status === "completed" || job.questions_status === "failed") {
+      console.log(`[Processor] Job ${jobId} questions already ${job.questions_status}, skipping`);
+      return;
+    }
+
+    // Only process jobs that are pending question generation
+    if (job.questions_status !== "pending") {
+      console.log(
+        `[Processor] Job ${jobId} questions_status is ${job.questions_status}, not pending - skipping`
+      );
       return;
     }
 
     try {
-      // Mark as processing
-      await this.repository.markProcessing(jobId);
+      // Mark questions as processing
+      await this.repository.markQuestionsProcessing(jobId);
 
       // Run the full LLM pipeline
       const result = await generateQuestionsForJob(this.llmClient, {
@@ -79,8 +90,8 @@ export class JobProcessor {
         selectionReason: a.selectionReason,
       }));
 
-      // Mark as completed with results
-      await this.repository.markCompleted(jobId, {
+      // Mark questions as completed with results
+      await this.repository.markQuestionsCompleted(jobId, {
         jobContext: result.jobContext as JobContextOutput,
         archetypes,
         questions: result.questions as RenderedQuestionOutput[],
@@ -92,12 +103,12 @@ export class JobProcessor {
         await this.orgRepository.incrementJobsListVersion(job.org_id);
       }
 
-      console.log(`[Processor] Job ${jobId} completed in ${processingDurationMs}ms`);
+      console.log(`[Processor] Job ${jobId} questions completed in ${processingDurationMs}ms`);
     } catch (error) {
       // Determine error code based on error type
       const { code, message } = this.categorizeError(error);
 
-      await this.repository.markFailed(jobId, {
+      await this.repository.markQuestionsFailed(jobId, {
         message,
         code,
       });

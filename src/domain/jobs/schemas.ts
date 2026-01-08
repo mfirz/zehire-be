@@ -8,7 +8,7 @@
  */
 
 import { z } from "zod";
-import { JOB_ERROR_CODES, JOB_STATUSES } from "../../types/bindings";
+import { JOB_ERROR_CODES, JOB_STATUSES, QUESTIONS_STATUSES } from "../../types/bindings";
 import {
   COLLABORATION_LEVELS,
   DECISION_IMPACTS,
@@ -130,22 +130,46 @@ export type ResolvedArchetypeOutput = z.infer<typeof ResolvedArchetypeSchema>;
 export const JobRowSchema = z.object({
   id: z.string(),
   org_id: z.string().nullable(),
+
+  // Visibility/billing lifecycle status
   status: z.enum(JOB_STATUSES),
+
+  // Question generation status
+  questions_status: z.enum(QUESTIONS_STATUSES),
+
+  // Job content
   title: z.string(),
   description: z.string(),
   company_name: z.string().nullable(),
   department: z.string().nullable(),
   location: z.string().nullable(),
-  job_context: z.string().nullable(), // JSON string
-  archetypes: z.string().nullable(), // JSON string
-  questions: z.string().nullable(), // JSON string
+
+  // Public access
+  public_slug: z.string().nullable(),
+
+  // Question generation results (JSON strings)
+  job_context: z.string().nullable(),
+  archetypes: z.string().nullable(),
+  questions: z.string().nullable(),
+
+  // Error details (for failed question generation)
   error_message: z.string().nullable(),
   error_code: z.enum(JOB_ERROR_CODES).nullable(),
+
+  // Regeneration rate limiting
+  regeneration_count: z.number(),
+  last_regeneration_at: z.string().nullable(),
+
+  // Processing timestamps
   processing_started_at: z.string().nullable(),
   processing_duration_ms: z.number().nullable(),
+
+  // Lifecycle timestamps
   created_at: z.string(),
   updated_at: z.string(),
-  completed_at: z.string().nullable(),
+  published_at: z.string().nullable(),
+  closed_at: z.string().nullable(),
+  completed_at: z.string().nullable(), // When questions completed
 });
 
 export type JobRow = z.infer<typeof JobRowSchema>;
@@ -157,7 +181,10 @@ export const JobListItemSchema = z.object({
   id: z.string(),
   title: z.string(),
   status: z.enum(JOB_STATUSES),
+  questionsStatus: z.enum(QUESTIONS_STATUSES),
+  publicSlug: z.string().nullable(),
   createdAt: z.string(),
+  publishedAt: z.string().nullable(),
 });
 
 export type JobListItem = z.infer<typeof JobListItemSchema>;
@@ -185,6 +212,7 @@ export type JobListResponse = z.infer<typeof JobListResponseSchema>;
 export const CreateJobResponseSchema = z.object({
   id: z.string(),
   status: z.enum(JOB_STATUSES),
+  questionsStatus: z.enum(QUESTIONS_STATUSES),
   createdAt: z.string(),
 });
 
@@ -193,56 +221,170 @@ export type CreateJobResponse = z.infer<typeof CreateJobResponseSchema>;
 /**
  * Schema for job status response (polling).
  * Returned from GET /v1/jobs/:id.
+ *
+ * Response varies by visibility status (draft/published/paused/closed)
+ * and questions generation status.
  */
 export const JobStatusResponseSchema = z.discriminatedUnion("status", [
-  // Pending state
+  // Draft state - may or may not have questions
   z.object({
     id: z.string(),
-    status: z.literal("pending"),
-    title: z.string(),
-    createdAt: z.string(),
-    updatedAt: z.string(),
-  }),
-
-  // Processing state
-  z.object({
-    id: z.string(),
-    status: z.literal("processing"),
-    title: z.string(),
-    createdAt: z.string(),
-    updatedAt: z.string(),
-    processingStartedAt: z.string(),
-  }),
-
-  // Completed state - includes all results
-  z.object({
-    id: z.string(),
-    status: z.literal("completed"),
+    status: z.literal("draft"),
+    questionsStatus: z.enum(QUESTIONS_STATUSES),
     title: z.string(),
     description: z.string(),
     companyName: z.string().nullable(),
     department: z.string().nullable(),
     location: z.string().nullable(),
+    // Questions (if generated)
+    jobContext: JobContextSchema.nullable(),
+    archetypes: z.array(ResolvedArchetypeSchema).nullable(),
+    questions: z.array(RenderedQuestionSchema).nullable(),
+    // Error (if question generation failed)
+    errorMessage: z.string().nullable(),
+    errorCode: z.enum(JOB_ERROR_CODES).nullable(),
+    // Regeneration info
+    regenerationCount: z.number(),
+    lastRegenerationAt: z.string().nullable(),
+    // Timestamps
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    processingStartedAt: z.string().nullable(),
+    completedAt: z.string().nullable(),
+  }),
+
+  // Published state - has questions, is live
+  z.object({
+    id: z.string(),
+    status: z.literal("published"),
+    questionsStatus: z.literal("completed"), // Always completed when published
+    title: z.string(),
+    description: z.string(),
+    companyName: z.string().nullable(),
+    department: z.string().nullable(),
+    location: z.string().nullable(),
+    publicSlug: z.string(),
+    // Questions (always present)
     jobContext: JobContextSchema,
     archetypes: z.array(ResolvedArchetypeSchema),
     questions: z.array(RenderedQuestionSchema),
+    processingDurationMs: z.number(),
+    // Timestamps
     createdAt: z.string(),
     updatedAt: z.string(),
+    publishedAt: z.string(),
     completedAt: z.string(),
-    processingDurationMs: z.number(),
   }),
 
-  // Failed state - includes error details
+  // Paused state - was published, now paused
   z.object({
     id: z.string(),
-    status: z.literal("failed"),
+    status: z.literal("paused"),
+    questionsStatus: z.literal("completed"),
     title: z.string(),
-    errorMessage: z.string(),
-    errorCode: z.enum(JOB_ERROR_CODES),
+    description: z.string(),
+    companyName: z.string().nullable(),
+    department: z.string().nullable(),
+    location: z.string().nullable(),
+    publicSlug: z.string(),
+    // Questions
+    jobContext: JobContextSchema,
+    archetypes: z.array(ResolvedArchetypeSchema),
+    questions: z.array(RenderedQuestionSchema),
+    processingDurationMs: z.number(),
+    // Timestamps
     createdAt: z.string(),
     updatedAt: z.string(),
+    publishedAt: z.string(),
+    completedAt: z.string(),
+  }),
+
+  // Closed state - permanently closed
+  z.object({
+    id: z.string(),
+    status: z.literal("closed"),
+    questionsStatus: z.literal("completed"),
+    title: z.string(),
+    description: z.string(),
+    companyName: z.string().nullable(),
+    department: z.string().nullable(),
+    location: z.string().nullable(),
+    publicSlug: z.string().nullable(), // May or may not have been published
+    // Questions
+    jobContext: JobContextSchema,
+    archetypes: z.array(ResolvedArchetypeSchema),
+    questions: z.array(RenderedQuestionSchema),
+    processingDurationMs: z.number(),
+    // Timestamps
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    publishedAt: z.string().nullable(),
+    closedAt: z.string(),
     completedAt: z.string(),
   }),
 ]);
 
 export type JobStatusResponse = z.infer<typeof JobStatusResponseSchema>;
+
+/**
+ * Schema for public job view (for candidates, no auth).
+ */
+export const PublicJobResponseSchema = z.object({
+  title: z.string(),
+  companyName: z.string().nullable(),
+  department: z.string().nullable(),
+  location: z.string().nullable(),
+  description: z.string(),
+  questions: z.array(
+    z.object({
+      id: z.string(),
+      text: z.string(),
+      minWords: z.number().optional(),
+    })
+  ),
+});
+
+export type PublicJobResponse = z.infer<typeof PublicJobResponseSchema>;
+
+/**
+ * Schema for job update input.
+ * Used for PATCH /v1/jobs/:id.
+ */
+export const UpdateJobInputSchema = z.object({
+  title: z
+    .string()
+    .min(3, "Title must be at least 3 characters")
+    .max(200, "Title must be at most 200 characters")
+    .trim()
+    .optional(),
+
+  description: z
+    .string()
+    .min(50, "Description must be at least 50 characters")
+    .max(50000, "Description must be at most 50,000 characters")
+    .trim()
+    .optional(),
+
+  companyName: z
+    .string()
+    .max(200, "Company name must be at most 200 characters")
+    .trim()
+    .optional()
+    .nullable(),
+
+  department: z
+    .string()
+    .max(100, "Department must be at most 100 characters")
+    .trim()
+    .optional()
+    .nullable(),
+
+  location: z
+    .string()
+    .max(200, "Location must be at most 200 characters")
+    .trim()
+    .optional()
+    .nullable(),
+});
+
+export type UpdateJobInput = z.infer<typeof UpdateJobInputSchema>;

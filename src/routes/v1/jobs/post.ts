@@ -1,19 +1,25 @@
 /**
  * POST /v1/jobs
  * =============
- * Create a new job and queue for async processing.
+ * Create a new job as a draft.
  *
  * Requires JWT authentication. Organization ID is extracted from the JWT.
  *
- * Returns immediately with job ID. Client should poll GET /v1/jobs/:id
- * to check processing status and retrieve results.
+ * Unlike the old API, this does NOT automatically queue for processing.
+ * The job is created with questionsStatus='none' and must be explicitly
+ * queued via POST /v1/jobs/:id/generate.
  *
  * Cache invalidation: After creating a job, the org's jobs_list_version
  * is incremented to automatically invalidate cached job lists.
  */
 
 import type { Context } from "hono";
-import { CreateJobInputSchema, JobRepository, JobService, OrgRepository } from "../../../domain/jobs";
+import {
+  CreateJobInputSchema,
+  JobRepository,
+  JobService,
+  OrgRepository,
+} from "../../../domain/jobs";
 import type { AuthVariables, Env } from "../../../types/bindings";
 
 /**
@@ -30,7 +36,9 @@ import type { AuthVariables, Env } from "../../../types/bindings";
  * }
  * ```
  */
-export async function createJob(c: Context<{ Bindings: Env; Variables: AuthVariables }>): Promise<Response> {
+export async function createJob(
+  c: Context<{ Bindings: Env; Variables: AuthVariables }>
+): Promise<Response> {
   // Get authenticated user
   const user = c.get("user");
 
@@ -53,14 +61,14 @@ export async function createJob(c: Context<{ Bindings: Env; Variables: AuthVaria
   // Create services with dependencies
   const repository = new JobRepository(c.env.DB);
   const orgRepository = new OrgRepository(c.env.DB);
-  const service = new JobService(repository, c.env.JOB_QUEUE);
+  const service = new JobService(repository, orgRepository, c.env.JOB_QUEUE);
 
-  // Create job and queue for processing (scoped to org)
+  // Create job as draft (no auto-queue)
   const result = await service.createJob(input, user.orgId);
 
   // Increment jobs_list_version to invalidate cached job lists
   await orgRepository.incrementJobsListVersion(user.orgId);
 
-  // Return 202 Accepted (processing queued, not complete)
-  return c.json(result, 202);
+  // Return 201 Created (draft created, not queued)
+  return c.json(result, 201);
 }

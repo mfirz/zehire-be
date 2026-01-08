@@ -5,27 +5,70 @@
  *
  * All endpoints require JWT authentication.
  * User claims are available via `c.get("user")` in handlers.
+ *
+ * Lifecycle endpoints:
+ * - POST /:id/generate - Queue questions for generation
+ * - POST /:id/publish  - Publish draft (starts billing)
+ * - POST /:id/pause    - Pause published job (stops billing)
+ * - POST /:id/resume   - Resume paused job (restarts billing)
+ * - POST /:id/close    - Close job permanently
  */
 
 import { Hono } from "hono";
 import { jwtAuth } from "../../../middleware/auth";
 import type { AuthVariables, Env } from "../../../types/bindings";
+import { closeJob } from "./close";
+import { deleteJob } from "./delete";
+import { generateQuestions } from "./generate";
 import { getJob } from "./get";
 import { listJobs } from "./list";
+import { pauseJob } from "./pause";
 import { createJob } from "./post";
+import { publishJob } from "./publish";
+import { resumeJob } from "./resume";
+import { updateJob } from "./update";
 
 const jobs = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
 // Apply JWT auth to all jobs routes
 jobs.use("/*", jwtAuth);
 
+// ===========================================================================
+// CRUD OPERATIONS
+// ===========================================================================
+
 // GET /v1/jobs - List jobs (paginated, cached)
 jobs.get("/", listJobs);
 
-// POST /v1/jobs - Create a new job
+// POST /v1/jobs - Create a new job as draft
 jobs.post("/", createJob);
 
 // GET /v1/jobs/:id - Get job status and results
 jobs.get("/:id", getJob);
+
+// PATCH /v1/jobs/:id - Update draft job content
+jobs.patch("/:id", updateJob);
+
+// DELETE /v1/jobs/:id - Delete draft job
+jobs.delete("/:id", deleteJob);
+
+// ===========================================================================
+// LIFECYCLE ACTIONS
+// ===========================================================================
+
+// POST /v1/jobs/:id/generate - Queue for question generation
+jobs.post("/:id/generate", generateQuestions);
+
+// POST /v1/jobs/:id/publish - Publish draft (requires completed questions)
+jobs.post("/:id/publish", publishJob);
+
+// POST /v1/jobs/:id/pause - Pause published job
+jobs.post("/:id/pause", pauseJob);
+
+// POST /v1/jobs/:id/resume - Resume paused job
+jobs.post("/:id/resume", resumeJob);
+
+// POST /v1/jobs/:id/close - Close job permanently
+jobs.post("/:id/close", closeJob);
 
 export default jobs;

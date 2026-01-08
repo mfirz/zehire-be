@@ -7,13 +7,15 @@ CREATE TABLE IF NOT EXISTS jobs (
   -- Primary identifier (21-char nanoid for URL-safe, compact IDs)
   id TEXT PRIMARY KEY NOT NULL,
 
-  -- Processing status (discriminated union for type safety)
-  -- pending: Just created, waiting for processing
+  -- Questions generation status (discriminated union for type safety)
+  -- Note: This column is renamed to 'questions_status' in migration 0004
+  -- none: Questions not yet generated (draft state)
+  -- pending: Queued for generation
   -- processing: LLM pipeline in progress
   -- completed: Successfully generated questions
   -- failed: Processing failed (check error_message)
-  status TEXT NOT NULL DEFAULT 'pending'
-    CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+  status TEXT NOT NULL DEFAULT 'none'
+    CHECK (status IN ('none', 'pending', 'processing', 'completed', 'failed')),
 
   -- Input fields from job posting
   title TEXT NOT NULL,

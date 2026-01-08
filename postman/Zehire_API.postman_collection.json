@@ -1,0 +1,472 @@
+{
+  "info": {
+    "_postman_id": "zehire-api-collection-v1",
+    "name": "Zehire API",
+    "description": "Complete API collection for Zehire Backend.\n\n## Setup\n\n1. Set the `base_url` variable to your environment (default: `http://localhost:8787`)\n2. Use **Auth > Login** to initiate magic link login\n3. Check your email and copy the token from the magic link\n4. Use **Auth > Callback** with the token - JWT will be auto-saved\n5. All authenticated endpoints will use the saved JWT automatically\n\n## Variables\n\n- `base_url`: API base URL\n- `jwt_token`: JWT token (auto-saved after callback)\n- `job_id`: Current job ID for testing\n- `public_slug`: Public job slug for testing",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8787",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "job_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "public_slug",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_email",
+      "value": "farizzx77@gmail.com",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Magic link authentication endpoints.\n\n**Flow:**\n1. POST /auth/login with email\n2. Check email for magic link\n3. GET /auth/callback with token (or copy token from email)\n4. JWT is auto-saved to collection variable",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{user_email}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Initiate magic link login.\n\n**Response:** 204 No Content on success (email sent)\n\nCheck your email for the magic link with token."
+          },
+          "response": []
+        },
+        {
+          "name": "Callback",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Auto-save JWT token from session cookie",
+                  "const cookies = pm.response.headers.get('Set-Cookie');",
+                  "if (cookies) {",
+                  "    const sessionMatch = cookies.match(/session=([^;]+)/);",
+                  "    if (sessionMatch && sessionMatch[1]) {",
+                  "        pm.collectionVariables.set('jwt_token', sessionMatch[1]);",
+                  "        console.log('JWT token saved to collection variable');",
+                  "    }",
+                  "}",
+                  "",
+                  "// Test response",
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response contains user info', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('user');",
+                  "    pm.expect(jsonData.user).to.have.property('id');",
+                  "    pm.expect(jsonData.user).to.have.property('email');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/callback?token=PASTE_TOKEN_HERE",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "callback"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "PASTE_TOKEN_HERE",
+                  "description": "Magic link token from email"
+                }
+              ]
+            },
+            "description": "Complete magic link authentication.\n\n**Steps:**\n1. Copy the token from the magic link in your email\n2. Replace `PASTE_TOKEN_HERE` with the actual token\n3. Send request\n4. JWT will be auto-saved to `jwt_token` collection variable\n\n**Response:** User info with session cookie"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "me"]
+            },
+            "description": "Get current authenticated user info.\n\nRequires valid JWT token."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Clear session cookie.\n\n**Response:** 204 No Content"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Jobs",
+      "description": "Job management endpoints.\n\nAll endpoints require JWT authentication.\n\n**Job Lifecycle:**\n```\ndraft → published → paused → closed\n         ↑___________|\n              resume\n```\n\n**Questions Status:**\n- none: Not generated\n- pending: Queued\n- processing: LLM running\n- completed: Ready\n- failed: Error",
+      "item": [
+        {
+          "name": "CRUD",
+          "description": "Basic job operations",
+          "item": [
+            {
+              "name": "List Jobs",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs?limit=20",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs"],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "20",
+                      "description": "Number of items (max: 50)"
+                    },
+                    {
+                      "key": "cursor",
+                      "value": "",
+                      "description": "Pagination cursor",
+                      "disabled": true
+                    },
+                    {
+                      "key": "status",
+                      "value": "draft",
+                      "description": "Filter: draft, published, paused, closed",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "List jobs for the authenticated organization.\n\nSupports cursor-based pagination."
+              },
+              "response": []
+            },
+            {
+              "name": "Create Job",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "// Auto-save job ID for subsequent requests",
+                      "if (pm.response.code === 201) {",
+                      "    const jsonData = pm.response.json();",
+                      "    if (jsonData.id) {",
+                      "        pm.collectionVariables.set('job_id', jsonData.id);",
+                      "        console.log('Job ID saved:', jsonData.id);",
+                      "    }",
+                      "}",
+                      "",
+                      "pm.test('Status code is 201', function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "",
+                      "pm.test('Response contains job ID', function () {",
+                      "    const jsonData = pm.response.json();",
+                      "    pm.expect(jsonData).to.have.property('id');",
+                      "    pm.expect(jsonData.status).to.equal('draft');",
+                      "    pm.expect(jsonData.questionsStatus).to.equal('none');",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Senior Software Engineer\",\n  \"description\": \"We are looking for a senior software engineer to join our growing team. You will be responsible for designing and implementing scalable backend systems, mentoring junior developers, and collaborating with product managers to deliver high-quality features. The ideal candidate has 5+ years of experience with distributed systems, strong problem-solving skills, and excellent communication abilities.\",\n  \"companyName\": \"Acme Corp\",\n  \"department\": \"Engineering\",\n  \"location\": \"Remote\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs"]
+                },
+                "description": "Create a new job as draft.\n\nDoes NOT automatically queue for question generation.\n\n**Required fields:**\n- title (3-200 chars)\n- description (50-50000 chars)\n\n**Optional fields:**\n- companyName (max 200 chars)\n- department (max 100 chars)\n- location (max 200 chars)"
+              },
+              "response": []
+            },
+            {
+              "name": "Get Job",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "// Save public slug if available",
+                      "if (pm.response.code === 200) {",
+                      "    const jsonData = pm.response.json();",
+                      "    if (jsonData.publicSlug) {",
+                      "        pm.collectionVariables.set('public_slug', jsonData.publicSlug);",
+                      "        console.log('Public slug saved:', jsonData.publicSlug);",
+                      "    }",
+                      "}",
+                      "",
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}"]
+                },
+                "description": "Get job status and details.\n\nResponse varies by job status (draft includes full editing data, published includes publicSlug)."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Job",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Senior Backend Engineer\",\n  \"description\": \"We are seeking a talented senior backend engineer to lead our API development efforts. You will architect and build high-performance services, establish coding standards, and mentor a growing team. Requirements include 5+ years with Node.js/TypeScript, experience with cloud platforms (AWS/GCP/Cloudflare), and strong system design skills.\",\n  \"department\": \"Backend Team\",\n  \"location\": \"Remote (US)\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}"]
+                },
+                "description": "Update a draft job's content.\n\n**Note:** If `title` or `description` changes, questions are reset to `none` and must be regenerated.\n\nOnly draft jobs can be updated."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Job",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}"]
+                },
+                "description": "Delete a draft job.\n\nOnly draft jobs can be deleted. Published/paused/closed jobs must be closed and remain for records."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Lifecycle Actions",
+          "description": "Job lifecycle management endpoints.\n\n**Flow:**\n1. Create draft\n2. Generate questions\n3. Publish (starts billing)\n4. Pause/Resume as needed\n5. Close when done",
+          "item": [
+            {
+              "name": "Generate Questions",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/generate",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "generate"]
+                },
+                "description": "Queue a job for question generation.\n\n**Rate Limits:**\n- Maximum 20 regenerations per job\n- 10 minute cooldown between regenerations\n\n**Response:** 202 Accepted with `{ \"queued\": true }`\n\nPoll GET /v1/jobs/:id to check questionsStatus."
+              },
+              "response": []
+            },
+            {
+              "name": "Publish Job",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "// Save public slug after publishing",
+                      "if (pm.response.code === 200) {",
+                      "    const jsonData = pm.response.json();",
+                      "    if (jsonData.publicSlug) {",
+                      "        pm.collectionVariables.set('public_slug', jsonData.publicSlug);",
+                      "        console.log('Public slug saved:', jsonData.publicSlug);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/publish",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "publish"]
+                },
+                "description": "Publish a draft job.\n\n**Prerequisites:**\n- Job must be in `draft` status\n- Questions must be `completed` (questionsStatus)\n\n**Effects:**\n- Generates public slug\n- Starts billing\n- Job becomes publicly accessible"
+              },
+              "response": []
+            },
+            {
+              "name": "Pause Job",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/pause",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "pause"]
+                },
+                "description": "Pause a published job.\n\n**Effects:**\n- Hides job from public view\n- Stops billing\n- Can be resumed later"
+              },
+              "response": []
+            },
+            {
+              "name": "Resume Job",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/resume",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "resume"]
+                },
+                "description": "Resume a paused job.\n\n**Effects:**\n- Makes job public again\n- Restarts billing"
+              },
+              "response": []
+            },
+            {
+              "name": "Close Job",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/close",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "close"]
+                },
+                "description": "Close a job permanently.\n\n**Effects:**\n- Job can no longer accept applications\n- Cannot be reopened\n- Billing stops"
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Public",
+      "description": "Public-facing endpoints for candidates.\n\nNo authentication required.",
+      "item": [
+        {
+          "name": "Get Public Job",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/public/jobs/{{public_slug}}",
+              "host": ["{{base_url}}"],
+              "path": ["public", "jobs", "{{public_slug}}"]
+            },
+            "description": "Get public job details by slug for candidates.\n\n**No authentication required.**\n\nOnly returns published jobs.\n\nReturns: title, companyName, department, location, description, questions"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Internal",
+      "description": "Internal endpoints for monitoring and operations.",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/internal/health",
+              "host": ["{{base_url}}"],
+              "path": ["internal", "health"]
+            },
+            "description": "Health check endpoint for monitoring.\n\nNo authentication required."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

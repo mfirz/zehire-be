@@ -11,7 +11,7 @@
 
 import type { D1Database, D1Result } from "@cloudflare/workers-types";
 import { nanoid } from "nanoid";
-import type { JobErrorCode, JobStatus } from "../../types/bindings";
+import type { JobErrorCode, JobStatus, QuestionsStatus } from "../../types/bindings";
 import type {
   CreateJobInput,
   JobContextOutput,
@@ -19,6 +19,7 @@ import type {
   JobRow,
   RenderedQuestionOutput,
   ResolvedArchetypeOutput,
+  UpdateJobInput,
 } from "./schemas";
 
 // =============================================================================
@@ -29,7 +30,7 @@ const DEFAULT_PAGE_LIMIT = 20;
 const MAX_PAGE_LIMIT = 50;
 
 // =============================================================================
-// REPOSITORY CLASS
+// JOB REPOSITORY CLASS
 // =============================================================================
 
 export class JobRepository {
@@ -40,21 +41,23 @@ export class JobRepository {
   // ===========================================================================
 
   /**
-   * Create a new job in pending status.
+   * Create a new job in draft status with questions_status='none'.
    * Returns the created job row.
    */
   async create(input: CreateJobInput, orgId: string): Promise<JobRow> {
-    const id = nanoid(21); // 21 chars = ~1 billion years before 1% collision probability
+    const id = nanoid(21);
     const now = new Date().toISOString();
 
     const result = await this.db
       .prepare(
         `
         INSERT INTO jobs (
-          id, org_id, status, title, description, company_name, department, location,
+          id, org_id, status, questions_status,
+          title, description, company_name, department, location,
+          regeneration_count,
           created_at, updated_at
         )
-        VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, 'draft', 'none', ?, ?, ?, ?, ?, 0, ?, ?)
         RETURNING *
         `
       )
@@ -96,50 +99,146 @@ export class JobRepository {
   }
 
   /**
-   * Get multiple jobs by status.
-   * Useful for monitoring and admin dashboards.
+   * Get a job by ID and org ID (for authorization).
+   * Returns null if not found or not owned by org.
    */
-  async findByStatus(
-    status: JobStatus,
-    options?: { limit?: number; offset?: number }
-  ): Promise<JobRow[]> {
-    const limit = options?.limit ?? 50;
-    const offset = options?.offset ?? 0;
-
+  async findByIdAndOrg(id: string, orgId: string): Promise<JobRow | null> {
     const result = await this.db
-      .prepare(
-        `
-        SELECT * FROM jobs
-        WHERE status = ?
-        ORDER BY created_at DESC
-        LIMIT ? OFFSET ?
-        `
-      )
-      .bind(status, limit, offset)
-      .all<JobRow>();
+      .prepare("SELECT * FROM jobs WHERE id = ? AND org_id = ?")
+      .bind(id, orgId)
+      .first<JobRow>();
 
-    return result.results;
+    return result ?? null;
+  }
+
+  /**
+   * Get a job by public slug (for public endpoint).
+   * Only returns published jobs.
+   */
+  async findBySlug(slug: string): Promise<JobRow | null> {
+    const result = await this.db
+      .prepare("SELECT * FROM jobs WHERE public_slug = ? AND status = 'published'")
+      .bind(slug)
+      .first<JobRow>();
+
+    return result ?? null;
+  }
+
+  /**
+   * Check if a slug is already in use.
+   */
+  async slugExists(slug: string): Promise<boolean> {
+    const result = await this.db
+      .prepare("SELECT 1 FROM jobs WHERE public_slug = ?")
+      .bind(slug)
+      .first();
+
+    return result !== null;
   }
 
   // ===========================================================================
-  // UPDATE STATUS
+  // UPDATE CONTENT
   // ===========================================================================
 
   /**
-   * Mark job as processing.
-   * Called at the start of the LLM pipeline.
+   * Update a draft job's content.
+   * If title or description changed, resets questions and regeneration count.
+   *
+   * @returns true if content was changed (questions reset), false otherwise
    */
-  async markProcessing(id: string): Promise<void> {
+  async update(
+    id: string,
+    input: UpdateJobInput,
+    currentJob: JobRow
+  ): Promise<{ updated: boolean; contentChanged: boolean }> {
+    const now = new Date().toISOString();
+
+    // Determine if content changed (title or description)
+    const titleChanged = input.title !== undefined && input.title !== currentJob.title;
+    const descChanged =
+      input.description !== undefined && input.description !== currentJob.description;
+    const contentChanged = titleChanged || descChanged;
+
+    // Build update fields
+    const updates: string[] = [];
+    const values: (string | number | null)[] = [];
+
+    if (input.title !== undefined) {
+      updates.push("title = ?");
+      values.push(input.title);
+    }
+    if (input.description !== undefined) {
+      updates.push("description = ?");
+      values.push(input.description);
+    }
+    if (input.companyName !== undefined) {
+      updates.push("company_name = ?");
+      values.push(input.companyName);
+    }
+    if (input.department !== undefined) {
+      updates.push("department = ?");
+      values.push(input.department);
+    }
+    if (input.location !== undefined) {
+      updates.push("location = ?");
+      values.push(input.location);
+    }
+
+    if (updates.length === 0) {
+      return { updated: false, contentChanged: false };
+    }
+
+    // If content changed, reset questions
+    if (contentChanged) {
+      updates.push("questions_status = 'none'");
+      updates.push("job_context = NULL");
+      updates.push("archetypes = NULL");
+      updates.push("questions = NULL");
+      updates.push("error_message = NULL");
+      updates.push("error_code = NULL");
+      updates.push("regeneration_count = 0");
+      updates.push("last_regeneration_at = NULL");
+      updates.push("processing_started_at = NULL");
+      updates.push("processing_duration_ms = NULL");
+      updates.push("completed_at = NULL");
+    }
+
+    updates.push("updated_at = ?");
+    values.push(now);
+
+    // Add ID for WHERE clause
+    values.push(id);
+
+    await this.db
+      .prepare(`UPDATE jobs SET ${updates.join(", ")} WHERE id = ? AND status = 'draft'`)
+      .bind(...values)
+      .run();
+
+    return { updated: true, contentChanged };
+  }
+
+  // ===========================================================================
+  // QUESTIONS STATUS UPDATES
+  // ===========================================================================
+
+  /**
+   * Mark job's questions as pending (queued for generation).
+   * Also increments regeneration count and updates last_regeneration_at.
+   */
+  async markQuestionsPending(id: string): Promise<void> {
     const now = new Date().toISOString();
 
     await this.db
       .prepare(
         `
         UPDATE jobs
-        SET status = 'processing',
-            processing_started_at = ?,
+        SET questions_status = 'pending',
+            regeneration_count = regeneration_count + 1,
+            last_regeneration_at = ?,
+            error_message = NULL,
+            error_code = NULL,
             updated_at = ?
-        WHERE id = ? AND status = 'pending'
+        WHERE id = ? AND status = 'draft'
         `
       )
       .bind(now, now, id)
@@ -147,10 +246,31 @@ export class JobRepository {
   }
 
   /**
-   * Mark job as completed with results.
+   * Mark job's questions as processing.
+   * Called at the start of the LLM pipeline.
+   */
+  async markQuestionsProcessing(id: string): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .prepare(
+        `
+        UPDATE jobs
+        SET questions_status = 'processing',
+            processing_started_at = ?,
+            updated_at = ?
+        WHERE id = ? AND questions_status = 'pending'
+        `
+      )
+      .bind(now, now, id)
+      .run();
+  }
+
+  /**
+   * Mark job's questions as completed with results.
    * Called after successful LLM pipeline completion.
    */
-  async markCompleted(
+  async markQuestionsCompleted(
     id: string,
     results: {
       jobContext: JobContextOutput;
@@ -165,7 +285,7 @@ export class JobRepository {
       .prepare(
         `
         UPDATE jobs
-        SET status = 'completed',
+        SET questions_status = 'completed',
             job_context = ?,
             archetypes = ?,
             questions = ?,
@@ -188,10 +308,10 @@ export class JobRepository {
   }
 
   /**
-   * Mark job as failed with error details.
+   * Mark job's questions as failed with error details.
    * Called when LLM pipeline fails.
    */
-  async markFailed(
+  async markQuestionsFailed(
     id: string,
     error: {
       message: string;
@@ -204,7 +324,7 @@ export class JobRepository {
       .prepare(
         `
         UPDATE jobs
-        SET status = 'failed',
+        SET questions_status = 'failed',
             error_message = ?,
             error_code = ?,
             completed_at = ?,
@@ -217,58 +337,101 @@ export class JobRepository {
   }
 
   // ===========================================================================
-  // ADMIN/MONITORING QUERIES
+  // LIFECYCLE STATUS UPDATES
   // ===========================================================================
 
   /**
-   * Get job counts by status.
-   * Useful for monitoring dashboards.
+   * Publish a draft job.
+   * Requires questions_status = 'completed'.
    */
-  async getStatusCounts(): Promise<Record<JobStatus, number>> {
-    const result = await this.db
+  async publish(id: string, publicSlug: string): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
       .prepare(
         `
-        SELECT status, COUNT(*) as count
-        FROM jobs
-        GROUP BY status
+        UPDATE jobs
+        SET status = 'published',
+            public_slug = ?,
+            published_at = ?,
+            updated_at = ?
+        WHERE id = ? AND status = 'draft' AND questions_status = 'completed'
         `
       )
-      .all<{ status: JobStatus; count: number }>();
-
-    const counts: Record<JobStatus, number> = {
-      pending: 0,
-      processing: 0,
-      completed: 0,
-      failed: 0,
-    };
-
-    for (const row of result.results) {
-      counts[row.status] = row.count;
-    }
-
-    return counts;
+      .bind(publicSlug, now, now, id)
+      .run();
   }
 
   /**
-   * Get stuck jobs (processing for too long).
-   * Useful for monitoring and cleanup.
+   * Pause a published job.
    */
-  async findStuckJobs(maxProcessingMinutes: number = 5): Promise<JobRow[]> {
-    const cutoffTime = new Date(Date.now() - maxProcessingMinutes * 60 * 1000).toISOString();
+  async pause(id: string): Promise<void> {
+    const now = new Date().toISOString();
 
-    const result = await this.db
+    await this.db
       .prepare(
         `
-        SELECT * FROM jobs
-        WHERE status = 'processing'
-          AND processing_started_at < ?
-        ORDER BY processing_started_at ASC
+        UPDATE jobs
+        SET status = 'paused',
+            updated_at = ?
+        WHERE id = ? AND status = 'published'
         `
       )
-      .bind(cutoffTime)
-      .all<JobRow>();
+      .bind(now, id)
+      .run();
+  }
 
-    return result.results;
+  /**
+   * Resume a paused job (back to published).
+   */
+  async resume(id: string): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .prepare(
+        `
+        UPDATE jobs
+        SET status = 'published',
+            updated_at = ?
+        WHERE id = ? AND status = 'paused'
+        `
+      )
+      .bind(now, id)
+      .run();
+  }
+
+  /**
+   * Close a job permanently.
+   * Can close published or paused jobs.
+   */
+  async close(id: string): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .prepare(
+        `
+        UPDATE jobs
+        SET status = 'closed',
+            closed_at = ?,
+            updated_at = ?
+        WHERE id = ? AND status IN ('published', 'paused')
+        `
+      )
+      .bind(now, now, id)
+      .run();
+  }
+
+  /**
+   * Delete a draft job.
+   * Only drafts can be deleted.
+   */
+  async delete(id: string): Promise<boolean> {
+    const result = await this.db
+      .prepare("DELETE FROM jobs WHERE id = ? AND status = 'draft'")
+      .bind(id)
+      .run();
+
+    return (result.meta?.changes ?? 0) > 0;
   }
 
   // ===========================================================================
@@ -278,16 +441,12 @@ export class JobRepository {
   /**
    * List jobs for an organization with cursor-based pagination.
    *
-   * Ordering: created_at DESC, id DESC (deterministic)
-   * Cursor: opaque base64-encoded JSON of (created_at, id)
-   *
    * @param orgId - Organization ID
-   * @param options - Pagination options
-   * @returns Jobs and next cursor
+   * @param options - Pagination and filter options
    */
   async list(
     orgId: string,
-    options?: { limit?: number; cursor?: string }
+    options?: { limit?: number; cursor?: string; status?: JobStatus }
   ): Promise<{ jobs: JobListItem[]; nextCursor: string | null }> {
     const limit = Math.min(options?.limit ?? DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT);
 
@@ -305,45 +464,56 @@ export class JobRepository {
       }
     }
 
-    // Build query based on cursor
-    let result: D1Result<{ id: string; title: string; status: JobStatus; created_at: string }>;
+    // Build query
+    type ListRow = {
+      id: string;
+      title: string;
+      status: JobStatus;
+      questions_status: QuestionsStatus;
+      public_slug: string | null;
+      created_at: string;
+      published_at: string | null;
+    };
+
+    let result: D1Result<ListRow>;
+
+    const statusFilter = options?.status ? `AND status = '${options.status}'` : "";
 
     if (cursorCreatedAt && cursorId) {
-      // Cursor-based pagination: get rows after cursor position
       result = await this.db
         .prepare(
           `
-          SELECT id, title, status, created_at FROM jobs
+          SELECT id, title, status, questions_status, public_slug, created_at, published_at
+          FROM jobs
           WHERE org_id = ?
             AND (created_at < ? OR (created_at = ? AND id < ?))
+            ${statusFilter}
           ORDER BY created_at DESC, id DESC
           LIMIT ?
           `
         )
         .bind(orgId, cursorCreatedAt, cursorCreatedAt, cursorId, limit + 1)
-        .all<{ id: string; title: string; status: JobStatus; created_at: string }>();
+        .all<ListRow>();
     } else {
-      // First page
       result = await this.db
         .prepare(
           `
-          SELECT id, title, status, created_at FROM jobs
-          WHERE org_id = ?
+          SELECT id, title, status, questions_status, public_slug, created_at, published_at
+          FROM jobs
+          WHERE org_id = ? ${statusFilter}
           ORDER BY created_at DESC, id DESC
           LIMIT ?
           `
         )
         .bind(orgId, limit + 1)
-        .all<{ id: string; title: string; status: JobStatus; created_at: string }>();
+        .all<ListRow>();
     }
 
     const rows = result.results;
-
-    // Check if there are more results
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
 
-    // Build next cursor from last item
+    // Build next cursor
     let nextCursor: string | null = null;
     if (hasMore && pageRows.length > 0) {
       const lastRow = pageRows[pageRows.length - 1];
@@ -357,10 +527,66 @@ export class JobRepository {
       id: row.id,
       title: row.title,
       status: row.status,
+      questionsStatus: row.questions_status,
+      publicSlug: row.public_slug,
       createdAt: row.created_at,
+      publishedAt: row.published_at,
     }));
 
     return { jobs, nextCursor };
+  }
+
+  // ===========================================================================
+  // ADMIN/MONITORING QUERIES
+  // ===========================================================================
+
+  /**
+   * Get job counts by visibility status.
+   */
+  async getStatusCounts(): Promise<Record<JobStatus, number>> {
+    const result = await this.db
+      .prepare(
+        `
+        SELECT status, COUNT(*) as count
+        FROM jobs
+        GROUP BY status
+        `
+      )
+      .all<{ status: JobStatus; count: number }>();
+
+    const counts: Record<JobStatus, number> = {
+      draft: 0,
+      published: 0,
+      paused: 0,
+      closed: 0,
+    };
+
+    for (const row of result.results) {
+      counts[row.status] = row.count;
+    }
+
+    return counts;
+  }
+
+  /**
+   * Get stuck jobs (questions processing for too long).
+   */
+  async findStuckJobs(maxProcessingMinutes: number = 5): Promise<JobRow[]> {
+    const cutoffTime = new Date(Date.now() - maxProcessingMinutes * 60 * 1000).toISOString();
+
+    const result = await this.db
+      .prepare(
+        `
+        SELECT * FROM jobs
+        WHERE questions_status = 'processing'
+          AND processing_started_at < ?
+        ORDER BY processing_started_at ASC
+        `
+      )
+      .bind(cutoffTime)
+      .all<JobRow>();
+
+    return result.results;
   }
 }
 
@@ -376,7 +602,6 @@ export class OrgRepository {
 
   /**
    * Get jobs_list_version for an organization.
-   * Returns 1 if org not found (safe default).
    */
   async getJobsListVersion(orgId: string): Promise<number> {
     const result = await this.db
@@ -389,7 +614,6 @@ export class OrgRepository {
 
   /**
    * Increment jobs_list_version for an organization.
-   * Called after creating/modifying jobs to invalidate caches.
    */
   async incrementJobsListVersion(orgId: string): Promise<void> {
     await this.db

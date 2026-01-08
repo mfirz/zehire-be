@@ -136,13 +136,7 @@ export class SessionService {
    * @returns Cookie header value that clears the session
    */
   getClearCookieHeader(): string {
-    const parts = [
-      `${this.config.cookieName}=`,
-      "HttpOnly",
-      "Path=/",
-      "SameSite=Lax",
-      "Max-Age=0",
-    ];
+    const parts = [`${this.config.cookieName}=`, "HttpOnly", "Path=/", "SameSite=Lax", "Max-Age=0"];
 
     if (this.config.secure) {
       parts.push("Secure");

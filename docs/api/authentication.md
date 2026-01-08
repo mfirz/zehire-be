@@ -122,9 +122,9 @@ Email is sent asynchronously. Response is immediate regardless of whether email 
 
 #### Errors
 
-| Status | Code            | Description           |
-| ------ | --------------- | --------------------- |
-| 400    | `INVALID_EMAIL` | Email format invalid  |
+| Status | Code            | Description          |
+| ------ | --------------- | -------------------- |
+| 400    | `INVALID_EMAIL` | Email format invalid |
 
 ---
 
@@ -153,6 +153,7 @@ curl "https://api.zehire.com/auth/callback?token=abc123..."
 ```
 
 Headers:
+
 ```
 Set-Cookie: zehire_session=<jwt>; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400
 ```
@@ -186,6 +187,7 @@ curl -X POST https://api.zehire.com/auth/logout
 ```
 
 Headers:
+
 ```
 Set-Cookie: zehire_session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0
 ```
@@ -243,27 +245,27 @@ All authentication errors follow a consistent format:
 
 ### Error Codes
 
-| HTTP | Code                 | Description                          |
-| ---- | -------------------- | ------------------------------------ |
-| 400  | `INVALID_EMAIL`      | Email format is invalid              |
-| 400  | `INVALID_TOKEN`      | Magic link token is malformed        |
-| 400  | `TOKEN_EXPIRED`      | Magic link expired (15 min TTL)      |
-| 400  | `TOKEN_ALREADY_USED` | Magic link was already used          |
-| 401  | `UNAUTHORIZED`       | Missing, invalid, or expired JWT     |
+| HTTP | Code                 | Description                            |
+| ---- | -------------------- | -------------------------------------- |
+| 400  | `INVALID_EMAIL`      | Email format is invalid                |
+| 400  | `INVALID_TOKEN`      | Magic link token is malformed          |
+| 400  | `TOKEN_EXPIRED`      | Magic link expired (15 min TTL)        |
+| 400  | `TOKEN_ALREADY_USED` | Magic link was already used            |
+| 401  | `UNAUTHORIZED`       | Missing, invalid, or expired JWT       |
 | 403  | `FORBIDDEN`          | Valid JWT but insufficient permissions |
 
 ## Protected vs Public Endpoints
 
-| Endpoint             | Auth Required | Description              |
-| -------------------- | ------------- | ------------------------ |
-| `POST /auth/login`   | No            | Initiate login           |
-| `GET /auth/callback` | No            | Complete login           |
-| `POST /auth/logout`  | No            | Clear session            |
-| `GET /auth/me`       | Semi          | Get current user         |
-| `GET /internal/health` | No          | Health check             |
-| `GET /v1/`           | No            | API root                 |
-| `POST /v1/jobs`      | **Yes**       | Create job               |
-| `GET /v1/jobs/:id`   | **Yes**       | Get job status           |
+| Endpoint               | Auth Required | Description      |
+| ---------------------- | ------------- | ---------------- |
+| `POST /auth/login`     | No            | Initiate login   |
+| `GET /auth/callback`   | No            | Complete login   |
+| `POST /auth/logout`    | No            | Clear session    |
+| `GET /auth/me`         | Semi          | Get current user |
+| `GET /internal/health` | No            | Health check     |
+| `GET /v1/`             | No            | API root         |
+| `POST /v1/jobs`        | **Yes**       | Create job       |
+| `GET /v1/jobs/:id`     | **Yes**       | Get job status   |
 
 ## Security Considerations
 
@@ -293,20 +295,20 @@ For web apps, the JWT is automatically stored in an HttpOnly cookie:
 
 ```javascript
 // Login
-await fetch('/auth/login', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ email: 'user@example.com' })
+await fetch("/auth/login", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ email: "user@example.com" }),
 });
 
 // After clicking magic link, cookie is set automatically
 
 // API calls include cookie automatically
-const response = await fetch('/v1/jobs', {
-  method: 'POST',
-  credentials: 'include', // Important!
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ title: 'Engineer' })
+const response = await fetch("/v1/jobs", {
+  method: "POST",
+  credentials: "include", // Important!
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ title: "Engineer" }),
 });
 ```
 
@@ -316,18 +318,18 @@ For API clients, extract the JWT and use the Authorization header:
 
 ```javascript
 // Get JWT from callback response
-const callbackResponse = await fetch('/auth/callback?token=xxx');
-const setCookie = callbackResponse.headers.get('Set-Cookie');
+const callbackResponse = await fetch("/auth/callback?token=xxx");
+const setCookie = callbackResponse.headers.get("Set-Cookie");
 const jwt = extractJwtFromCookie(setCookie);
 
 // Use JWT in Authorization header
-const response = await fetch('/v1/jobs', {
-  method: 'POST',
+const response = await fetch("/v1/jobs", {
+  method: "POST",
   headers: {
-    'Authorization': `Bearer ${jwt}`,
-    'Content-Type': 'application/json'
+    Authorization: `Bearer ${jwt}`,
+    "Content-Type": "application/json",
   },
-  body: JSON.stringify({ title: 'Engineer' })
+  body: JSON.stringify({ title: "Engineer" }),
 });
 ```
 

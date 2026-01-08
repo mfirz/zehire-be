@@ -8,10 +8,13 @@
 export { JobRepository, OrgRepository } from "./repository";
 
 // Service
-export { JobService } from "./service";
+export { JobService, type JobServiceError, type JobServiceResult } from "./service";
 
 // Processor (for queue consumer)
 export { JobProcessor } from "./processor";
+
+// Slug utilities
+export { generateBaseSlug, generateUniqueSlug } from "./slug";
 
 // Schemas and types
 export {
@@ -20,8 +23,10 @@ export {
   JobContextSchema,
   JobListResponseSchema,
   JobStatusResponseSchema,
+  PublicJobResponseSchema,
   RenderedQuestionSchema,
   ResolvedArchetypeSchema,
+  UpdateJobInputSchema,
   type CreateJobInput,
   type CreateJobResponse,
   type JobContextOutput,
@@ -29,8 +34,10 @@ export {
   type JobListResponse,
   type JobRow,
   type JobStatusResponse,
+  type PublicJobResponse,
   type RenderedQuestionOutput,
   type ResolvedArchetypeOutput,
+  type UpdateJobInput,
 } from "./schemas";
 
 // Archetypes (re-export for convenience)

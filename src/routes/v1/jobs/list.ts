@@ -17,8 +17,12 @@
  */
 
 import type { Context } from "hono";
-import { JobRepository, OrgRepository, type JobListResponse } from "../../../domain/jobs";
-import type { AuthVariables, Env } from "../../../types/bindings";
+import {
+  JobRepository,
+  OrgRepository,
+  type JobListResponse,
+} from "../../../domain/jobs";
+import { JOB_STATUSES, type AuthVariables, type Env, type JobStatus } from "../../../types/bindings";
 
 // =============================================================================
 // CONSTANTS
@@ -37,7 +41,9 @@ const MAX_LIMIT = 50;
 // HANDLER
 // =============================================================================
 
-export async function listJobs(c: Context<{ Bindings: Env; Variables: AuthVariables }>): Promise<Response> {
+export async function listJobs(
+  c: Context<{ Bindings: Env; Variables: AuthVariables }>
+): Promise<Response> {
   const user = c.get("user");
   const orgId = user.orgId;
 
@@ -45,8 +51,29 @@ export async function listJobs(c: Context<{ Bindings: Env; Variables: AuthVariab
   const url = new URL(c.req.url);
   const limitParam = url.searchParams.get("limit");
   const cursor = url.searchParams.get("cursor");
+  const statusParam = url.searchParams.get("status");
 
-  const limit = limitParam ? Math.min(Math.max(1, parseInt(limitParam, 10) || DEFAULT_LIMIT), MAX_LIMIT) : DEFAULT_LIMIT;
+  const limit = limitParam
+    ? Math.min(Math.max(1, parseInt(limitParam, 10) || DEFAULT_LIMIT), MAX_LIMIT)
+    : DEFAULT_LIMIT;
+
+  // Validate status filter if provided
+  let status: JobStatus | undefined;
+  if (statusParam) {
+    if (JOB_STATUSES.includes(statusParam as JobStatus)) {
+      status = statusParam as JobStatus;
+    } else {
+      return c.json(
+        {
+          error: {
+            code: "INVALID_STATUS",
+            message: `Invalid status filter. Must be one of: ${JOB_STATUSES.join(", ")}`,
+          },
+        },
+        400
+      );
+    }
+  }
 
   // Get current jobs_list_version for cache key
   const orgRepository = new OrgRepository(c.env.DB);
@@ -70,6 +97,7 @@ export async function listJobs(c: Context<{ Bindings: Env; Variables: AuthVariab
   const { jobs, nextCursor } = await repository.list(orgId, {
     limit,
     ...(cursor ? { cursor } : {}),
+    ...(status ? { status } : {}),
   });
 
   // Build response
