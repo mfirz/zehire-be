@@ -575,6 +575,50 @@ https://yourapp.com/apply/acme-corp-senior-software-engineer-x7k3m
 | `VALIDATION_ERROR` | Input or output validation failed |
 | `INTERNAL_ERROR` | Unexpected internal error |
 
+### Retryable vs Permanent Errors
+
+Some errors are **retryable** (transient infrastructure issues) and the queue will automatically retry:
+
+| Code | Retryable | Description |
+|------|-----------|-------------|
+| `LLM_RATE_LIMITED` | Yes | Rate limit or capacity exceeded, will retry |
+| `LLM_TIMEOUT` | Yes | Timeout or temporary service error, will retry |
+| `VALIDATION_ERROR` | No | Invalid input/output, requires user action |
+| `INFERENCE_FAILED` | No | LLM inference logic failed |
+| `ARCHETYPE_RESOLUTION_FAILED` | No | Archetype resolution logic failed |
+| `QUESTION_RENDERING_FAILED` | No | Question rendering logic failed |
+| `INTERNAL_ERROR` | No | Unexpected error |
+
+For retryable errors:
+- `questionsStatus` is reset to `pending` for queue retry
+- `regenerationCount` is **not** incremented (the attempt doesn't count)
+
+For permanent errors:
+- `questionsStatus` is set to `failed`
+- User must call `POST /v1/jobs/:id/generate` again to retry
+
+---
+
+## Caching
+
+### GET /v1/jobs/:id Caching
+
+| Job Status | Cache-Control | Reason |
+|------------|---------------|--------|
+| draft | `no-store` | Can be edited or regenerated at any time |
+| published | `private, max-age=3600` | Immutable after publishing |
+| paused | `private, max-age=3600` | Immutable |
+| closed | `private, max-age=3600` | Immutable |
+
+Draft jobs are never cached because:
+- Content can be updated via `PATCH /v1/jobs/:id`
+- Questions can be regenerated via `POST /v1/jobs/:id/generate`
+- Status can change (pending → processing → completed/failed)
+
+### GET /public/jobs/:slug Caching
+
+Public job endpoints are cached for 1 hour (`Cache-Control: public, max-age=3600`) because published jobs are immutable. When a job is paused or closed, it returns 404 and the cache will be updated on the next request.
+
 ---
 
 ## FAQ

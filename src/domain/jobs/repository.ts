@@ -309,7 +309,7 @@ export class JobRepository {
 
   /**
    * Mark job's questions as failed with error details.
-   * Called when LLM pipeline fails.
+   * Called when LLM pipeline fails with a permanent error.
    */
   async markQuestionsFailed(
     id: string,
@@ -333,6 +333,31 @@ export class JobRepository {
         `
       )
       .bind(error.message, error.code, now, now, id)
+      .run();
+  }
+
+  /**
+   * Reset job's questions status back to pending for queue retry.
+   * Called when LLM pipeline fails with a transient/retryable error.
+   * Decrements regeneration_count since the attempt didn't really count.
+   */
+  async resetQuestionsForRetry(id: string): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .prepare(
+        `
+        UPDATE jobs
+        SET questions_status = 'pending',
+            regeneration_count = MAX(0, regeneration_count - 1),
+            processing_started_at = NULL,
+            error_message = NULL,
+            error_code = NULL,
+            updated_at = ?
+        WHERE id = ?
+        `
+      )
+      .bind(now, id)
       .run();
   }
 

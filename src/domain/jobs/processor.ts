@@ -105,9 +105,22 @@ export class JobProcessor {
 
       console.log(`[Processor] Job ${jobId} questions completed in ${processingDurationMs}ms`);
     } catch (error) {
-      // Determine error code based on error type
-      const { code, message } = this.categorizeError(error);
+      const { code, message, retryable } = this.categorizeError(error);
 
+      if (retryable) {
+        // For transient errors, reset to pending so queue can retry
+        // Also decrements regeneration_count since this attempt doesn't count
+        await this.repository.resetQuestionsForRetry(jobId);
+
+        console.log(
+          `[Processor] Job ${jobId} hit transient error (${code}), reset for retry: ${message}`
+        );
+
+        // Re-throw for queue retry mechanism
+        throw error;
+      }
+
+      // For permanent errors, mark as failed
       await this.repository.markQuestionsFailed(jobId, {
         message,
         code,
@@ -118,45 +131,69 @@ export class JobProcessor {
         await this.orgRepository.incrementJobsListVersion(job.org_id);
       }
 
-      // Re-throw for queue retry mechanism
+      console.log(`[Processor] Job ${jobId} failed permanently (${code}): ${message}`);
+
+      // Re-throw for visibility
       throw error;
     }
   }
 
   /**
    * Categorize an error into a machine-readable code.
+   * Also determines if the error is retryable (transient) or permanent.
    */
   private categorizeError(error: unknown): {
     code: JobErrorCode;
     message: string;
+    retryable: boolean;
   } {
     const message = error instanceof Error ? error.message : "Unknown error occurred";
 
-    // Check for specific error patterns
+    // ==========================================================================
+    // RETRYABLE ERRORS (transient - queue should retry)
+    // ==========================================================================
+
+    // Rate limiting - should retry after backoff
     if (message.includes("rate limit") || message.includes("429")) {
-      return { code: "LLM_RATE_LIMITED", message };
+      return { code: "LLM_RATE_LIMITED", message, retryable: true };
     }
 
+    // Timeout - may succeed on retry
     if (message.includes("timeout") || message.includes("ETIMEDOUT")) {
-      return { code: "LLM_TIMEOUT", message };
+      return { code: "LLM_TIMEOUT", message, retryable: true };
     }
+
+    // Capacity exceeded (Workers AI specific) - should retry
+    if (message.includes("Capacity") || message.includes("capacity")) {
+      return { code: "LLM_RATE_LIMITED", message, retryable: true };
+    }
+
+    // Temporary service errors
+    if (message.includes("503") || message.includes("502") || message.includes("temporarily")) {
+      return { code: "LLM_TIMEOUT", message, retryable: true };
+    }
+
+    // ==========================================================================
+    // PERMANENT ERRORS (should not retry - mark as failed)
+    // ==========================================================================
 
     if (message.includes("Invalid JSON") || message.includes("Validation failed")) {
-      return { code: "VALIDATION_ERROR", message };
+      return { code: "VALIDATION_ERROR", message, retryable: false };
     }
 
     if (message.includes("inference") || message.includes("JobContext")) {
-      return { code: "INFERENCE_FAILED", message };
+      return { code: "INFERENCE_FAILED", message, retryable: false };
     }
 
     if (message.includes("archetype") || message.includes("resolve")) {
-      return { code: "ARCHETYPE_RESOLUTION_FAILED", message };
+      return { code: "ARCHETYPE_RESOLUTION_FAILED", message, retryable: false };
     }
 
     if (message.includes("render") || message.includes("question")) {
-      return { code: "QUESTION_RENDERING_FAILED", message };
+      return { code: "QUESTION_RENDERING_FAILED", message, retryable: false };
     }
 
-    return { code: "INTERNAL_ERROR", message };
+    // Unknown errors are NOT retryable by default to prevent infinite loops
+    return { code: "INTERNAL_ERROR", message, retryable: false };
   }
 }

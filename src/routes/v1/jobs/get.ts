@@ -6,9 +6,8 @@
  * Requires JWT authentication. Organization ID is extracted from the JWT.
  *
  * Caching Strategy:
- * - Published, paused, and closed jobs are cached (relatively stable states)
- * - Draft jobs are never cached (can change frequently during editing)
- * - Cache key includes job ID and version for invalidation
+ * - Published, paused, and closed jobs get cache headers (immutable states)
+ * - Draft jobs are never cached (can change via edits or regeneration)
  *
  * Response shape varies by status (discriminated union):
  * - draft: Full editing info, questions (if generated), errors (if failed)
@@ -19,7 +18,7 @@
 
 import type { Context } from "hono";
 import { JobRepository, JobService, OrgRepository } from "../../../domain/jobs";
-import type { AuthVariables, Env, JobStatus, QuestionsStatus } from "../../../types/bindings";
+import type { AuthVariables, Env, JobStatus } from "../../../types/bindings";
 
 // =============================================================================
 // CONSTANTS
@@ -34,11 +33,6 @@ const CACHE_MAX_AGE_SECONDS = 3600;
  */
 const CACHEABLE_STATUSES: JobStatus[] = ["published", "paused", "closed"];
 
-/**
- * Questions statuses that indicate terminal state for question generation.
- * Used to determine if a draft's questions state is stable.
- */
-const TERMINAL_QUESTIONS_STATUSES: QuestionsStatus[] = ["completed", "failed"];
 
 // =============================================================================
 // HANDLER
@@ -61,76 +55,40 @@ export async function getJob(
   const service = new JobService(repository, orgRepository, c.env.JOB_QUEUE);
 
   // Fetch job (scoped to org for authorization)
+  // We ALWAYS fetch fresh data because:
+  // 1. Authorization check requires DB lookup anyway
+  // 2. Job state can change (regeneration, status updates)
+  // 3. Cache is only for edge/CDN optimization, not for skipping DB
   const result = await service.getJobStatus(jobId, orgId);
 
   if (!result) {
     return c.json({ error: "Job not found" }, 404);
   }
 
-  // For draft status with non-terminal questions state, don't cache
-  // (questions are still being generated or haven't started)
-  if (result.status === "draft") {
-    const isTerminalQuestionsState = TERMINAL_QUESTIONS_STATUSES.includes(result.questionsStatus);
+  // Determine if response should have cache headers for CDN/edge caching
+  // Only published/paused/closed jobs are cached (immutable states)
+  const shouldCache = isCacheableState(result.status);
 
-    // Only cache drafts with completed/failed questions
-    if (isTerminalQuestionsState) {
-      return createCachedResponse(c, jobId, result);
-    }
-
-    // Non-terminal questions state - don't cache
-    return c.json(result, 200);
+  if (shouldCache) {
+    return c.json(result, 200, {
+      "Cache-Control": `private, max-age=${CACHE_MAX_AGE_SECONDS}`,
+    });
   }
 
-  // Cache non-draft statuses (published, paused, closed)
-  if (CACHEABLE_STATUSES.includes(result.status)) {
-    return createCachedResponse(c, jobId, result);
-  }
-
-  // Fallback: return without caching
-  return c.json(result, 200);
-}
-
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-/**
- * Create and cache a response.
- */
-async function createCachedResponse(
-  c: Context<{ Bindings: Env; Variables: AuthVariables }>,
-  jobId: string,
-  result: unknown
-): Promise<Response> {
-  const cache = caches.default;
-  const cacheKey = buildCacheKey(jobId);
-
-  // Check cache first
-  const cachedResponse = await cache.match(cacheKey);
-  if (cachedResponse) {
-    return cachedResponse;
-  }
-
-  // Create cacheable response
-  const responseToCache = new Response(JSON.stringify(result), {
-    status: 200,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": `public, max-age=${CACHE_MAX_AGE_SECONDS}`,
-    },
+  // Non-cacheable state - no cache headers
+  return c.json(result, 200, {
+    "Cache-Control": "no-store",
   });
-
-  // Store in cache (non-blocking)
-  c.executionCtx.waitUntil(cache.put(cacheKey, responseToCache.clone()));
-
-  return responseToCache;
 }
 
 /**
- * Build cache key for a specific job.
+ * Determine if a job state is stable enough to cache.
  *
- * Uses a synthetic internal URL for Cloudflare Cache API.
+ * Only published, paused, and closed jobs are cacheable.
+ * Drafts are never cached because they can change at any time
+ * (content updates, question regeneration, etc.)
  */
-function buildCacheKey(jobId: string): Request {
-  return new Request(`https://cache.zehire.internal/jobs/${jobId}`);
+function isCacheableState(status: JobStatus): boolean {
+  return CACHEABLE_STATUSES.includes(status);
 }
+
