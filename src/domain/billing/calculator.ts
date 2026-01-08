@@ -35,14 +35,23 @@ export interface BillingPeriod {
 }
 
 /**
+ * An active window within a billing period.
+ * Represents a continuous period where billing applies.
+ */
+export interface ActiveWindow {
+  /** When billing started for this window */
+  from: string;
+  /** When billing ended for this window, null if still active */
+  to: string | null;
+}
+
+/**
  * Usage for a single job within a billing period.
  */
 export interface JobUsage {
   jobId: string;
-  /** When the job was activated (or period start if before) */
-  activeFrom: string | null;
-  /** When the job was deactivated (or period end if still active) */
-  activeTo: string | null;
+  /** Active windows within the period (accounts for pause/resume cycles) */
+  activeWindows: ActiveWindow[];
   /** Milliseconds active within the period */
   activeMs: number;
   /** Fraction of period active (0-1) */
@@ -72,8 +81,8 @@ export interface BillingUsage {
 export interface BillingLineItem {
   jobId: string;
   jobTitle: string;
-  activeFrom: string | null;
-  activeTo: string | null;
+  /** Active windows within the period (accounts for pause/resume cycles) */
+  activeWindows: ActiveWindow[];
   activeDays: number;
   activeFraction: number;
   unitPrice: number; // Monthly rate
@@ -148,6 +157,9 @@ export function getPreviousBillingPeriod(): BillingPeriod {
 /**
  * Calculate job usage within a billing period from billing events.
  *
+ * Handles full lifecycle: activated → paused → resumed → paused → resumed → deactivated
+ * Each pause stops the billing clock, each resume restarts it.
+ *
  * @param jobId - Job ID
  * @param events - All billing events for this job (sorted by occurred_at)
  * @param period - The billing period to calculate for
@@ -160,72 +172,96 @@ export function calculateJobUsage(
   const periodStart = new Date(period.start).getTime();
   const periodEnd = new Date(period.end).getTime();
 
-  // Find the activation and deactivation events
-  let activatedAt: number | null = null;
-  let deactivatedAt: number | null = null;
+  // Build active windows from events
+  // Each window is [start, end] where billing applies
+  const activeWindows: Array<{ start: number; end: number | null }> = [];
+  let currentWindowStart: number | null = null;
+  let isDeactivated = false;
 
   for (const event of events) {
     const eventTime = new Date(event.occurredAt).getTime();
 
-    if (event.eventType === "activated") {
-      activatedAt = eventTime;
-    } else if (event.eventType === "deactivated") {
-      deactivatedAt = eventTime;
+    if (event.eventType === "activated" || event.eventType === "resumed") {
+      // Start a new active window
+      currentWindowStart = eventTime;
+    } else if (event.eventType === "paused" || event.eventType === "deactivated") {
+      // End the current active window
+      if (currentWindowStart !== null) {
+        activeWindows.push({ start: currentWindowStart, end: eventTime });
+        currentWindowStart = null;
+      }
+      if (event.eventType === "deactivated") {
+        isDeactivated = true;
+      }
     }
   }
 
+  // If there's an open window (job is currently active), close it at null (ongoing)
+  if (currentWindowStart !== null) {
+    activeWindows.push({ start: currentWindowStart, end: null });
+  }
+
   // Job was never activated
-  if (activatedAt === null) {
+  if (activeWindows.length === 0) {
     return {
       jobId,
-      activeFrom: null,
-      activeTo: null,
+      activeWindows: [],
       activeMs: 0,
       activeFraction: 0,
       isStillActive: false,
     };
   }
 
-  // Job was deactivated before period started
-  if (deactivatedAt !== null && deactivatedAt <= periodStart) {
+  // Calculate total active time within the period and build result windows
+  let totalActiveMs = 0;
+  let hasOpenWindow = false;
+  const resultWindows: ActiveWindow[] = [];
+
+  for (const window of activeWindows) {
+    const windowEnd = window.end ?? periodEnd; // Use period end for open windows
+
+    // Skip windows that don't overlap with the period
+    if (windowEnd <= periodStart) continue;
+    if (window.start >= periodEnd) continue;
+
+    // Calculate overlap with period
+    const effectiveStart = Math.max(window.start, periodStart);
+    const effectiveEnd = Math.min(windowEnd, periodEnd);
+    const windowMs = Math.max(0, effectiveEnd - effectiveStart);
+
+    totalActiveMs += windowMs;
+
+    // Add to result windows
+    resultWindows.push({
+      from: new Date(effectiveStart).toISOString(),
+      to: window.end === null ? null : new Date(effectiveEnd).toISOString(),
+    });
+
+    // Check if this window is still open
+    if (window.end === null) {
+      hasOpenWindow = true;
+    }
+  }
+
+  // No active time in this period
+  if (totalActiveMs === 0) {
     return {
       jobId,
-      activeFrom: null,
-      activeTo: null,
+      activeWindows: [],
       activeMs: 0,
       activeFraction: 0,
-      isStillActive: false,
+      isStillActive: !isDeactivated && activeWindows.some((w) => w.end === null),
     };
   }
 
-  // Job was activated after period ended
-  if (activatedAt >= periodEnd) {
-    return {
-      jobId,
-      activeFrom: null,
-      activeTo: null,
-      activeMs: 0,
-      activeFraction: 0,
-      isStillActive: deactivatedAt === null,
-    };
-  }
-
-  // Calculate effective active window within period
-  const effectiveStart = Math.max(activatedAt, periodStart);
-  const effectiveEnd = deactivatedAt !== null
-    ? Math.min(deactivatedAt, periodEnd)
-    : periodEnd;
-
-  const activeMs = Math.max(0, effectiveEnd - effectiveStart);
-  const activeFraction = activeMs / period.totalMs;
+  const activeFraction = totalActiveMs / period.totalMs;
 
   return {
     jobId,
-    activeFrom: new Date(effectiveStart).toISOString(),
-    activeTo: new Date(effectiveEnd).toISOString(),
-    activeMs,
+    activeWindows: resultWindows,
+    activeMs: totalActiveMs,
     activeFraction,
-    isStillActive: deactivatedAt === null,
+    isStillActive: hasOpenWindow && !isDeactivated,
   };
 }
 
@@ -289,8 +325,7 @@ export function generateInvoice(
     return {
       jobId: job.jobId,
       jobTitle: jobTitles.get(job.jobId) ?? "Unknown Job",
-      activeFrom: job.activeFrom,
-      activeTo: job.activeTo,
+      activeWindows: job.activeWindows,
       activeDays: Math.round(activeDays * 100) / 100, // 2 decimal places
       activeFraction: Math.round(job.activeFraction * 10000) / 10000, // 4 decimal places
       unitPrice: monthlyRatePerJob,

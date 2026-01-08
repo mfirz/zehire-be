@@ -8,6 +8,7 @@
  * - Calculates usage per job
  * - Generates invoices with proration
  * - Handles billing waivers (founding access)
+ * - Uses versioned pricing from pricing_history table
  */
 
 import { BillingEventRepository, OrgRepository } from "../jobs/repository";
@@ -22,27 +23,32 @@ import {
   type BillingPeriod,
   type BillingUsage,
 } from "./calculator";
+import { PricingRepository } from "./pricing";
 
 // =============================================================================
 // CONSTANTS
 // =============================================================================
 
 /**
- * Default monthly rate per active job (in cents).
+ * Fallback monthly rate if no pricing history exists (in cents).
  * $200/month = 20000 cents
  */
-const DEFAULT_MONTHLY_RATE_CENTS = 20000;
+const FALLBACK_MONTHLY_RATE_CENTS = 20000;
 
 // =============================================================================
 // BILLING SERVICE
 // =============================================================================
 
 export class BillingService {
+  private readonly pricingRepository: PricingRepository;
+
   constructor(
     private readonly billingEventRepository: BillingEventRepository,
     private readonly orgRepository: OrgRepository,
     private readonly db: D1Database
-  ) {}
+  ) {
+    this.pricingRepository = new PricingRepository(db);
+  }
 
   /**
    * Get billing usage for an organization in the current month.
@@ -110,49 +116,55 @@ export class BillingService {
 
   /**
    * Generate an invoice for an organization for the previous month.
+   * Uses the pricing that was active during that period.
    *
    * @param orgId - Organization ID
-   * @param monthlyRate - Monthly rate per job in cents (default: $200)
+   * @param rateOverride - Optional rate override (in cents), otherwise uses pricing history
    */
   async generatePreviousMonthInvoice(
     orgId: string,
-    monthlyRate: number = DEFAULT_MONTHLY_RATE_CENTS
+    rateOverride?: number
   ): Promise<BillingInvoice> {
     const period = getPreviousBillingPeriod();
-    return this.generateInvoiceForPeriod(orgId, period, monthlyRate);
+    return this.generateInvoiceForPeriod(orgId, period, rateOverride);
   }
 
   /**
    * Generate an invoice for an organization for a specific month.
+   * Uses the pricing that was active during that period.
    *
    * @param orgId - Organization ID
    * @param year - Year (e.g., 2026)
    * @param month - Month (1-12)
-   * @param monthlyRate - Monthly rate per job in cents (default: $200)
+   * @param rateOverride - Optional rate override (in cents), otherwise uses pricing history
    */
   async generateInvoiceForMonth(
     orgId: string,
     year: number,
     month: number,
-    monthlyRate: number = DEFAULT_MONTHLY_RATE_CENTS
+    rateOverride?: number
   ): Promise<BillingInvoice> {
     const period = createBillingPeriod(year, month);
-    return this.generateInvoiceForPeriod(orgId, period, monthlyRate);
+    return this.generateInvoiceForPeriod(orgId, period, rateOverride);
   }
 
   /**
    * Generate an invoice for an organization for a specific period.
+   * Uses the pricing that was active at the start of the period.
    */
   async generateInvoiceForPeriod(
     orgId: string,
     period: BillingPeriod,
-    monthlyRate: number = DEFAULT_MONTHLY_RATE_CENTS
+    rateOverride?: number
   ): Promise<BillingInvoice> {
     // Get usage
     const usage = await this.getUsageForPeriod(orgId, period);
 
     // Get job titles
     const jobTitles = await this.getJobTitles(usage.jobs.map((j) => j.jobId));
+
+    // Get the rate: use override, or look up from pricing history
+    const monthlyRate = rateOverride ?? await this.getRateForPeriod(period);
 
     // Generate invoice
     return generateInvoice(usage, jobTitles, monthlyRate);
@@ -161,10 +173,11 @@ export class BillingService {
   /**
    * Get a preview of current month charges (not finalized).
    * Shows what the user would be charged if the month ended now.
+   * Uses current active pricing.
    */
   async getCurrentChargesPreview(
     orgId: string,
-    monthlyRate: number = DEFAULT_MONTHLY_RATE_CENTS
+    rateOverride?: number
   ): Promise<BillingInvoice> {
     const period = getCurrentBillingPeriod();
 
@@ -196,13 +209,46 @@ export class BillingService {
     // Get job titles
     const jobTitles = await this.getJobTitles(usage.jobs.map((j) => j.jobId));
 
+    // Get the rate: use override, or look up current pricing
+    const monthlyRate = rateOverride ?? await this.getRateForPeriod(period);
+
     // Generate invoice preview
     return generateInvoice(usage, jobTitles, monthlyRate);
+  }
+
+  /**
+   * Get the current pricing information.
+   */
+  async getCurrentPricing() {
+    return this.pricingRepository.getCurrentPrice();
+  }
+
+  /**
+   * Get all pricing history.
+   */
+  async getPricingHistory() {
+    return this.pricingRepository.getHistory();
+  }
+
+  /**
+   * Get upcoming price changes.
+   */
+  async getUpcomingPriceChanges() {
+    return this.pricingRepository.getUpcoming();
   }
 
   // ===========================================================================
   // PRIVATE HELPERS
   // ===========================================================================
+
+  /**
+   * Get the rate for a billing period from pricing history.
+   * Uses the price that was active at the start of the period.
+   */
+  private async getRateForPeriod(period: BillingPeriod): Promise<number> {
+    const pricing = await this.pricingRepository.getActivePrice(period.start);
+    return pricing?.rateCents ?? FALLBACK_MONTHLY_RATE_CENTS;
+  }
 
   /**
    * Group billing events by job ID.

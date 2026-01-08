@@ -446,6 +446,68 @@
       ]
     },
     {
+      "name": "Billing",
+      "description": "Billing and usage endpoints.\n\nAll endpoints require JWT authentication.\n\n**Billing Model:**\n- $200/month per active role\n- Prorated by milliseconds\n- Calendar month billing periods\n- Active = published OR paused",
+      "item": [
+        {
+          "name": "Current Usage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/billing",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "billing"]
+            },
+            "description": "Get current month usage summary.\n\nReturns:\n- Period dates\n- Per-job active time breakdown\n- Total active job-days\n- Billing waiver status"
+          },
+          "response": []
+        },
+        {
+          "name": "Preview Charges",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/billing/preview",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "billing", "preview"]
+            },
+            "description": "Preview of current charges up to now.\n\nShows what you would be charged if the billing period ended right now.\n\nUseful for real-time cost tracking."
+          },
+          "response": []
+        },
+        {
+          "name": "Monthly Usage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/billing/2026/1",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "billing", "2026", "1"]
+            },
+            "description": "Get usage for a specific month.\n\n**Path Parameters:**\n- year: 2020-2100\n- month: 1-12\n\nExample: `/v1/billing/2026/1` for January 2026"
+          },
+          "response": []
+        },
+        {
+          "name": "Monthly Invoice",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/billing/2026/1/invoice",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "billing", "2026", "1", "invoice"]
+            },
+            "description": "Get invoice for a specific month.\n\n**Path Parameters:**\n- year: 2020-2100\n- month: 1-12\n\nReturns:\n- Line items with job details\n- Prorated amounts\n- Subtotal, discount, total\n- Formatted currency strings\n\n**Note:** Cannot generate invoices for future periods."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "Internal",
       "description": "Internal endpoints for monitoring and operations.",
       "item": [
