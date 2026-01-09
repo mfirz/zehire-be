@@ -20,9 +20,11 @@ import type { AuthVariables, Env } from "../../../types/bindings";
 import { closeJob } from "./close";
 import { deleteJob } from "./delete";
 import { generateQuestions } from "./generate";
+import { generatePipeline } from "./generate-pipeline";
 import { getJob } from "./get";
 import { listJobs } from "./list";
 import { pauseJob } from "./pause";
+import { getPipeline, resetPipeline, updatePipeline } from "./pipeline";
 import { createJob } from "./post";
 import { publishJob } from "./publish";
 import { resumeJob } from "./resume";
@@ -59,7 +61,19 @@ jobs.delete("/:id", deleteJob);
 // POST /v1/jobs/:id/generate - Queue for question generation
 jobs.post("/:id/generate", generateQuestions);
 
-// POST /v1/jobs/:id/publish - Publish draft (requires completed questions)
+// POST /v1/jobs/:id/generate-pipeline - Queue for pipeline generation
+jobs.post("/:id/generate-pipeline", generatePipeline);
+
+// GET /v1/jobs/:id/pipeline - Get pipeline details
+jobs.get("/:id/pipeline", getPipeline);
+
+// PATCH /v1/jobs/:id/pipeline - Update pipeline configuration
+jobs.patch("/:id/pipeline", updatePipeline);
+
+// POST /v1/jobs/:id/pipeline/reset - Reset pipeline to AI recommendation
+jobs.post("/:id/pipeline/reset", resetPipeline);
+
+// POST /v1/jobs/:id/publish - Publish draft (requires completed questions AND pipeline)
 jobs.post("/:id/publish", publishJob);
 
 // POST /v1/jobs/:id/pause - Pause published job

@@ -8,7 +8,11 @@
  */
 
 import { z } from "zod";
-import { JOB_ERROR_CODES, JOB_STATUSES, QUESTIONS_STATUSES } from "../../types/bindings";
+import { JOB_ERROR_CODES, JOB_STATUSES, PIPELINE_STATUSES, QUESTIONS_STATUSES } from "../../types/bindings";
+import {
+  PipelineConfigSchema,
+  PipelineRecommendationSchema,
+} from "../pipeline/types";
 import {
   COLLABORATION_LEVELS,
   DECISION_IMPACTS,
@@ -137,6 +141,9 @@ export const JobRowSchema = z.object({
   // Question generation status
   questions_status: z.enum(QUESTIONS_STATUSES),
 
+  // Pipeline generation status
+  pipeline_status: z.enum(PIPELINE_STATUSES).nullable().default("none"),
+
   // Job content
   title: z.string(),
   description: z.string(),
@@ -152,17 +159,34 @@ export const JobRowSchema = z.object({
   archetypes: z.string().nullable(),
   questions: z.string().nullable(),
 
+  // Pipeline generation results (JSON strings)
+  pipeline_recommendation: z.string().nullable(),
+  pipeline: z.string().nullable(),
+
   // Error details (for failed question generation)
   error_message: z.string().nullable(),
   error_code: z.enum(JOB_ERROR_CODES).nullable(),
 
-  // Regeneration rate limiting
+  // Pipeline error details
+  pipeline_error: z.string().nullable(),
+  pipeline_error_code: z.enum(JOB_ERROR_CODES).nullable(),
+
+  // Regeneration rate limiting (questions)
   regeneration_count: z.number(),
   last_regeneration_at: z.string().nullable(),
 
-  // Processing timestamps
+  // Regeneration rate limiting (pipeline)
+  pipeline_regeneration_count: z.number().nullable().default(0),
+  pipeline_last_regeneration_at: z.string().nullable(),
+
+  // Processing timestamps (questions)
   processing_started_at: z.string().nullable(),
   processing_duration_ms: z.number().nullable(),
+
+  // Processing timestamps (pipeline)
+  pipeline_processing_started_at: z.string().nullable(),
+  pipeline_processing_duration_ms: z.number().nullable(),
+  pipeline_generated_at: z.string().nullable(),
 
   // Lifecycle timestamps
   created_at: z.string(),
@@ -182,6 +206,7 @@ export const JobListItemSchema = z.object({
   title: z.string(),
   status: z.enum(JOB_STATUSES),
   questionsStatus: z.enum(QUESTIONS_STATUSES),
+  pipelineStatus: z.enum(PIPELINE_STATUSES),
   publicSlug: z.string().nullable(),
   createdAt: z.string(),
   publishedAt: z.string().nullable(),
@@ -239,14 +264,15 @@ export type CreateJobResponse = z.infer<typeof CreateJobResponseSchema>;
  * Returned from GET /v1/jobs/:id.
  *
  * Response varies by visibility status (draft/published/paused/closed)
- * and questions generation status.
+ * and questions/pipeline generation status.
  */
 export const JobStatusResponseSchema = z.discriminatedUnion("status", [
-  // Draft state - may or may not have questions
+  // Draft state - may or may not have questions/pipeline
   z.object({
     id: z.string(),
     status: z.literal("draft"),
     questionsStatus: z.enum(QUESTIONS_STATUSES),
+    pipelineStatus: z.enum(PIPELINE_STATUSES),
     title: z.string(),
     description: z.string(),
     companyName: z.string().nullable(),
@@ -256,24 +282,35 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
     jobContext: JobContextSchema.nullable(),
     archetypes: z.array(ResolvedArchetypeSchema).nullable(),
     questions: z.array(RenderedQuestionSchema).nullable(),
+    // Pipeline (if generated)
+    pipelineRecommendation: PipelineRecommendationSchema.nullable(),
+    pipeline: PipelineConfigSchema.nullable(),
     // Error (if question generation failed)
     errorMessage: z.string().nullable(),
     errorCode: z.enum(JOB_ERROR_CODES).nullable(),
-    // Regeneration info
+    // Pipeline error (if pipeline generation failed)
+    pipelineError: z.string().nullable(),
+    pipelineErrorCode: z.enum(JOB_ERROR_CODES).nullable(),
+    // Regeneration info (questions)
     regenerationCount: z.number(),
     lastRegenerationAt: z.string().nullable(),
+    // Regeneration info (pipeline)
+    pipelineRegenerationCount: z.number(),
+    pipelineLastRegenerationAt: z.string().nullable(),
     // Timestamps
     createdAt: z.string(),
     updatedAt: z.string(),
     processingStartedAt: z.string().nullable(),
     completedAt: z.string().nullable(),
+    pipelineGeneratedAt: z.string().nullable(),
   }),
 
-  // Published state - has questions, is live
+  // Published state - has questions and pipeline, is live
   z.object({
     id: z.string(),
     status: z.literal("published"),
     questionsStatus: z.literal("completed"), // Always completed when published
+    pipelineStatus: z.literal("completed"), // Always completed when published
     title: z.string(),
     description: z.string(),
     companyName: z.string().nullable(),
@@ -285,11 +322,15 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
     archetypes: z.array(ResolvedArchetypeSchema),
     questions: z.array(RenderedQuestionSchema),
     processingDurationMs: z.number(),
+    // Pipeline (always present)
+    pipelineRecommendation: PipelineRecommendationSchema,
+    pipeline: PipelineConfigSchema,
     // Timestamps
     createdAt: z.string(),
     updatedAt: z.string(),
     publishedAt: z.string(),
     completedAt: z.string(),
+    pipelineGeneratedAt: z.string(),
   }),
 
   // Paused state - was published, now paused
@@ -297,6 +338,7 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
     id: z.string(),
     status: z.literal("paused"),
     questionsStatus: z.literal("completed"),
+    pipelineStatus: z.literal("completed"),
     title: z.string(),
     description: z.string(),
     companyName: z.string().nullable(),
@@ -308,11 +350,15 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
     archetypes: z.array(ResolvedArchetypeSchema),
     questions: z.array(RenderedQuestionSchema),
     processingDurationMs: z.number(),
+    // Pipeline
+    pipelineRecommendation: PipelineRecommendationSchema,
+    pipeline: PipelineConfigSchema,
     // Timestamps
     createdAt: z.string(),
     updatedAt: z.string(),
     publishedAt: z.string(),
     completedAt: z.string(),
+    pipelineGeneratedAt: z.string(),
   }),
 
   // Closed state - permanently closed
@@ -320,6 +366,7 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
     id: z.string(),
     status: z.literal("closed"),
     questionsStatus: z.literal("completed"),
+    pipelineStatus: z.literal("completed"),
     title: z.string(),
     description: z.string(),
     companyName: z.string().nullable(),
@@ -331,12 +378,16 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
     archetypes: z.array(ResolvedArchetypeSchema),
     questions: z.array(RenderedQuestionSchema),
     processingDurationMs: z.number(),
+    // Pipeline
+    pipelineRecommendation: PipelineRecommendationSchema,
+    pipeline: PipelineConfigSchema,
     // Timestamps
     createdAt: z.string(),
     updatedAt: z.string(),
     publishedAt: z.string().nullable(),
     closedAt: z.string(),
     completedAt: z.string(),
+    pipelineGeneratedAt: z.string(),
   }),
 ]);
 

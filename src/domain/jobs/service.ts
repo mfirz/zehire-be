@@ -15,6 +15,9 @@
  */
 
 import type { Env } from "../../types/bindings";
+import { generateInitialConfig } from "../pipeline/advisor";
+import { PipelineConfigSchema, PipelineRecommendationSchema } from "../pipeline/types";
+import type { PipelineConfig, PipelineUpdate } from "../pipeline/types";
 import { BillingEventRepository, JobRepository, OrgRepository } from "./repository";
 import type {
   CreateJobInput,
@@ -45,6 +48,7 @@ export type JobServiceError =
   | { code: "REGENERATION_LIMIT_REACHED"; message: string }
   | { code: "REGENERATION_COOLDOWN"; message: string; retryAfter: number }
   | { code: "QUESTIONS_NOT_READY"; message: string }
+  | { code: "PIPELINE_NOT_READY"; message: string }
   | {
       code: "CAPACITY_EXCEEDED";
       message: string;
@@ -241,6 +245,238 @@ export class JobService {
   }
 
   // ===========================================================================
+  // GENERATE PIPELINE
+  // ===========================================================================
+
+  /**
+   * Queue job for pipeline generation.
+   *
+   * Rate limited per job to prevent abuse (same limits as questions):
+   * - Maximum 20 regenerations per job
+   * - 1 minute cooldown between regenerations
+   *
+   * @param jobId - Job ID
+   * @param orgId - Organization ID for authorization
+   * @returns Success or error with rate limit info
+   */
+  async generatePipeline(
+    jobId: string,
+    orgId: string
+  ): Promise<JobServiceResult<{ queued: true }>> {
+    const job = await this.repository.findByIdAndOrg(jobId, orgId);
+
+    if (!job) {
+      return { success: false, error: { code: "NOT_FOUND", message: "Job not found" } };
+    }
+
+    if (job.status !== "draft") {
+      return {
+        success: false,
+        error: { code: "INVALID_STATE", message: "Only draft jobs can generate pipeline" },
+      };
+    }
+
+    // Check regeneration limit
+    const pipelineRegenCount = job.pipeline_regeneration_count ?? 0;
+    if (pipelineRegenCount >= MAX_REGENERATIONS) {
+      return {
+        success: false,
+        error: {
+          code: "REGENERATION_LIMIT_REACHED",
+          message: `Maximum ${MAX_REGENERATIONS} pipeline regenerations per job reached`,
+        },
+      };
+    }
+
+    // Check cooldown
+    if (job.pipeline_last_regeneration_at) {
+      const lastRegen = new Date(job.pipeline_last_regeneration_at).getTime();
+      const cooldownEnd = lastRegen + COOLDOWN_MS;
+      const now = Date.now();
+
+      if (now < cooldownEnd) {
+        const retryAfter = Math.ceil((cooldownEnd - now) / 1000);
+        return {
+          success: false,
+          error: {
+            code: "REGENERATION_COOLDOWN",
+            message: `Please wait before regenerating pipeline`,
+            retryAfter,
+          },
+        };
+      }
+    }
+
+    // Mark as pending (this increments pipeline_regeneration_count and sets pipeline_last_regeneration_at)
+    await this.repository.markPipelinePending(jobId);
+
+    // Queue for processing with pipeline type
+    await this.queue.send({
+      jobId: jobId,
+      createdAt: new Date().toISOString(),
+      type: "pipeline",
+    });
+
+    // Invalidate cache
+    if (job.org_id) {
+      await this.orgRepository.incrementJobsListVersion(job.org_id);
+    }
+
+    console.log(
+      `[Service] Job ${jobId} queued for pipeline generation (attempt ${pipelineRegenCount + 1})`
+    );
+
+    return { success: true, data: { queued: true } };
+  }
+
+  // ===========================================================================
+  // UPDATE PIPELINE CONFIG
+  // ===========================================================================
+
+  /**
+   * Update pipeline configuration (recruiter edits).
+   *
+   * Only allowed for draft jobs with completed pipeline generation.
+   *
+   * @param jobId - Job ID
+   * @param orgId - Organization ID for authorization
+   * @param update - Pipeline update (partial)
+   * @returns Updated job status or error
+   */
+  async updatePipelineConfig(
+    jobId: string,
+    orgId: string,
+    update: PipelineUpdate
+  ): Promise<JobServiceResult<JobStatusResponse>> {
+    const job = await this.repository.findByIdAndOrg(jobId, orgId);
+
+    if (!job) {
+      return { success: false, error: { code: "NOT_FOUND", message: "Job not found" } };
+    }
+
+    if (job.status !== "draft") {
+      return {
+        success: false,
+        error: { code: "INVALID_STATE", message: "Only draft jobs can update pipeline" },
+      };
+    }
+
+    if (job.pipeline_status !== "completed") {
+      return {
+        success: false,
+        error: {
+          code: "PIPELINE_NOT_READY",
+          message: "Pipeline must be generated before editing",
+        },
+      };
+    }
+
+    // Parse current config
+    const currentConfig: PipelineConfig = job.pipeline
+      ? JSON.parse(job.pipeline)
+      : { assessment: { enabled: false, providerId: null, config: null }, interviewRounds: [] };
+
+    // Merge updates
+    const updatedConfig: PipelineConfig = {
+      assessment: update.assessment ?? currentConfig.assessment,
+      interviewRounds: update.interviewRounds ?? currentConfig.interviewRounds,
+    };
+
+    // Save updated config
+    await this.repository.updatePipelineConfig(jobId, updatedConfig);
+
+    // Invalidate cache
+    if (job.org_id) {
+      await this.orgRepository.incrementJobsListVersion(job.org_id);
+    }
+
+    // Fetch updated job
+    const updatedJob = await this.repository.findById(jobId);
+    if (!updatedJob) {
+      return {
+        success: false,
+        error: { code: "NOT_FOUND", message: "Job not found after update" },
+      };
+    }
+
+    console.log(`[Service] Job ${jobId} pipeline config updated`);
+
+    return { success: true, data: this.formatJobResponse(updatedJob) };
+  }
+
+  // ===========================================================================
+  // RESET PIPELINE CONFIG
+  // ===========================================================================
+
+  /**
+   * Reset pipeline configuration to AI recommendation.
+   *
+   * This regenerates the initial config from the existing recommendation
+   * without calling the LLM again. Useful when recruiter wants to undo
+   * their customizations.
+   *
+   * @param jobId - Job ID
+   * @param orgId - Organization ID for authorization
+   * @returns Reset job status or error
+   */
+  async resetPipelineConfig(
+    jobId: string,
+    orgId: string
+  ): Promise<JobServiceResult<JobStatusResponse>> {
+    const job = await this.repository.findByIdAndOrg(jobId, orgId);
+
+    if (!job) {
+      return { success: false, error: { code: "NOT_FOUND", message: "Job not found" } };
+    }
+
+    if (job.status !== "draft") {
+      return {
+        success: false,
+        error: { code: "INVALID_STATE", message: "Only draft jobs can reset pipeline" },
+      };
+    }
+
+    if (job.pipeline_status !== "completed" || !job.pipeline_recommendation) {
+      return {
+        success: false,
+        error: {
+          code: "PIPELINE_NOT_READY",
+          message: "Pipeline must be generated before resetting",
+        },
+      };
+    }
+
+    // Parse existing recommendation
+    const recommendation = PipelineRecommendationSchema.parse(
+      JSON.parse(job.pipeline_recommendation)
+    );
+
+    // Regenerate initial config from recommendation (no LLM call)
+    const resetConfig = generateInitialConfig(recommendation);
+
+    // Save reset config
+    await this.repository.updatePipelineConfig(jobId, resetConfig);
+
+    // Invalidate cache
+    if (job.org_id) {
+      await this.orgRepository.incrementJobsListVersion(job.org_id);
+    }
+
+    // Fetch updated job
+    const updatedJob = await this.repository.findById(jobId);
+    if (!updatedJob) {
+      return {
+        success: false,
+        error: { code: "NOT_FOUND", message: "Job not found after reset" },
+      };
+    }
+
+    console.log(`[Service] Job ${jobId} pipeline config reset to recommendation`);
+
+    return { success: true, data: this.formatJobResponse(updatedJob) };
+  }
+
+  // ===========================================================================
   // PUBLISH JOB
   // ===========================================================================
 
@@ -277,6 +513,16 @@ export class JobService {
         error: {
           code: "QUESTIONS_NOT_READY",
           message: "Questions must be completed before publishing",
+        },
+      };
+    }
+
+    if (job.pipeline_status !== "completed") {
+      return {
+        success: false,
+        error: {
+          code: "PIPELINE_NOT_READY",
+          message: "Pipeline must be completed before publishing",
         },
       };
     }
@@ -614,6 +860,7 @@ export class JobService {
           id: job.id,
           status: "draft",
           questionsStatus: job.questions_status,
+          pipelineStatus: job.pipeline_status ?? "none",
           title: job.title,
           description: job.description,
           companyName: job.company_name,
@@ -627,17 +874,29 @@ export class JobService {
           questions: job.questions
             ? this.parseJsonArray(job.questions, RenderedQuestionSchema)
             : null,
+          // Pipeline (if generated)
+          pipelineRecommendation: job.pipeline_recommendation
+            ? this.parseJson(job.pipeline_recommendation, PipelineRecommendationSchema)
+            : null,
+          pipeline: job.pipeline ? this.parseJson(job.pipeline, PipelineConfigSchema) : null,
           // Error (if failed)
           errorMessage: job.error_message,
           errorCode: job.error_code,
-          // Regeneration info
+          // Pipeline error (if failed)
+          pipelineError: job.pipeline_error,
+          pipelineErrorCode: job.pipeline_error_code,
+          // Regeneration info (questions)
           regenerationCount: job.regeneration_count,
           lastRegenerationAt: job.last_regeneration_at,
+          // Regeneration info (pipeline)
+          pipelineRegenerationCount: job.pipeline_regeneration_count ?? 0,
+          pipelineLastRegenerationAt: job.pipeline_last_regeneration_at,
           // Timestamps
           createdAt: job.created_at,
           updatedAt: job.updated_at,
           processingStartedAt: job.processing_started_at,
           completedAt: job.completed_at,
+          pipelineGeneratedAt: job.pipeline_generated_at,
         };
 
       case "published":
@@ -645,6 +904,7 @@ export class JobService {
           id: job.id,
           status: "published",
           questionsStatus: "completed", // Always completed when published
+          pipelineStatus: "completed", // Always completed when published
           title: job.title,
           description: job.description,
           companyName: job.company_name,
@@ -656,11 +916,18 @@ export class JobService {
           archetypes: this.parseJsonArray(job.archetypes!, ResolvedArchetypeSchema),
           questions: this.parseJsonArray(job.questions!, RenderedQuestionSchema),
           processingDurationMs: job.processing_duration_ms!,
+          // Pipeline (always present)
+          pipelineRecommendation: this.parseJson(
+            job.pipeline_recommendation!,
+            PipelineRecommendationSchema
+          ),
+          pipeline: this.parseJson(job.pipeline!, PipelineConfigSchema),
           // Timestamps
           createdAt: job.created_at,
           updatedAt: job.updated_at,
           publishedAt: job.published_at!,
           completedAt: job.completed_at!,
+          pipelineGeneratedAt: job.pipeline_generated_at!,
         };
 
       case "paused":
@@ -668,6 +935,7 @@ export class JobService {
           id: job.id,
           status: "paused",
           questionsStatus: "completed",
+          pipelineStatus: "completed",
           title: job.title,
           description: job.description,
           companyName: job.company_name,
@@ -679,11 +947,18 @@ export class JobService {
           archetypes: this.parseJsonArray(job.archetypes!, ResolvedArchetypeSchema),
           questions: this.parseJsonArray(job.questions!, RenderedQuestionSchema),
           processingDurationMs: job.processing_duration_ms!,
+          // Pipeline
+          pipelineRecommendation: this.parseJson(
+            job.pipeline_recommendation!,
+            PipelineRecommendationSchema
+          ),
+          pipeline: this.parseJson(job.pipeline!, PipelineConfigSchema),
           // Timestamps
           createdAt: job.created_at,
           updatedAt: job.updated_at,
           publishedAt: job.published_at!,
           completedAt: job.completed_at!,
+          pipelineGeneratedAt: job.pipeline_generated_at!,
         };
 
       case "closed":
@@ -691,6 +966,7 @@ export class JobService {
           id: job.id,
           status: "closed",
           questionsStatus: "completed",
+          pipelineStatus: "completed",
           title: job.title,
           description: job.description,
           companyName: job.company_name,
@@ -702,12 +978,19 @@ export class JobService {
           archetypes: this.parseJsonArray(job.archetypes!, ResolvedArchetypeSchema),
           questions: this.parseJsonArray(job.questions!, RenderedQuestionSchema),
           processingDurationMs: job.processing_duration_ms!,
+          // Pipeline
+          pipelineRecommendation: this.parseJson(
+            job.pipeline_recommendation!,
+            PipelineRecommendationSchema
+          ),
+          pipeline: this.parseJson(job.pipeline!, PipelineConfigSchema),
           // Timestamps
           createdAt: job.created_at,
           updatedAt: job.updated_at,
           publishedAt: job.published_at,
           closedAt: job.closed_at!,
           completedAt: job.completed_at!,
+          pipelineGeneratedAt: job.pipeline_generated_at!,
         };
     }
   }

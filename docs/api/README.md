@@ -108,12 +108,32 @@ All errors follow a consistent format:
 
 ### v1 (Protected)
 
-| Method | Path           | Auth     | Description            |
-| ------ | -------------- | -------- | ---------------------- |
-| GET    | `/v1/`         | Public   | API root               |
-| GET    | `/v1/jobs`     | Required | List jobs (paginated)  |
-| POST   | `/v1/jobs`     | Required | Create a job           |
-| GET    | `/v1/jobs/:id` | Required | Get job status/results |
+| Method | Path                            | Auth     | Description                    |
+| ------ | ------------------------------- | -------- | ------------------------------ |
+| GET    | `/v1/`                          | Public   | API root                       |
+| GET    | `/v1/jobs`                      | Required | List jobs (paginated)          |
+| POST   | `/v1/jobs`                      | Required | Create a job                   |
+| GET    | `/v1/jobs/:id`                  | Required | Get job status/results         |
+| PATCH  | `/v1/jobs/:id`                  | Required | Update draft job               |
+| DELETE | `/v1/jobs/:id`                  | Required | Delete draft job               |
+| POST   | `/v1/jobs/:id/generate`         | Required | Generate screening questions   |
+| POST   | `/v1/jobs/:id/generate-pipeline`| Required | Generate hiring pipeline       |
+| GET    | `/v1/jobs/:id/pipeline`         | Required | Get pipeline recommendation    |
+| PATCH  | `/v1/jobs/:id/pipeline`         | Required | Update pipeline configuration  |
+| POST   | `/v1/jobs/:id/pipeline/reset`   | Required | Reset pipeline to AI suggestion|
+| POST   | `/v1/jobs/:id/publish`          | Required | Publish draft job              |
+| POST   | `/v1/jobs/:id/pause`            | Required | Pause published job            |
+| POST   | `/v1/jobs/:id/resume`           | Required | Resume paused job              |
+| POST   | `/v1/jobs/:id/close`            | Required | Close job permanently          |
+| GET    | `/v1/assessment-providers`      | Required | List assessment providers      |
+| GET    | `/v1/billing`                   | Required | Get billing overview           |
+| GET    | `/v1/billing/history`           | Required | Get billing history            |
+
+### Public (No Auth)
+
+| Method | Path                  | Description                |
+| ------ | --------------------- | -------------------------- |
+| GET    | `/public/jobs/:slug`  | Get job details by slug    |
 
 ### Internal (Public)
 

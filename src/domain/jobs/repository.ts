@@ -17,7 +17,8 @@ const alphanumericId = customAlphabet(
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
   21
 );
-import type { JobErrorCode, JobStatus, QuestionsStatus } from "../../types/bindings";
+import type { JobErrorCode, JobStatus, PipelineStatus, QuestionsStatus } from "../../types/bindings";
+import type { PipelineConfig, PipelineRecommendation } from "../pipeline/types";
 import type {
   CreateJobInput,
   JobContextOutput,
@@ -194,8 +195,9 @@ export class JobRepository {
       return { updated: false, contentChanged: false };
     }
 
-    // If content changed, reset questions
+    // If content changed, reset questions and pipeline
     if (contentChanged) {
+      // Reset questions
       updates.push("questions_status = 'none'");
       updates.push("job_context = NULL");
       updates.push("archetypes = NULL");
@@ -207,6 +209,18 @@ export class JobRepository {
       updates.push("processing_started_at = NULL");
       updates.push("processing_duration_ms = NULL");
       updates.push("completed_at = NULL");
+
+      // Reset pipeline
+      updates.push("pipeline_status = 'none'");
+      updates.push("pipeline_recommendation = NULL");
+      updates.push("pipeline = NULL");
+      updates.push("pipeline_error = NULL");
+      updates.push("pipeline_error_code = NULL");
+      updates.push("pipeline_regeneration_count = 0");
+      updates.push("pipeline_last_regeneration_at = NULL");
+      updates.push("pipeline_processing_started_at = NULL");
+      updates.push("pipeline_processing_duration_ms = NULL");
+      updates.push("pipeline_generated_at = NULL");
     }
 
     updates.push("updated_at = ?");
@@ -368,12 +382,173 @@ export class JobRepository {
   }
 
   // ===========================================================================
+  // PIPELINE STATUS UPDATES
+  // ===========================================================================
+
+  /**
+   * Mark job's pipeline as pending (queued for generation).
+   * Also increments pipeline_regeneration_count and updates pipeline_last_regeneration_at.
+   */
+  async markPipelinePending(id: string): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .prepare(
+        `
+        UPDATE jobs
+        SET pipeline_status = 'pending',
+            pipeline_regeneration_count = pipeline_regeneration_count + 1,
+            pipeline_last_regeneration_at = ?,
+            pipeline_error = NULL,
+            pipeline_error_code = NULL,
+            updated_at = ?
+        WHERE id = ? AND status = 'draft'
+        `
+      )
+      .bind(now, now, id)
+      .run();
+  }
+
+  /**
+   * Mark job's pipeline as processing.
+   * Called at the start of pipeline generation.
+   */
+  async markPipelineProcessing(id: string): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .prepare(
+        `
+        UPDATE jobs
+        SET pipeline_status = 'processing',
+            pipeline_processing_started_at = ?,
+            updated_at = ?
+        WHERE id = ? AND pipeline_status = 'pending'
+        `
+      )
+      .bind(now, now, id)
+      .run();
+  }
+
+  /**
+   * Mark job's pipeline as completed with results.
+   * Called after successful pipeline generation.
+   */
+  async markPipelineCompleted(
+    id: string,
+    results: {
+      recommendation: PipelineRecommendation;
+      config: PipelineConfig;
+      processingDurationMs: number;
+    }
+  ): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .prepare(
+        `
+        UPDATE jobs
+        SET pipeline_status = 'completed',
+            pipeline_recommendation = ?,
+            pipeline = ?,
+            pipeline_processing_duration_ms = ?,
+            pipeline_generated_at = ?,
+            updated_at = ?
+        WHERE id = ?
+        `
+      )
+      .bind(
+        JSON.stringify(results.recommendation),
+        JSON.stringify(results.config),
+        results.processingDurationMs,
+        now,
+        now,
+        id
+      )
+      .run();
+  }
+
+  /**
+   * Mark job's pipeline as failed with error details.
+   * Called when pipeline generation fails with a permanent error.
+   */
+  async markPipelineFailed(
+    id: string,
+    error: {
+      message: string;
+      code: JobErrorCode;
+    }
+  ): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .prepare(
+        `
+        UPDATE jobs
+        SET pipeline_status = 'failed',
+            pipeline_error = ?,
+            pipeline_error_code = ?,
+            pipeline_generated_at = ?,
+            updated_at = ?
+        WHERE id = ?
+        `
+      )
+      .bind(error.message, error.code, now, now, id)
+      .run();
+  }
+
+  /**
+   * Reset job's pipeline status back to pending for queue retry.
+   * Called when pipeline generation fails with a transient/retryable error.
+   * Decrements pipeline_regeneration_count since the attempt didn't really count.
+   */
+  async resetPipelineForRetry(id: string): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .prepare(
+        `
+        UPDATE jobs
+        SET pipeline_status = 'pending',
+            pipeline_regeneration_count = MAX(0, pipeline_regeneration_count - 1),
+            pipeline_processing_started_at = NULL,
+            pipeline_error = NULL,
+            pipeline_error_code = NULL,
+            updated_at = ?
+        WHERE id = ?
+        `
+      )
+      .bind(now, id)
+      .run();
+  }
+
+  /**
+   * Update pipeline configuration (recruiter edits).
+   * Only allowed for draft jobs.
+   */
+  async updatePipelineConfig(id: string, config: PipelineConfig): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .prepare(
+        `
+        UPDATE jobs
+        SET pipeline = ?,
+            updated_at = ?
+        WHERE id = ? AND status = 'draft'
+        `
+      )
+      .bind(JSON.stringify(config), now, id)
+      .run();
+  }
+
+  // ===========================================================================
   // LIFECYCLE STATUS UPDATES
   // ===========================================================================
 
   /**
    * Publish a draft job.
-   * Requires questions_status = 'completed'.
+   * Requires BOTH questions_status = 'completed' AND pipeline_status = 'completed'.
    */
   async publish(id: string, publicSlug: string): Promise<void> {
     const now = new Date().toISOString();
@@ -386,7 +561,7 @@ export class JobRepository {
             public_slug = ?,
             published_at = ?,
             updated_at = ?
-        WHERE id = ? AND status = 'draft' AND questions_status = 'completed'
+        WHERE id = ? AND status = 'draft' AND questions_status = 'completed' AND pipeline_status = 'completed'
         `
       )
       .bind(publicSlug, now, now, id)
@@ -501,6 +676,7 @@ export class JobRepository {
       title: string;
       status: JobStatus;
       questions_status: QuestionsStatus;
+      pipeline_status: PipelineStatus;
       public_slug: string | null;
       created_at: string;
       published_at: string | null;
@@ -514,7 +690,7 @@ export class JobRepository {
       result = await this.db
         .prepare(
           `
-          SELECT id, title, status, questions_status, public_slug, created_at, published_at
+          SELECT id, title, status, questions_status, pipeline_status, public_slug, created_at, published_at
           FROM jobs
           WHERE org_id = ?
             AND (created_at < ? OR (created_at = ? AND id < ?))
@@ -529,7 +705,7 @@ export class JobRepository {
       result = await this.db
         .prepare(
           `
-          SELECT id, title, status, questions_status, public_slug, created_at, published_at
+          SELECT id, title, status, questions_status, pipeline_status, public_slug, created_at, published_at
           FROM jobs
           WHERE org_id = ? ${statusFilter}
           ORDER BY created_at DESC, id DESC
@@ -554,11 +730,12 @@ export class JobRepository {
     }
 
     // Transform to API format
-    const jobs: JobListItem[] = pageRows.map((row) => ({
+    const jobs = pageRows.map((row) => ({
       id: row.id,
       title: row.title,
       status: row.status,
       questionsStatus: row.questions_status,
+      pipelineStatus: row.pipeline_status ?? ("none" as PipelineStatus),
       publicSlug: row.public_slug,
       createdAt: row.created_at,
       publishedAt: row.published_at,
@@ -612,6 +789,27 @@ export class JobRepository {
         WHERE questions_status = 'processing'
           AND processing_started_at < ?
         ORDER BY processing_started_at ASC
+        `
+      )
+      .bind(cutoffTime)
+      .all<JobRow>();
+
+    return result.results;
+  }
+
+  /**
+   * Get stuck pipeline jobs (pipeline processing for too long).
+   */
+  async findStuckPipelineJobs(maxProcessingMinutes: number = 5): Promise<JobRow[]> {
+    const cutoffTime = new Date(Date.now() - maxProcessingMinutes * 60 * 1000).toISOString();
+
+    const result = await this.db
+      .prepare(
+        `
+        SELECT * FROM jobs
+        WHERE pipeline_status = 'processing'
+          AND pipeline_processing_started_at < ?
+        ORDER BY pipeline_processing_started_at ASC
         `
       )
       .bind(cutoffTime)

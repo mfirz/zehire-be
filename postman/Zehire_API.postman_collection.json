@@ -160,7 +160,7 @@
     },
     {
       "name": "Jobs",
-      "description": "Job management endpoints.\n\nAll endpoints require JWT authentication.\n\n**Job Lifecycle:**\n```\ndraft → published → paused → closed\n         ↑___________|\n              resume\n```\n\n**Questions Status:**\n- none: Not generated\n- pending: Queued\n- processing: LLM running\n- completed: Ready\n- failed: Error",
+      "description": "Job management endpoints.\n\nAll endpoints require JWT authentication.\n\n**Job Lifecycle:**\n```\ndraft → published → paused → closed\n         ↑___________|\n              resume\n```\n\n**Questions Status:**\n- none: Not generated\n- pending: Queued\n- processing: LLM running\n- completed: Ready\n- failed: Error\n\n**Pipeline Status:**\n- none: Not generated\n- pending: Queued\n- processing: LLM running\n- completed: Ready\n- failed: Error\n\n**Note:** Both questions AND pipeline must be completed before publishing.",
       "item": [
         {
           "name": "CRUD",
@@ -328,7 +328,7 @@
         },
         {
           "name": "Lifecycle Actions",
-          "description": "Job lifecycle management endpoints.\n\n**Flow:**\n1. Create draft\n2. Generate questions\n3. Publish (starts billing)\n4. Pause/Resume as needed\n5. Close when done",
+          "description": "Job lifecycle management endpoints.\n\n**Flow:**\n1. Create draft\n2. Generate questions\n3. Generate pipeline\n4. Publish (starts billing)\n5. Pause/Resume as needed\n6. Close when done",
           "item": [
             {
               "name": "Generate Questions",
@@ -340,7 +340,72 @@
                   "host": ["{{base_url}}"],
                   "path": ["v1", "jobs", "{{job_id}}", "generate"]
                 },
-                "description": "Queue a job for question generation.\n\n**Rate Limits:**\n- Maximum 20 regenerations per job\n- 10 minute cooldown between regenerations\n\n**Response:** 202 Accepted with `{ \"queued\": true }`\n\nPoll GET /v1/jobs/:id to check questionsStatus."
+                "description": "Queue a job for question generation.\n\n**Rate Limits:**\n- Maximum 20 regenerations per job\n- 1 minute cooldown between regenerations\n\n**Response:** 202 Accepted with `{ \"queued\": true }`\n\nPoll GET /v1/jobs/:id to check questionsStatus."
+              },
+              "response": []
+            },
+            {
+              "name": "Generate Pipeline",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/generate-pipeline",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "generate-pipeline"]
+                },
+                "description": "Queue a job for pipeline generation.\n\nPipeline includes:\n- Assessment recommendations\n- Interview panel structure\n- Evaluation criteria\n\n**Rate Limits:**\n- Maximum 20 regenerations per job\n- 1 minute cooldown between regenerations\n\n**Response:** 202 Accepted with `{ \"queued\": true }`\n\nPoll GET /v1/jobs/:id to check pipelineStatus."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Pipeline",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/pipeline",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "pipeline"]
+                },
+                "description": "Get pipeline recommendation and configuration.\n\nReturns:\n- pipelineStatus: Current status\n- recommendation: LLM-generated recommendation\n- config: Editable configuration\n- generatedAt: When pipeline was generated\n\nIf pipeline not yet generated, recommendation and config will be null."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Pipeline",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"assessment\": {\n    \"enabled\": true,\n    \"providerId\": \"hackerrank\",\n    \"config\": {\n      \"testId\": \"test-123\",\n      \"timeLimit\": 90\n    }\n  },\n  \"interviewRounds\": [\n    {\n      \"id\": \"round-1\",\n      \"name\": \"Technical Screen\",\n      \"duration\": 45,\n      \"interviewerIds\": [\"user-123\"],\n      \"focus\": \"Technical fundamentals\"\n    },\n    {\n      \"id\": \"round-2\",\n      \"name\": \"System Design\",\n      \"duration\": 60,\n      \"interviewerIds\": [\"user-456\"],\n      \"focus\": \"Architecture and scalability\"\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/pipeline",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "pipeline"]
+                },
+                "description": "Update pipeline configuration.\n\nRecruiter can customize:\n- Assessment provider and settings\n- Interview rounds and interviewers\n\n**Prerequisites:**\n- Job must be in `draft` status\n- Pipeline must be `completed`\n\nAll fields are optional for partial updates."
+              },
+              "response": []
+            },
+            {
+              "name": "Reset Pipeline",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/pipeline/reset",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "pipeline", "reset"]
+                },
+                "description": "Reset pipeline configuration to AI recommendation.\n\nThis reverts any customizations and regenerates the initial config from the existing recommendation.\n\n**Benefits:**\n- No LLM call - instant response\n- No token cost - free\n- Doesn't count against regeneration limit\n- Deterministic - same config from same recommendation\n\n**Prerequisites:**\n- Job must be in `draft` status\n- Pipeline must be `completed`"
               },
               "response": []
             },
@@ -372,7 +437,7 @@
                   "host": ["{{base_url}}"],
                   "path": ["v1", "jobs", "{{job_id}}", "publish"]
                 },
-                "description": "Publish a draft job.\n\n**Prerequisites:**\n- Job must be in `draft` status\n- Questions must be `completed` (questionsStatus)\n\n**Effects:**\n- Generates public slug\n- Starts billing\n- Job becomes publicly accessible"
+                "description": "Publish a draft job.\n\n**Prerequisites:**\n- Job must be in `draft` status\n- Questions must be `completed` (questionsStatus)\n- Pipeline must be `completed` (pipelineStatus)\n\n**Effects:**\n- Generates public slug\n- Starts billing\n- Job becomes publicly accessible"
               },
               "response": []
             },
@@ -502,6 +567,26 @@
               "path": ["v1", "billing", "2026", "1", "invoice"]
             },
             "description": "Get invoice for a specific month.\n\n**Path Parameters:**\n- year: 2020-2100\n- month: 1-12\n\nReturns:\n- Line items with job details\n- Prorated amounts\n- Subtotal, discount, total\n- Formatted currency strings\n\n**Note:** Cannot generate invoices for future periods."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Assessment Providers",
+      "description": "Assessment provider endpoints.\n\nProviders are used when configuring job pipelines.\n\n**Available Providers:**\n- hackerrank: Technical assessments\n- codility: Coding tests\n- testgorilla: Pre-employment testing\n- takehome: Custom take-home projects\n- none: Skip assessment",
+      "item": [
+        {
+          "name": "List Providers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/assessment-providers",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "assessment-providers"]
+            },
+            "description": "List all available assessment providers.\n\nReturns provider details including:\n- id: Provider identifier (used in pipeline config)\n- name: Display name\n- type: external or internal\n- description: Provider description\n- bestFor: Role categories this provider suits"
           },
           "response": []
         }

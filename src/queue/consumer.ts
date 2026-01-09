@@ -22,6 +22,10 @@ import type { Env, JobQueueMessage } from "../types/bindings";
 /**
  * Queue consumer handler.
  * Called by Cloudflare Workers runtime when messages are available.
+ *
+ * Handles two types of messages:
+ * - questions (default): Generate interview questions
+ * - pipeline: Generate hiring pipeline recommendation
  */
 export async function handleQueue(batch: MessageBatch<JobQueueMessage>, env: Env): Promise<void> {
   const repository = new JobRepository(env.DB);
@@ -30,20 +34,26 @@ export async function handleQueue(batch: MessageBatch<JobQueueMessage>, env: Env
   const processor = new JobProcessor(repository, orgRepository, llmClient);
 
   for (const message of batch.messages) {
-    const { jobId, createdAt } = message.body;
+    const { jobId, createdAt, type } = message.body;
+    const messageType = type ?? "questions"; // Default to questions for backwards compatibility
 
-    console.log(`[Queue] Processing job ${jobId} (queued at ${createdAt})`);
+    console.log(`[Queue] Processing ${messageType} for job ${jobId} (queued at ${createdAt})`);
 
     try {
-      await processor.processJob(jobId);
+      // Dispatch based on message type
+      if (messageType === "pipeline") {
+        await processor.processPipelineJob(jobId);
+      } else {
+        await processor.processJob(jobId);
+      }
 
       // Acknowledge successful processing
       message.ack();
 
-      console.log(`[Queue] Job ${jobId} completed successfully`);
+      console.log(`[Queue] Job ${jobId} ${messageType} completed successfully`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      console.error(`[Queue] Job ${jobId} failed: ${errorMessage}`);
+      console.error(`[Queue] Job ${jobId} ${messageType} failed: ${errorMessage}`);
 
       // Retry the message (will go to DLQ after max retries)
       message.retry();

@@ -29,6 +29,18 @@ Separate from job status, tracks question generation:
 - **completed**: Questions ready
 - **failed**: Generation failed
 
+### Pipeline Status
+
+Separate from job status, tracks hiring pipeline generation:
+
+- **none**: Pipeline not yet generated
+- **pending**: Queued for generation
+- **processing**: LLM pipeline running
+- **completed**: Pipeline ready
+- **failed**: Generation failed
+
+The pipeline recommends assessment types and interview rounds based on job details.
+
 ---
 
 ## POST /v1/jobs
@@ -78,6 +90,7 @@ Content-Type: application/json
   "id": "abc123def456ghi78",
   "status": "draft",
   "questionsStatus": "none",
+  "pipelineStatus": "none",
   "createdAt": "2026-01-07T10:30:00Z"
 }
 ```
@@ -120,6 +133,7 @@ List jobs for the authenticated organization with cursor-based pagination.
       "title": "Senior Backend Engineer",
       "status": "published",
       "questionsStatus": "completed",
+      "pipelineStatus": "completed",
       "publicSlug": "acme-corp-senior-backend-engineer-x7k3m",
       "createdAt": "2026-01-01T10:00:00Z",
       "publishedAt": "2026-01-01T12:00:00Z"
@@ -129,6 +143,7 @@ List jobs for the authenticated organization with cursor-based pagination.
       "title": "Frontend Engineer",
       "status": "draft",
       "questionsStatus": "none",
+      "pipelineStatus": "none",
       "publicSlug": null,
       "createdAt": "2026-01-01T09:30:00Z",
       "publishedAt": null
@@ -167,6 +182,7 @@ Get job status and details. Response varies by job status.
   "id": "abc123def456ghi78",
   "status": "draft",
   "questionsStatus": "completed",
+  "pipelineStatus": "completed",
   "title": "Senior Software Engineer",
   "description": "We are looking for...",
   "companyName": "Acme Corp",
@@ -209,6 +225,60 @@ Get job status and details. Response varies by job status.
       }
     }
   ],
+  "pipelineRecommendation": {
+    "assessment": {
+      "recommended": true,
+      "reason": "Technical role requires validated coding skills",
+      "suggestedType": "coding_challenge",
+      "suggestedProviders": ["hackerrank", "codility"],
+      "whatToTest": ["system_design", "algorithms", "code_quality"]
+    },
+    "interviewPanel": {
+      "rounds": [
+        {
+          "name": "Technical Deep Dive",
+          "duration": 60,
+          "interviewerProfile": "Senior Engineer",
+          "focus": "System design and architecture"
+        },
+        {
+          "name": "Team Fit",
+          "duration": 45,
+          "interviewerProfile": "Engineering Manager",
+          "focus": "Leadership and collaboration"
+        }
+      ],
+      "totalTime": "105 minutes"
+    },
+    "evaluationCriteria": {
+      "mustHave": ["system_design_experience", "team_leadership"],
+      "niceToHave": ["open_source_contributions", "conference_talks"],
+      "redFlags": ["difficulty_collaborating", "no_growth_mindset"]
+    }
+  },
+  "pipeline": {
+    "assessment": {
+      "enabled": true,
+      "providerId": "hackerrank",
+      "config": null
+    },
+    "interviewRounds": [
+      {
+        "id": "round_1",
+        "name": "Technical Deep Dive",
+        "duration": 60,
+        "interviewerIds": [],
+        "focus": "System design and architecture"
+      },
+      {
+        "id": "round_2",
+        "name": "Team Fit",
+        "duration": 45,
+        "interviewerIds": [],
+        "focus": "Leadership and collaboration"
+      }
+    ]
+  },
   "errorMessage": null,
   "errorCode": null,
   "regenerationCount": 1,
@@ -227,6 +297,7 @@ Get job status and details. Response varies by job status.
   "id": "abc123def456ghi78",
   "status": "published",
   "questionsStatus": "completed",
+  "pipelineStatus": "completed",
   "title": "Senior Software Engineer",
   "description": "We are looking for...",
   "companyName": "Acme Corp",
@@ -236,6 +307,8 @@ Get job status and details. Response varies by job status.
   "jobContext": { ... },
   "archetypes": [ ... ],
   "questions": [ ... ],
+  "pipelineRecommendation": { ... },
+  "pipeline": { ... },
   "processingDurationMs": 3500,
   "createdAt": "2026-01-07T10:30:00Z",
   "updatedAt": "2026-01-07T12:00:00Z",
@@ -254,7 +327,7 @@ Similar to published, with `closedAt` for closed jobs.
 
 Update a draft job's content.
 
-**Note**: If `title` or `description` changes, questions are reset to `none` and must be regenerated.
+**Note**: If `title` or `description` changes, both questions and pipeline are reset to `none` and must be regenerated.
 
 ### Request
 
@@ -364,6 +437,261 @@ Also returns `Retry-After` header with seconds to wait.
 
 ---
 
+## POST /v1/jobs/:id/generate-pipeline
+
+Queue a job for pipeline generation. The pipeline recommends assessment types and interview rounds based on job details.
+
+### Rate Limits
+
+- Maximum 20 regenerations per job
+- 10 minute cooldown between regenerations
+
+### Response
+
+#### 202 Accepted
+
+```json
+{
+  "queued": true
+}
+```
+
+#### 429 Too Many Requests
+
+```json
+{
+  "error": {
+    "code": "REGENERATION_COOLDOWN",
+    "message": "Please wait before regenerating pipeline",
+    "retryAfter": 542
+  }
+}
+```
+
+Also returns `Retry-After` header with seconds to wait.
+
+#### 400 Bad Request
+
+```json
+{
+  "error": {
+    "code": "INVALID_STATE",
+    "message": "Only draft jobs can generate pipeline"
+  }
+}
+```
+
+---
+
+## GET /v1/jobs/:id/pipeline
+
+Get the pipeline recommendation and configuration for a job.
+
+### Response
+
+#### 200 OK
+
+```json
+{
+  "recommendation": {
+    "assessment": {
+      "recommended": true,
+      "reason": "Technical role requires validated coding skills",
+      "suggestedType": "coding_challenge",
+      "suggestedProviders": ["hackerrank", "codility"],
+      "whatToTest": ["system_design", "algorithms", "code_quality"]
+    },
+    "interviewPanel": {
+      "rounds": [
+        {
+          "name": "Technical Deep Dive",
+          "duration": 60,
+          "interviewerProfile": "Senior Engineer",
+          "focus": "System design and architecture"
+        },
+        {
+          "name": "Team Fit",
+          "duration": 45,
+          "interviewerProfile": "Engineering Manager",
+          "focus": "Leadership and collaboration"
+        }
+      ],
+      "totalTime": "105 minutes"
+    },
+    "evaluationCriteria": {
+      "mustHave": ["system_design_experience", "team_leadership"],
+      "niceToHave": ["open_source_contributions"],
+      "redFlags": ["difficulty_collaborating"]
+    }
+  },
+  "config": {
+    "assessment": {
+      "enabled": true,
+      "providerId": "hackerrank",
+      "config": null
+    },
+    "interviewRounds": [
+      {
+        "id": "round_1",
+        "name": "Technical Deep Dive",
+        "duration": 60,
+        "interviewerIds": [],
+        "focus": "System design and architecture"
+      },
+      {
+        "id": "round_2",
+        "name": "Team Fit",
+        "duration": 45,
+        "interviewerIds": [],
+        "focus": "Leadership and collaboration"
+      }
+    ]
+  }
+}
+```
+
+#### 404 Not Found
+
+```json
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Job not found"
+  }
+}
+```
+
+---
+
+## PATCH /v1/jobs/:id/pipeline
+
+Update the pipeline configuration for a draft job.
+
+**Note**: Only draft jobs can have their pipeline updated.
+
+### Request
+
+```json
+{
+  "assessment": {
+    "enabled": true,
+    "providerId": "codility",
+    "config": {
+      "testId": "test_123",
+      "timeLimit": 90
+    }
+  },
+  "interviewRounds": [
+    {
+      "id": "round_1",
+      "name": "Technical Screen",
+      "duration": 45,
+      "interviewerIds": ["user_abc"],
+      "focus": "Technical fundamentals"
+    }
+  ]
+}
+```
+
+All fields are optional. Only provided fields are updated.
+
+### Response
+
+#### 200 OK
+
+Returns the updated pipeline (same format as GET /v1/jobs/:id/pipeline).
+
+#### 400 Bad Request
+
+```json
+{
+  "error": {
+    "code": "INVALID_STATE",
+    "message": "Only draft jobs can update pipeline"
+  }
+}
+```
+
+Or if pipeline hasn't been generated yet:
+
+```json
+{
+  "error": {
+    "code": "PIPELINE_NOT_GENERATED",
+    "message": "Pipeline must be generated before it can be updated"
+  }
+}
+```
+
+---
+
+## POST /v1/jobs/:id/pipeline/reset
+
+Reset the pipeline configuration to the original AI recommendation.
+
+This is useful when a recruiter wants to undo their customizations and revert to the initial suggestion. Unlike regenerating the pipeline:
+
+- **No LLM call** - instant response
+- **No token cost** - free
+- **Doesn't count against regeneration limit**
+- **Deterministic** - always produces the same config from the same recommendation
+
+### Response
+
+#### 200 OK
+
+Returns the job with reset pipeline config (same format as GET /v1/jobs/:id).
+
+```json
+{
+  "id": "abc123def456ghi78",
+  "status": "draft",
+  "questionsStatus": "completed",
+  "pipelineStatus": "completed",
+  "pipeline": {
+    "assessment": {
+      "enabled": true,
+      "providerId": "hackerrank",
+      "config": null
+    },
+    "interviewRounds": [
+      {
+        "id": "round-1",
+        "name": "Technical Deep Dive",
+        "duration": 60,
+        "interviewerIds": [],
+        "focus": "System design and architecture"
+      }
+    ]
+  },
+  ...
+}
+```
+
+#### 400 Bad Request
+
+```json
+{
+  "error": {
+    "code": "INVALID_STATE",
+    "message": "Only draft jobs can reset pipeline"
+  }
+}
+```
+
+Or if pipeline hasn't been generated yet:
+
+```json
+{
+  "error": {
+    "code": "PIPELINE_NOT_READY",
+    "message": "Pipeline must be generated before resetting"
+  }
+}
+```
+
+---
+
 ## POST /v1/jobs/:id/publish
 
 Publish a draft job.
@@ -371,6 +699,7 @@ Publish a draft job.
 **Prerequisites**:
 - Job must be in `draft` status
 - Questions must be `completed` (questionsStatus)
+- Pipeline must be `completed` (pipelineStatus)
 
 ### Response
 
@@ -383,6 +712,7 @@ Returns the published job with `publicSlug`.
   "id": "abc123def456ghi78",
   "status": "published",
   "questionsStatus": "completed",
+  "pipelineStatus": "completed",
   "publicSlug": "acme-corp-senior-software-engineer-x7k3m",
   ...
 }
@@ -395,6 +725,17 @@ Returns the published job with `publicSlug`.
   "error": {
     "code": "QUESTIONS_NOT_READY",
     "message": "Questions must be completed before publishing"
+  }
+}
+```
+
+Or if pipeline is not ready:
+
+```json
+{
+  "error": {
+    "code": "PIPELINE_NOT_READY",
+    "message": "Pipeline must be generated before publishing"
   }
 }
 ```
@@ -476,6 +817,76 @@ Returns the closed job.
 
 ---
 
+## GET /v1/assessment-providers
+
+List available assessment providers for pipeline configuration.
+
+### Authentication
+
+**Required**: JWT via `Authorization: Bearer <jwt>` or session cookie
+
+### Response
+
+#### 200 OK
+
+```json
+{
+  "providers": [
+    {
+      "id": "hackerrank",
+      "name": "HackerRank",
+      "type": "external",
+      "description": "Technical assessments and coding challenges",
+      "capabilities": ["coding", "algorithms", "system_design"],
+      "integrationRequired": true
+    },
+    {
+      "id": "codility",
+      "name": "Codility",
+      "type": "external",
+      "description": "Code quality and algorithmic assessments",
+      "capabilities": ["coding", "algorithms", "code_quality"],
+      "integrationRequired": true
+    },
+    {
+      "id": "testgorilla",
+      "name": "TestGorilla",
+      "type": "external",
+      "description": "Comprehensive pre-employment testing",
+      "capabilities": ["personality", "cognitive", "skills"],
+      "integrationRequired": true
+    },
+    {
+      "id": "takehome",
+      "name": "Take-Home Project",
+      "type": "internal",
+      "description": "Custom take-home assignment managed by recruiter",
+      "capabilities": ["coding", "system_design", "documentation"],
+      "integrationRequired": false
+    },
+    {
+      "id": "none",
+      "name": "No Assessment",
+      "type": "internal",
+      "description": "Skip technical assessment step",
+      "capabilities": [],
+      "integrationRequired": false
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `id` | string | Unique provider identifier (used in pipeline config) |
+| `name` | string | Human-readable provider name |
+| `type` | string | `external` (third-party integration) or `internal` (Zehire-managed) |
+| `description` | string | Provider description |
+| `capabilities` | array | Assessment types the provider supports |
+| `integrationRequired` | boolean | Whether external integration setup is required |
+
+---
+
 ## GET /public/jobs/:slug
 
 Get public job details by slug for candidates.
@@ -547,22 +958,43 @@ curl -X POST http://localhost:8787/v1/jobs/{id}/generate \
   -H "Authorization: Bearer $JWT"
 ```
 
-### 3. Poll for Completion
+### 3. Generate Pipeline
+
+```bash
+curl -X POST http://localhost:8787/v1/jobs/{id}/generate-pipeline \
+  -H "Authorization: Bearer $JWT"
+```
+
+### 4. Poll for Completion
 
 ```bash
 curl http://localhost:8787/v1/jobs/{id} \
   -H "Authorization: Bearer $JWT"
-# Wait for questionsStatus: "completed"
+# Wait for BOTH questionsStatus: "completed" AND pipelineStatus: "completed"
 ```
 
-### 4. Review and Publish
+### 5. (Optional) Customize Pipeline
+
+```bash
+curl -X PATCH http://localhost:8787/v1/jobs/{id}/pipeline \
+  -H "Authorization: Bearer $JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "assessment": {
+      "enabled": true,
+      "providerId": "codility"
+    }
+  }'
+```
+
+### 6. Review and Publish
 
 ```bash
 curl -X POST http://localhost:8787/v1/jobs/{id}/publish \
   -H "Authorization: Bearer $JWT"
 ```
 
-### 5. Share Public Link
+### 7. Share Public Link
 
 ```
 https://yourapp.com/apply/acme-corp-senior-software-engineer-x7k3m
@@ -577,12 +1009,15 @@ https://yourapp.com/apply/acme-corp-senior-software-engineer-x7k3m
 | `NOT_FOUND` | Job not found or not owned by organization |
 | `INVALID_STATE` | Action not allowed for current job status |
 | `QUESTIONS_NOT_READY` | Questions must be completed before publishing |
+| `PIPELINE_NOT_READY` | Pipeline must be completed before publishing |
+| `PIPELINE_NOT_GENERATED` | Pipeline must be generated before updating |
 | `CAPACITY_EXCEEDED` | Organization has reached active role capacity |
 | `REGENERATION_LIMIT_REACHED` | Maximum 20 regenerations per job reached |
 | `REGENERATION_COOLDOWN` | Must wait before regenerating (check retryAfter) |
 | `INFERENCE_FAILED` | LLM inference step failed |
 | `ARCHETYPE_RESOLUTION_FAILED` | Archetype resolution failed |
 | `QUESTION_RENDERING_FAILED` | Question rendering failed |
+| `PIPELINE_GENERATION_FAILED` | Pipeline generation failed |
 | `LLM_RATE_LIMITED` | LLM API rate limited |
 | `LLM_TIMEOUT` | LLM API timed out |
 | `VALIDATION_ERROR` | Input or output validation failed |
@@ -619,15 +1054,16 @@ Some errors are **retryable** (transient infrastructure issues) and the queue wi
 | `INFERENCE_FAILED` | No | LLM inference logic failed |
 | `ARCHETYPE_RESOLUTION_FAILED` | No | Archetype resolution logic failed |
 | `QUESTION_RENDERING_FAILED` | No | Question rendering logic failed |
+| `PIPELINE_GENERATION_FAILED` | No | Pipeline generation logic failed |
 | `INTERNAL_ERROR` | No | Unexpected error |
 
 For retryable errors:
-- `questionsStatus` is reset to `pending` for queue retry
+- `questionsStatus` / `pipelineStatus` is reset to `pending` for queue retry
 - `regenerationCount` is **not** incremented (the attempt doesn't count)
 
 For permanent errors:
-- `questionsStatus` is set to `failed`
-- User must call `POST /v1/jobs/:id/generate` again to retry
+- `questionsStatus` / `pipelineStatus` is set to `failed`
+- User must call the respective generate endpoint (`/generate` or `/generate-pipeline`) again to retry
 
 ---
 
