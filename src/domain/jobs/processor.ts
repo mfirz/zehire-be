@@ -263,6 +263,15 @@ export class JobProcessor {
       return { code: "LLM_TIMEOUT", message, retryable: true };
     }
 
+    // D1/SQLite database lock errors (concurrent writes)
+    if (
+      message.includes("1031") ||
+      message.includes("SQLITE_BUSY") ||
+      message.includes("database is locked")
+    ) {
+      return { code: "LLM_TIMEOUT", message: "Database busy, will retry", retryable: true };
+    }
+
     // ==========================================================================
     // PERMANENT ERRORS (should not retry - mark as failed)
     // ==========================================================================
@@ -320,6 +329,15 @@ export class JobProcessor {
     // Temporary service errors
     if (message.includes("503") || message.includes("502") || message.includes("temporarily")) {
       return { code: "LLM_TIMEOUT", message, retryable: true };
+    }
+
+    // D1/SQLite database lock errors (concurrent writes)
+    if (
+      message.includes("1031") ||
+      message.includes("SQLITE_BUSY") ||
+      message.includes("database is locked")
+    ) {
+      return { code: "LLM_TIMEOUT", message: "Database busy, will retry", retryable: true };
     }
 
     // ==========================================================================
