@@ -55,8 +55,21 @@ export async function handleQueue(batch: MessageBatch<JobQueueMessage>, env: Env
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       console.error(`[Queue] Job ${jobId} ${messageType} failed: ${errorMessage}`);
 
-      // Retry the message (will go to DLQ after max retries)
-      message.retry();
+      // Check if this is a database lock error - add delay before retry
+      const isDbLockError =
+        errorMessage.includes("1031") ||
+        errorMessage.includes("SQLITE_BUSY") ||
+        errorMessage.includes("database is locked") ||
+        errorMessage.includes("Database busy");
+
+      if (isDbLockError) {
+        // Delay retry by 10 seconds to let database recover
+        console.log(`[Queue] Database lock detected, retrying in 10s...`);
+        message.retry({ delaySeconds: 10 });
+      } else {
+        // Retry immediately for other errors
+        message.retry();
+      }
     }
   }
 }

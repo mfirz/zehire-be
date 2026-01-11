@@ -59,6 +59,50 @@ function truncateAtWordBoundary(text: string | null, maxLength: number): string 
   return normalized.slice(0, cutPoint).trim() + "...";
 }
 
+/**
+ * Check if an error is a D1/SQLite lock error.
+ */
+function isDbLockError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("1031") ||
+    message.includes("SQLITE_BUSY") ||
+    message.includes("database is locked") ||
+    message.includes("Database busy")
+  );
+}
+
+/**
+ * Retry a database operation with exponential backoff.
+ * Handles D1 lock contention in local dev and production edge cases.
+ */
+async function withDbRetry<T>(
+  operation: () => Promise<T>,
+  maxRetries = 3,
+  baseDelayMs = 100
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+
+      if (!isDbLockError(error) || attempt === maxRetries - 1) {
+        throw error;
+      }
+
+      // Exponential backoff: 100ms, 200ms, 400ms
+      const delay = baseDelayMs * Math.pow(2, attempt);
+      console.log(`[DB] Lock detected, retry ${attempt + 1}/${maxRetries} in ${delay}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+
 // =============================================================================
 // CONSTANTS
 // =============================================================================
@@ -139,10 +183,9 @@ export class JobRepository {
    * Returns null if not found.
    */
   async findById(id: string): Promise<JobRow | null> {
-    const result = await this.db
-      .prepare("SELECT * FROM jobs WHERE id = ?")
-      .bind(id)
-      .first<JobRow>();
+    const result = await withDbRetry(() =>
+      this.db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first<JobRow>()
+    );
 
     return result ?? null;
   }
@@ -340,18 +383,20 @@ export class JobRepository {
   async markQuestionsProcessing(id: string): Promise<void> {
     const now = new Date().toISOString();
 
-    await this.db
-      .prepare(
-        `
+    await withDbRetry(() =>
+      this.db
+        .prepare(
+          `
         UPDATE jobs
         SET questions_status = 'processing',
             processing_started_at = ?,
             updated_at = ?
         WHERE id = ? AND questions_status = 'pending'
         `
-      )
-      .bind(now, now, id)
-      .run();
+        )
+        .bind(now, now, id)
+        .run()
+    );
   }
 
   /**
@@ -369,9 +414,10 @@ export class JobRepository {
   ): Promise<void> {
     const now = new Date().toISOString();
 
-    await this.db
-      .prepare(
-        `
+    await withDbRetry(() =>
+      this.db
+        .prepare(
+          `
         UPDATE jobs
         SET questions_status = 'completed',
             job_context = ?,
@@ -382,17 +428,18 @@ export class JobRepository {
             updated_at = ?
         WHERE id = ?
         `
-      )
-      .bind(
-        JSON.stringify(results.jobContext),
-        JSON.stringify(results.archetypes),
-        JSON.stringify(results.questions),
-        results.processingDurationMs,
-        now,
-        now,
-        id
-      )
-      .run();
+        )
+        .bind(
+          JSON.stringify(results.jobContext),
+          JSON.stringify(results.archetypes),
+          JSON.stringify(results.questions),
+          results.processingDurationMs,
+          now,
+          now,
+          id
+        )
+        .run()
+    );
   }
 
   /**
@@ -408,9 +455,10 @@ export class JobRepository {
   ): Promise<void> {
     const now = new Date().toISOString();
 
-    await this.db
-      .prepare(
-        `
+    await withDbRetry(() =>
+      this.db
+        .prepare(
+          `
         UPDATE jobs
         SET questions_status = 'failed',
             error_message = ?,
@@ -419,9 +467,10 @@ export class JobRepository {
             updated_at = ?
         WHERE id = ?
         `
-      )
-      .bind(error.message, error.code, now, now, id)
-      .run();
+        )
+        .bind(error.message, error.code, now, now, id)
+        .run()
+    );
   }
 
   /**
@@ -484,18 +533,20 @@ export class JobRepository {
   async markPipelineProcessing(id: string): Promise<void> {
     const now = new Date().toISOString();
 
-    await this.db
-      .prepare(
-        `
+    await withDbRetry(() =>
+      this.db
+        .prepare(
+          `
         UPDATE jobs
         SET pipeline_status = 'processing',
             pipeline_processing_started_at = ?,
             updated_at = ?
         WHERE id = ? AND pipeline_status = 'pending'
         `
-      )
-      .bind(now, now, id)
-      .run();
+        )
+        .bind(now, now, id)
+        .run()
+    );
   }
 
   /**
@@ -512,9 +563,10 @@ export class JobRepository {
   ): Promise<void> {
     const now = new Date().toISOString();
 
-    await this.db
-      .prepare(
-        `
+    await withDbRetry(() =>
+      this.db
+        .prepare(
+          `
         UPDATE jobs
         SET pipeline_status = 'completed',
             pipeline_recommendation = ?,
@@ -524,16 +576,17 @@ export class JobRepository {
             updated_at = ?
         WHERE id = ?
         `
-      )
-      .bind(
-        JSON.stringify(results.recommendation),
-        JSON.stringify(results.config),
-        results.processingDurationMs,
-        now,
-        now,
-        id
-      )
-      .run();
+        )
+        .bind(
+          JSON.stringify(results.recommendation),
+          JSON.stringify(results.config),
+          results.processingDurationMs,
+          now,
+          now,
+          id
+        )
+        .run()
+    );
   }
 
   /**
@@ -549,9 +602,10 @@ export class JobRepository {
   ): Promise<void> {
     const now = new Date().toISOString();
 
-    await this.db
-      .prepare(
-        `
+    await withDbRetry(() =>
+      this.db
+        .prepare(
+          `
         UPDATE jobs
         SET pipeline_status = 'failed',
             pipeline_error = ?,
@@ -560,9 +614,10 @@ export class JobRepository {
             updated_at = ?
         WHERE id = ?
         `
-      )
-      .bind(error.message, error.code, now, now, id)
-      .run();
+        )
+        .bind(error.message, error.code, now, now, id)
+        .run()
+    );
   }
 
   /**
