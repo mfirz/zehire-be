@@ -23,6 +23,19 @@ import {
 } from "./archetypes/types";
 
 // =============================================================================
+// JOB FIELD CONSTANTS
+// =============================================================================
+
+export const WORK_TYPES = ["remote", "hybrid", "onsite"] as const;
+export type WorkType = (typeof WORK_TYPES)[number];
+
+export const EMPLOYMENT_TYPES = ["fulltime", "parttime", "contract", "internship"] as const;
+export type EmploymentType = (typeof EMPLOYMENT_TYPES)[number];
+
+export const SALARY_CURRENCIES = ["USD", "EUR", "GBP", "SGD", "IDR"] as const;
+export type SalaryCurrency = (typeof SALARY_CURRENCIES)[number];
+
+// =============================================================================
 // INPUT SCHEMAS
 // =============================================================================
 
@@ -30,40 +43,70 @@ import {
  * Schema for creating a new job.
  * Validates POST /v1/jobs request body.
  */
-export const CreateJobInputSchema = z.object({
-  title: z
-    .string()
-    .min(3, "Title must be at least 3 characters")
-    .max(200, "Title must be at most 200 characters")
-    .trim(),
+export const CreateJobInputSchema = z
+  .object({
+    title: z
+      .string()
+      .min(3, "Title must be at least 3 characters")
+      .max(200, "Title must be at most 200 characters")
+      .trim(),
 
-  description: z
-    .string()
-    .min(50, "Description must be at least 50 characters")
-    .max(50000, "Description must be at most 50,000 characters")
-    .trim(),
+    description: z
+      .string()
+      .min(50, "Description must be at least 50 characters")
+      .max(50000, "Description must be at most 50,000 characters")
+      .trim(),
 
-  companyName: z
-    .string()
-    .max(200, "Company name must be at most 200 characters")
-    .trim()
-    .optional()
-    .nullable(),
+    companyName: z
+      .string()
+      .max(200, "Company name must be at most 200 characters")
+      .trim()
+      .optional()
+      .nullable(),
 
-  department: z
-    .string()
-    .max(100, "Department must be at most 100 characters")
-    .trim()
-    .optional()
-    .nullable(),
+    department: z
+      .string()
+      .max(100, "Department must be at most 100 characters")
+      .trim()
+      .optional()
+      .nullable(),
 
-  location: z
-    .string()
-    .max(200, "Location must be at most 200 characters")
-    .trim()
-    .optional()
-    .nullable(),
-});
+    location: z
+      .string()
+      .max(200, "Location must be at most 200 characters")
+      .trim()
+      .optional()
+      .nullable(),
+
+    // Required job type fields
+    workType: z.enum(WORK_TYPES, {
+      required_error: "Work type is required",
+      invalid_type_error: "Work type must be 'remote', 'hybrid', or 'onsite'",
+    }),
+
+    employmentType: z.enum(EMPLOYMENT_TYPES, {
+      required_error: "Employment type is required",
+      invalid_type_error: "Employment type must be 'fulltime', 'parttime', 'contract', or 'internship'",
+    }),
+
+    // Optional salary fields
+    salaryMin: z.number().min(0, "Salary minimum must be non-negative").optional().nullable(),
+    salaryMax: z.number().min(0, "Salary maximum must be non-negative").optional().nullable(),
+    salaryCurrency: z.enum(SALARY_CURRENCIES).optional().nullable(),
+  })
+  .refine(
+    (data) => {
+      // If both salaryMin and salaryMax are provided, max must be >= min
+      if (data.salaryMin != null && data.salaryMax != null) {
+        return data.salaryMax >= data.salaryMin;
+      }
+      return true;
+    },
+    {
+      message: "Salary maximum must be greater than or equal to salary minimum",
+      path: ["salaryMax"],
+    }
+  );
 
 export type CreateJobInput = z.infer<typeof CreateJobInputSchema>;
 
@@ -151,6 +194,15 @@ export const JobRowSchema = z.object({
   department: z.string().nullable(),
   location: z.string().nullable(),
 
+  // Job type fields
+  work_type: z.enum(WORK_TYPES),
+  employment_type: z.enum(EMPLOYMENT_TYPES),
+
+  // Salary fields
+  salary_min: z.number().nullable(),
+  salary_max: z.number().nullable(),
+  salary_currency: z.enum(SALARY_CURRENCIES).nullable(),
+
   // Public access
   public_slug: z.string().nullable(),
 
@@ -208,6 +260,9 @@ export const JobListItemSchema = z.object({
   questionsStatus: z.enum(QUESTIONS_STATUSES),
   pipelineStatus: z.enum(PIPELINE_STATUSES),
   publicSlug: z.string().nullable(),
+  workType: z.enum(WORK_TYPES),
+  employmentType: z.enum(EMPLOYMENT_TYPES),
+  location: z.string().nullable(),
   createdAt: z.string(),
   publishedAt: z.string().nullable(),
 });
@@ -278,6 +333,13 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
     companyName: z.string().nullable(),
     department: z.string().nullable(),
     location: z.string().nullable(),
+    // Job type fields
+    workType: z.enum(WORK_TYPES),
+    employmentType: z.enum(EMPLOYMENT_TYPES),
+    // Salary fields
+    salaryMin: z.number().nullable(),
+    salaryMax: z.number().nullable(),
+    salaryCurrency: z.enum(SALARY_CURRENCIES).nullable(),
     // Questions (if generated)
     jobContext: JobContextSchema.nullable(),
     archetypes: z.array(ResolvedArchetypeSchema).nullable(),
@@ -317,6 +379,13 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
     department: z.string().nullable(),
     location: z.string().nullable(),
     publicSlug: z.string(),
+    // Job type fields
+    workType: z.enum(WORK_TYPES),
+    employmentType: z.enum(EMPLOYMENT_TYPES),
+    // Salary fields
+    salaryMin: z.number().nullable(),
+    salaryMax: z.number().nullable(),
+    salaryCurrency: z.enum(SALARY_CURRENCIES).nullable(),
     // Questions (always present)
     jobContext: JobContextSchema,
     archetypes: z.array(ResolvedArchetypeSchema),
@@ -345,6 +414,13 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
     department: z.string().nullable(),
     location: z.string().nullable(),
     publicSlug: z.string(),
+    // Job type fields
+    workType: z.enum(WORK_TYPES),
+    employmentType: z.enum(EMPLOYMENT_TYPES),
+    // Salary fields
+    salaryMin: z.number().nullable(),
+    salaryMax: z.number().nullable(),
+    salaryCurrency: z.enum(SALARY_CURRENCIES).nullable(),
     // Questions
     jobContext: JobContextSchema,
     archetypes: z.array(ResolvedArchetypeSchema),
@@ -373,6 +449,13 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
     department: z.string().nullable(),
     location: z.string().nullable(),
     publicSlug: z.string().nullable(), // May or may not have been published
+    // Job type fields
+    workType: z.enum(WORK_TYPES),
+    employmentType: z.enum(EMPLOYMENT_TYPES),
+    // Salary fields
+    salaryMin: z.number().nullable(),
+    salaryMax: z.number().nullable(),
+    salaryCurrency: z.enum(SALARY_CURRENCIES).nullable(),
     // Questions
     jobContext: JobContextSchema,
     archetypes: z.array(ResolvedArchetypeSchema),
@@ -401,6 +484,14 @@ export const PublicJobResponseSchema = z.object({
   companyName: z.string().nullable(),
   department: z.string().nullable(),
   location: z.string().nullable(),
+  // Job type fields
+  workType: z.enum(WORK_TYPES),
+  employmentType: z.enum(EMPLOYMENT_TYPES),
+  // Salary fields
+  salaryMin: z.number().nullable(),
+  salaryMax: z.number().nullable(),
+  salaryCurrency: z.enum(SALARY_CURRENCIES).nullable(),
+  // Content
   description: z.string(),
   questions: z.array(
     z.object({
@@ -417,41 +508,64 @@ export type PublicJobResponse = z.infer<typeof PublicJobResponseSchema>;
  * Schema for job update input.
  * Used for PATCH /v1/jobs/:id.
  */
-export const UpdateJobInputSchema = z.object({
-  title: z
-    .string()
-    .min(3, "Title must be at least 3 characters")
-    .max(200, "Title must be at most 200 characters")
-    .trim()
-    .optional(),
+export const UpdateJobInputSchema = z
+  .object({
+    title: z
+      .string()
+      .min(3, "Title must be at least 3 characters")
+      .max(200, "Title must be at most 200 characters")
+      .trim()
+      .optional(),
 
-  description: z
-    .string()
-    .min(50, "Description must be at least 50 characters")
-    .max(50000, "Description must be at most 50,000 characters")
-    .trim()
-    .optional(),
+    description: z
+      .string()
+      .min(50, "Description must be at least 50 characters")
+      .max(50000, "Description must be at most 50,000 characters")
+      .trim()
+      .optional(),
 
-  companyName: z
-    .string()
-    .max(200, "Company name must be at most 200 characters")
-    .trim()
-    .optional()
-    .nullable(),
+    companyName: z
+      .string()
+      .max(200, "Company name must be at most 200 characters")
+      .trim()
+      .optional()
+      .nullable(),
 
-  department: z
-    .string()
-    .max(100, "Department must be at most 100 characters")
-    .trim()
-    .optional()
-    .nullable(),
+    department: z
+      .string()
+      .max(100, "Department must be at most 100 characters")
+      .trim()
+      .optional()
+      .nullable(),
 
-  location: z
-    .string()
-    .max(200, "Location must be at most 200 characters")
-    .trim()
-    .optional()
-    .nullable(),
-});
+    location: z
+      .string()
+      .max(200, "Location must be at most 200 characters")
+      .trim()
+      .optional()
+      .nullable(),
+
+    // Job type fields (optional for updates)
+    workType: z.enum(WORK_TYPES).optional(),
+    employmentType: z.enum(EMPLOYMENT_TYPES).optional(),
+
+    // Salary fields (optional for updates)
+    salaryMin: z.number().min(0, "Salary minimum must be non-negative").optional().nullable(),
+    salaryMax: z.number().min(0, "Salary maximum must be non-negative").optional().nullable(),
+    salaryCurrency: z.enum(SALARY_CURRENCIES).optional().nullable(),
+  })
+  .refine(
+    (data) => {
+      // If both salaryMin and salaryMax are provided, max must be >= min
+      if (data.salaryMin != null && data.salaryMax != null) {
+        return data.salaryMax >= data.salaryMin;
+      }
+      return true;
+    },
+    {
+      message: "Salary maximum must be greater than or equal to salary minimum",
+      path: ["salaryMax"],
+    }
+  );
 
 export type UpdateJobInput = z.infer<typeof UpdateJobInputSchema>;

@@ -61,10 +61,12 @@ export class JobRepository {
         INSERT INTO jobs (
           id, org_id, status, questions_status,
           title, description, company_name, department, location,
+          work_type, employment_type,
+          salary_min, salary_max, salary_currency,
           regeneration_count,
           created_at, updated_at
         )
-        VALUES (?, ?, 'draft', 'none', ?, ?, ?, ?, ?, 0, ?, ?)
+        VALUES (?, ?, 'draft', 'none', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
         RETURNING *
         `
       )
@@ -76,6 +78,11 @@ export class JobRepository {
         input.companyName ?? null,
         input.department ?? null,
         input.location ?? null,
+        input.workType,
+        input.employmentType,
+        input.salaryMin ?? null,
+        input.salaryMax ?? null,
+        input.salaryCurrency ?? null,
         now,
         now
       )
@@ -189,6 +196,26 @@ export class JobRepository {
     if (input.location !== undefined) {
       updates.push("location = ?");
       values.push(input.location);
+    }
+    if (input.workType !== undefined) {
+      updates.push("work_type = ?");
+      values.push(input.workType);
+    }
+    if (input.employmentType !== undefined) {
+      updates.push("employment_type = ?");
+      values.push(input.employmentType);
+    }
+    if (input.salaryMin !== undefined) {
+      updates.push("salary_min = ?");
+      values.push(input.salaryMin);
+    }
+    if (input.salaryMax !== undefined) {
+      updates.push("salary_max = ?");
+      values.push(input.salaryMax);
+    }
+    if (input.salaryCurrency !== undefined) {
+      updates.push("salary_currency = ?");
+      values.push(input.salaryCurrency);
     }
 
     if (updates.length === 0) {
@@ -678,6 +705,9 @@ export class JobRepository {
       questions_status: QuestionsStatus;
       pipeline_status: PipelineStatus;
       public_slug: string | null;
+      work_type: string;
+      employment_type: string;
+      location: string | null;
       created_at: string;
       published_at: string | null;
     };
@@ -690,7 +720,8 @@ export class JobRepository {
       result = await this.db
         .prepare(
           `
-          SELECT id, title, status, questions_status, pipeline_status, public_slug, created_at, published_at
+          SELECT id, title, status, questions_status, pipeline_status, public_slug,
+                 work_type, employment_type, location, created_at, published_at
           FROM jobs
           WHERE org_id = ?
             AND (created_at < ? OR (created_at = ? AND id < ?))
@@ -705,7 +736,8 @@ export class JobRepository {
       result = await this.db
         .prepare(
           `
-          SELECT id, title, status, questions_status, pipeline_status, public_slug, created_at, published_at
+          SELECT id, title, status, questions_status, pipeline_status, public_slug,
+                 work_type, employment_type, location, created_at, published_at
           FROM jobs
           WHERE org_id = ? ${statusFilter}
           ORDER BY created_at DESC, id DESC
@@ -737,6 +769,9 @@ export class JobRepository {
       questionsStatus: row.questions_status,
       pipelineStatus: row.pipeline_status ?? ("none" as PipelineStatus),
       publicSlug: row.public_slug,
+      workType: row.work_type as "remote" | "hybrid" | "onsite",
+      employmentType: row.employment_type as "fulltime" | "parttime" | "contract" | "internship",
+      location: row.location,
       createdAt: row.created_at,
       publishedAt: row.published_at,
     }));

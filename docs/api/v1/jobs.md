@@ -69,17 +69,27 @@ Content-Type: application/json
   "description": "We are looking for a senior engineer to lead our backend team. You will be responsible for designing scalable systems, mentoring junior developers, and collaborating with product managers.",
   "companyName": "Acme Corp",
   "department": "Engineering",
-  "location": "Remote"
+  "location": "Remote",
+  "workType": "remote",
+  "employmentType": "fulltime",
+  "salaryMin": 120000,
+  "salaryMax": 180000,
+  "salaryCurrency": "USD"
 }
 ```
 
-| Field         | Type   | Required | Description                          |
-| ------------- | ------ | -------- | ------------------------------------ |
-| `title`       | string | Yes      | Job title (3-200 characters)         |
-| `description` | string | Yes      | Job description (50-50000 characters)|
-| `companyName` | string | No       | Company name (max 200 characters)    |
-| `department`  | string | No       | Department name (max 100 characters) |
-| `location`    | string | No       | Job location (max 200 characters)    |
+| Field            | Type   | Required | Description                          |
+| ---------------- | ------ | -------- | ------------------------------------ |
+| `title`          | string | Yes      | Job title (3-200 characters)         |
+| `description`    | string | Yes      | Job description (50-50000 characters)|
+| `companyName`    | string | No       | Company name (max 200 characters)    |
+| `department`     | string | No       | Department name (max 100 characters) |
+| `location`       | string | No       | Job location (max 200 characters)    |
+| `workType`       | enum   | Yes      | `remote`, `hybrid`, or `onsite`      |
+| `employmentType` | enum   | Yes      | `fulltime`, `parttime`, `contract`, or `internship` |
+| `salaryMin`      | number | No       | Minimum salary (non-negative)        |
+| `salaryMax`      | number | No       | Maximum salary (>= salaryMin)        |
+| `salaryCurrency` | enum   | No       | `USD`, `EUR`, `GBP`, `SGD`, or `IDR` |
 
 ### Response
 
@@ -134,6 +144,9 @@ List jobs for the authenticated organization with cursor-based pagination.
       "status": "published",
       "questionsStatus": "completed",
       "pipelineStatus": "completed",
+      "workType": "remote",
+      "employmentType": "fulltime",
+      "location": "Remote",
       "publicSlug": "acme-corp-senior-backend-engineer-x7k3m",
       "createdAt": "2026-01-01T10:00:00Z",
       "publishedAt": "2026-01-01T12:00:00Z"
@@ -144,6 +157,9 @@ List jobs for the authenticated organization with cursor-based pagination.
       "status": "draft",
       "questionsStatus": "none",
       "pipelineStatus": "none",
+      "workType": "hybrid",
+      "employmentType": "contract",
+      "location": "San Francisco, CA",
       "publicSlug": null,
       "createdAt": "2026-01-01T09:30:00Z",
       "publishedAt": null
@@ -188,6 +204,11 @@ Get job status and details. Response varies by job status.
   "companyName": "Acme Corp",
   "department": "Engineering",
   "location": "Remote",
+  "workType": "remote",
+  "employmentType": "fulltime",
+  "salaryMin": 120000,
+  "salaryMax": 180000,
+  "salaryCurrency": "USD",
   "jobContext": {
     "domain": "software_engineering",
     "riskLevel": "medium",
@@ -303,6 +324,11 @@ Get job status and details. Response varies by job status.
   "companyName": "Acme Corp",
   "department": "Engineering",
   "location": "Remote",
+  "workType": "remote",
+  "employmentType": "fulltime",
+  "salaryMin": 120000,
+  "salaryMax": 180000,
+  "salaryCurrency": "USD",
   "publicSlug": "acme-corp-senior-software-engineer-x7k3m",
   "jobContext": { ... },
   "archetypes": [ ... ],
@@ -337,11 +363,29 @@ Update a draft job's content.
   "description": "Updated description...",
   "companyName": "New Company Name",
   "department": "New Department",
-  "location": "New Location"
+  "location": "New Location",
+  "workType": "hybrid",
+  "employmentType": "fulltime",
+  "salaryMin": 150000,
+  "salaryMax": 200000,
+  "salaryCurrency": "USD"
 }
 ```
 
 All fields are optional. Only provided fields are updated.
+
+| Field            | Type   | Description                          |
+| ---------------- | ------ | ------------------------------------ |
+| `title`          | string | Job title (3-200 characters)         |
+| `description`    | string | Job description (50-50000 characters)|
+| `companyName`    | string | Company name (max 200 characters)    |
+| `department`     | string | Department name (max 100 characters) |
+| `location`       | string | Job location (max 200 characters)    |
+| `workType`       | enum   | `remote`, `hybrid`, or `onsite`      |
+| `employmentType` | enum   | `fulltime`, `parttime`, `contract`, or `internship` |
+| `salaryMin`      | number | Minimum salary (non-negative)        |
+| `salaryMax`      | number | Maximum salary (>= salaryMin)        |
+| `salaryCurrency` | enum   | `USD`, `EUR`, `GBP`, `SGD`, or `IDR` |
 
 ### Response
 
@@ -911,6 +955,11 @@ GET /public/jobs/acme-corp-senior-software-engineer-x7k3m
   "companyName": "Acme Corp",
   "department": "Engineering",
   "location": "Remote",
+  "workType": "remote",
+  "employmentType": "fulltime",
+  "salaryMin": 120000,
+  "salaryMax": 180000,
+  "salaryCurrency": "USD",
   "description": "We are looking for a senior engineer...",
   "questions": [
     {
@@ -926,6 +975,20 @@ GET /public/jobs/acme-corp-senior-software-engineer-x7k3m
   ]
 }
 ```
+
+| Field            | Type   | Description                          |
+| ---------------- | ------ | ------------------------------------ |
+| `title`          | string | Job title                            |
+| `companyName`    | string | Company name (may be null)           |
+| `department`     | string | Department name (may be null)        |
+| `location`       | string | Job location (may be null)           |
+| `workType`       | enum   | `remote`, `hybrid`, or `onsite`      |
+| `employmentType` | enum   | `fulltime`, `parttime`, `contract`, or `internship` |
+| `salaryMin`      | number | Minimum salary (may be null)         |
+| `salaryMax`      | number | Maximum salary (may be null)         |
+| `salaryCurrency` | enum   | `USD`, `EUR`, `GBP`, `SGD`, `IDR` (may be null) |
+| `description`    | string | Full job description                 |
+| `questions`      | array  | Application questions                |
 
 #### 404 Not Found
 

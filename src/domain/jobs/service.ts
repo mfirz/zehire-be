@@ -836,6 +836,14 @@ export class JobService {
       companyName: job.company_name,
       department: job.department,
       location: job.location,
+      // Job type fields
+      workType: job.work_type,
+      employmentType: job.employment_type,
+      // Salary fields
+      salaryMin: job.salary_min,
+      salaryMax: job.salary_max,
+      salaryCurrency: job.salary_currency,
+      // Content
       description: job.description,
       questions: questions.map((q, index) => ({
         id: `q${index + 1}`,
@@ -866,6 +874,13 @@ export class JobService {
           companyName: job.company_name,
           department: job.department,
           location: job.location,
+          // Job type fields
+          workType: job.work_type,
+          employmentType: job.employment_type,
+          // Salary fields
+          salaryMin: job.salary_min,
+          salaryMax: job.salary_max,
+          salaryCurrency: job.salary_currency,
           // Questions (if generated)
           jobContext: job.job_context ? this.parseJson(job.job_context, JobContextSchema) : null,
           archetypes: job.archetypes
@@ -911,6 +926,13 @@ export class JobService {
           department: job.department,
           location: job.location,
           publicSlug: job.public_slug!,
+          // Job type fields
+          workType: job.work_type,
+          employmentType: job.employment_type,
+          // Salary fields
+          salaryMin: job.salary_min,
+          salaryMax: job.salary_max,
+          salaryCurrency: job.salary_currency,
           // Questions (always present)
           jobContext: this.parseJson(job.job_context!, JobContextSchema),
           archetypes: this.parseJsonArray(job.archetypes!, ResolvedArchetypeSchema),
@@ -942,6 +964,13 @@ export class JobService {
           department: job.department,
           location: job.location,
           publicSlug: job.public_slug!,
+          // Job type fields
+          workType: job.work_type,
+          employmentType: job.employment_type,
+          // Salary fields
+          salaryMin: job.salary_min,
+          salaryMax: job.salary_max,
+          salaryCurrency: job.salary_currency,
           // Questions
           jobContext: this.parseJson(job.job_context!, JobContextSchema),
           archetypes: this.parseJsonArray(job.archetypes!, ResolvedArchetypeSchema),
@@ -973,6 +1002,13 @@ export class JobService {
           department: job.department,
           location: job.location,
           publicSlug: job.public_slug,
+          // Job type fields
+          workType: job.work_type,
+          employmentType: job.employment_type,
+          // Salary fields
+          salaryMin: job.salary_min,
+          salaryMax: job.salary_max,
+          salaryCurrency: job.salary_currency,
           // Questions
           jobContext: this.parseJson(job.job_context!, JobContextSchema),
           archetypes: this.parseJsonArray(job.archetypes!, ResolvedArchetypeSchema),
