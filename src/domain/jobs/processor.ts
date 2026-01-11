@@ -71,10 +71,10 @@ export class JobProcessor {
       // Mark questions as processing
       await this.repository.markQuestionsProcessing(jobId);
 
-      // Run the full LLM pipeline
+      // Run the full LLM pipeline (use plain text for LLM)
       const result = await generateQuestionsForJob(this.llmClient, {
         title: job.title,
-        description: job.description,
+        description: job.description_text!,
         ...(job.company_name && { companyName: job.company_name }),
         ...(job.department && { department: job.department }),
         ...(job.location && { location: job.location }),
@@ -173,10 +173,10 @@ export class JobProcessor {
       // Mark pipeline as processing
       await this.repository.markPipelineProcessing(jobId);
 
-      // Run the pipeline advisor LLM
+      // Run the pipeline advisor LLM (use plain text for LLM)
       const result = await generatePipelineRecommendation(this.llmClient, {
         title: job.title,
-        description: job.description,
+        description: job.description_text!,
         ...(job.company_name && { companyName: job.company_name }),
       });
 

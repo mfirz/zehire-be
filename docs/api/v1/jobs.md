@@ -66,7 +66,36 @@ Content-Type: application/json
 ```json
 {
   "title": "Senior Software Engineer",
-  "description": "We are looking for a senior engineer to lead our backend team. You will be responsible for designing scalable systems, mentoring junior developers, and collaborating with product managers.",
+  "description": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          { "type": "text", "text": "We are looking for a " },
+          { "type": "text", "marks": [{"type": "bold"}], "text": "senior engineer" },
+          { "type": "text", "text": " to lead our backend team." }
+        ]
+      },
+      {
+        "type": "bulletList",
+        "content": [
+          {
+            "type": "listItem",
+            "content": [
+              { "type": "paragraph", "content": [{ "type": "text", "text": "Design scalable systems" }] }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              { "type": "paragraph", "content": [{ "type": "text", "text": "Mentor junior developers" }] }
+            ]
+          }
+        ]
+      }
+    ]
+  },
   "companyName": "Acme Corp",
   "department": "Engineering",
   "location": "Remote",
@@ -78,18 +107,28 @@ Content-Type: application/json
 }
 ```
 
-| Field            | Type   | Required | Description                          |
-| ---------------- | ------ | -------- | ------------------------------------ |
-| `title`          | string | Yes      | Job title (3-200 characters)         |
-| `description`    | string | Yes      | Job description (50-50000 characters)|
-| `companyName`    | string | No       | Company name (max 200 characters)    |
-| `department`     | string | No       | Department name (max 100 characters) |
-| `location`       | string | No       | Job location (max 200 characters)    |
-| `workType`       | enum   | Yes      | `remote`, `hybrid`, or `onsite`      |
-| `employmentType` | enum   | Yes      | `fulltime`, `parttime`, `contract`, or `internship` |
-| `salaryMin`      | number | No       | Minimum salary (non-negative)        |
-| `salaryMax`      | number | No       | Maximum salary (>= salaryMin)        |
-| `salaryCurrency` | enum   | No       | `USD`, `EUR`, `GBP`, `SGD`, or `IDR` |
+| Field            | Type       | Required | Description                          |
+| ---------------- | ---------- | -------- | ------------------------------------ |
+| `title`          | string     | Yes      | Job title (3-200 characters)         |
+| `description`    | TiptapDoc  | Yes      | Tiptap JSON document (50-30000 chars extracted text) |
+| `companyName`    | string     | No       | Company name (max 200 characters)    |
+| `department`     | string     | No       | Department name (max 100 characters) |
+| `location`       | string     | No       | Job location (max 200 characters)    |
+| `workType`       | enum       | Yes      | `remote`, `hybrid`, or `onsite`      |
+| `employmentType` | enum       | Yes      | `fulltime`, `parttime`, `contract`, or `internship` |
+| `salaryMin`      | number     | No       | Minimum salary (non-negative)        |
+| `salaryMax`      | number     | No       | Maximum salary (>= salaryMin)        |
+| `salaryCurrency` | enum       | No       | `USD`, `EUR`, `GBP`, `SGD`, or `IDR` |
+
+**Tiptap Description Format:**
+
+The `description` field accepts a Tiptap JSON document. Allowed node types:
+- `doc`, `paragraph`, `text`, `heading`, `bulletList`, `orderedList`, `listItem`
+- `blockquote`, `codeBlock`, `hardBreak`, `horizontalRule`
+
+Allowed marks: `bold`, `italic`, `underline`, `strike`, `code`, `link`
+
+Links must use `http://` or `https://` protocols.
 
 ### Response
 
@@ -193,6 +232,8 @@ Get job status and details. Response varies by job status.
 
 #### Draft
 
+Draft jobs return `description` as a Tiptap JSON object for the editor.
+
 ```json
 {
   "id": "abc123def456ghi78",
@@ -200,7 +241,15 @@ Get job status and details. Response varies by job status.
   "questionsStatus": "completed",
   "pipelineStatus": "completed",
   "title": "Senior Software Engineer",
-  "description": "We are looking for...",
+  "description": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [{ "type": "text", "text": "We are looking for..." }]
+      }
+    ]
+  },
   "companyName": "Acme Corp",
   "department": "Engineering",
   "location": "Remote",
@@ -313,6 +362,8 @@ Get job status and details. Response varies by job status.
 
 #### Published
 
+Published, paused, and closed jobs return `descriptionHtml` as pre-rendered HTML (read-only).
+
 ```json
 {
   "id": "abc123def456ghi78",
@@ -320,7 +371,7 @@ Get job status and details. Response varies by job status.
   "questionsStatus": "completed",
   "pipelineStatus": "completed",
   "title": "Senior Software Engineer",
-  "description": "We are looking for...",
+  "descriptionHtml": "<p>We are looking for a <strong>senior engineer</strong> to lead our backend team.</p><ul><li><p>Design scalable systems</p></li></ul>",
   "companyName": "Acme Corp",
   "department": "Engineering",
   "location": "Remote",
@@ -345,7 +396,7 @@ Get job status and details. Response varies by job status.
 
 #### Paused / Closed
 
-Similar to published, with `closedAt` for closed jobs.
+Same as published, with `descriptionHtml` instead of `description`. Closed jobs include `closedAt`.
 
 ---
 
@@ -360,7 +411,15 @@ Update a draft job's content.
 ```json
 {
   "title": "Updated Job Title",
-  "description": "Updated description...",
+  "description": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [{ "type": "text", "text": "Updated description content..." }]
+      }
+    ]
+  },
   "companyName": "New Company Name",
   "department": "New Department",
   "location": "New Location",
@@ -374,18 +433,18 @@ Update a draft job's content.
 
 All fields are optional. Only provided fields are updated.
 
-| Field            | Type   | Description                          |
-| ---------------- | ------ | ------------------------------------ |
-| `title`          | string | Job title (3-200 characters)         |
-| `description`    | string | Job description (50-50000 characters)|
-| `companyName`    | string | Company name (max 200 characters)    |
-| `department`     | string | Department name (max 100 characters) |
-| `location`       | string | Job location (max 200 characters)    |
-| `workType`       | enum   | `remote`, `hybrid`, or `onsite`      |
-| `employmentType` | enum   | `fulltime`, `parttime`, `contract`, or `internship` |
-| `salaryMin`      | number | Minimum salary (non-negative)        |
-| `salaryMax`      | number | Maximum salary (>= salaryMin)        |
-| `salaryCurrency` | enum   | `USD`, `EUR`, `GBP`, `SGD`, or `IDR` |
+| Field            | Type       | Description                          |
+| ---------------- | ---------- | ------------------------------------ |
+| `title`          | string     | Job title (3-200 characters)         |
+| `description`    | TiptapDoc  | Tiptap JSON document (50-30000 chars extracted text) |
+| `companyName`    | string     | Company name (max 200 characters)    |
+| `department`     | string     | Department name (max 100 characters) |
+| `location`       | string     | Job location (max 200 characters)    |
+| `workType`       | enum       | `remote`, `hybrid`, or `onsite`      |
+| `employmentType` | enum       | `fulltime`, `parttime`, `contract`, or `internship` |
+| `salaryMin`      | number     | Minimum salary (non-negative)        |
+| `salaryMax`      | number     | Maximum salary (>= salaryMin)        |
+| `salaryCurrency` | enum       | `USD`, `EUR`, `GBP`, `SGD`, or `IDR` |
 
 ### Response
 
@@ -960,7 +1019,7 @@ GET /public/jobs/acme-corp-senior-software-engineer-x7k3m
   "salaryMin": 120000,
   "salaryMax": 180000,
   "salaryCurrency": "USD",
-  "description": "We are looking for a senior engineer...",
+  "descriptionHtml": "<p>We are looking for a <strong>senior engineer</strong> to lead our backend team.</p><ul><li><p>Design scalable systems</p></li></ul>",
   "questions": [
     {
       "id": "q1",
@@ -987,7 +1046,7 @@ GET /public/jobs/acme-corp-senior-software-engineer-x7k3m
 | `salaryMin`      | number | Minimum salary (may be null)         |
 | `salaryMax`      | number | Maximum salary (may be null)         |
 | `salaryCurrency` | enum   | `USD`, `EUR`, `GBP`, `SGD`, `IDR` (may be null) |
-| `description`    | string | Full job description                 |
+| `descriptionHtml`| string | Pre-rendered HTML job description (safe for SSR) |
 | `questions`      | array  | Application questions                |
 
 #### 404 Not Found

@@ -8,6 +8,7 @@
  */
 
 import { z } from "zod";
+import { JobDescriptionSchema, TiptapDocSchema } from "../../lib/tiptap";
 import { JOB_ERROR_CODES, JOB_STATUSES, PIPELINE_STATUSES, QUESTIONS_STATUSES } from "../../types/bindings";
 import {
   PipelineConfigSchema,
@@ -51,11 +52,8 @@ export const CreateJobInputSchema = z
       .max(200, "Title must be at most 200 characters")
       .trim(),
 
-    description: z
-      .string()
-      .min(50, "Description must be at least 50 characters")
-      .max(50000, "Description must be at most 50,000 characters")
-      .trim(),
+    // Tiptap JSON document with content validation
+    description: JobDescriptionSchema,
 
     companyName: z
       .string()
@@ -189,7 +187,8 @@ export const JobRowSchema = z.object({
 
   // Job content
   title: z.string(),
-  description: z.string(),
+  description: z.string(), // Tiptap JSON stored as string
+  description_text: z.string().nullable(), // Plain text extracted for LLM
   company_name: z.string().nullable(),
   department: z.string().nullable(),
   location: z.string().nullable(),
@@ -262,6 +261,7 @@ export const JobListItemSchema = z.object({
   publicSlug: z.string().nullable(),
   workType: z.enum(WORK_TYPES),
   employmentType: z.enum(EMPLOYMENT_TYPES),
+  department: z.string().nullable(),
   location: z.string().nullable(),
   createdAt: z.string(),
   publishedAt: z.string().nullable(),
@@ -323,13 +323,14 @@ export type CreateJobResponse = z.infer<typeof CreateJobResponseSchema>;
  */
 export const JobStatusResponseSchema = z.discriminatedUnion("status", [
   // Draft state - may or may not have questions/pipeline
+  // Returns description as Tiptap JSON for editing
   z.object({
     id: z.string(),
     status: z.literal("draft"),
     questionsStatus: z.enum(QUESTIONS_STATUSES),
     pipelineStatus: z.enum(PIPELINE_STATUSES),
     title: z.string(),
-    description: z.string(),
+    description: TiptapDocSchema, // JSON for Tiptap editor
     companyName: z.string().nullable(),
     department: z.string().nullable(),
     location: z.string().nullable(),
@@ -368,13 +369,14 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
   }),
 
   // Published state - has questions and pipeline, is live
+  // Returns description as pre-rendered HTML (read-only)
   z.object({
     id: z.string(),
     status: z.literal("published"),
     questionsStatus: z.literal("completed"), // Always completed when published
     pipelineStatus: z.literal("completed"), // Always completed when published
     title: z.string(),
-    description: z.string(),
+    descriptionHtml: z.string(), // Pre-rendered HTML for display
     companyName: z.string().nullable(),
     department: z.string().nullable(),
     location: z.string().nullable(),
@@ -403,13 +405,14 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
   }),
 
   // Paused state - was published, now paused
+  // Returns description as pre-rendered HTML (read-only)
   z.object({
     id: z.string(),
     status: z.literal("paused"),
     questionsStatus: z.literal("completed"),
     pipelineStatus: z.literal("completed"),
     title: z.string(),
-    description: z.string(),
+    descriptionHtml: z.string(), // Pre-rendered HTML for display
     companyName: z.string().nullable(),
     department: z.string().nullable(),
     location: z.string().nullable(),
@@ -438,13 +441,14 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
   }),
 
   // Closed state - permanently closed
+  // Returns description as pre-rendered HTML (read-only)
   z.object({
     id: z.string(),
     status: z.literal("closed"),
     questionsStatus: z.literal("completed"),
     pipelineStatus: z.literal("completed"),
     title: z.string(),
-    description: z.string(),
+    descriptionHtml: z.string(), // Pre-rendered HTML for display
     companyName: z.string().nullable(),
     department: z.string().nullable(),
     location: z.string().nullable(),
@@ -478,6 +482,7 @@ export type JobStatusResponse = z.infer<typeof JobStatusResponseSchema>;
 
 /**
  * Schema for public job view (for candidates, no auth).
+ * Returns pre-rendered HTML for SSR/SEO.
  */
 export const PublicJobResponseSchema = z.object({
   title: z.string(),
@@ -491,8 +496,8 @@ export const PublicJobResponseSchema = z.object({
   salaryMin: z.number().nullable(),
   salaryMax: z.number().nullable(),
   salaryCurrency: z.enum(SALARY_CURRENCIES).nullable(),
-  // Content
-  description: z.string(),
+  // Content - pre-rendered HTML for SSR
+  descriptionHtml: z.string(),
   questions: z.array(
     z.object({
       id: z.string(),
@@ -517,12 +522,8 @@ export const UpdateJobInputSchema = z
       .trim()
       .optional(),
 
-    description: z
-      .string()
-      .min(50, "Description must be at least 50 characters")
-      .max(50000, "Description must be at most 50,000 characters")
-      .trim()
-      .optional(),
+    // Tiptap JSON document with content validation (optional for updates)
+    description: JobDescriptionSchema.optional(),
 
     companyName: z
       .string()

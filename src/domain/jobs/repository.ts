@@ -12,12 +12,14 @@
 import type { D1Database, D1Result } from "@cloudflare/workers-types";
 import { customAlphabet } from "nanoid";
 
+import { extractPlainText, type TiptapDoc } from "../../lib/tiptap";
+import type { JobErrorCode, JobStatus, PipelineStatus, QuestionsStatus } from "../../types/bindings";
+
 // Alphanumeric-only nanoid for IDs (easier to select/copy)
 const alphanumericId = customAlphabet(
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
   21
 );
-import type { JobErrorCode, JobStatus, PipelineStatus, QuestionsStatus } from "../../types/bindings";
 import type { PipelineConfig, PipelineRecommendation } from "../pipeline/types";
 import type {
   CreateJobInput,
@@ -55,18 +57,22 @@ export class JobRepository {
     const id = alphanumericId();
     const now = new Date().toISOString();
 
+    // Serialize Tiptap document and extract plain text
+    const descriptionJson = JSON.stringify(input.description);
+    const descriptionText = extractPlainText(input.description as TiptapDoc);
+
     const result = await this.db
       .prepare(
         `
         INSERT INTO jobs (
           id, org_id, status, questions_status,
-          title, description, company_name, department, location,
+          title, description, description_text, company_name, department, location,
           work_type, employment_type,
           salary_min, salary_max, salary_currency,
           regeneration_count,
           created_at, updated_at
         )
-        VALUES (?, ?, 'draft', 'none', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+        VALUES (?, ?, 'draft', 'none', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
         RETURNING *
         `
       )
@@ -74,7 +80,8 @@ export class JobRepository {
         id,
         orgId,
         input.title,
-        input.description,
+        descriptionJson,
+        descriptionText,
         input.companyName ?? null,
         input.department ?? null,
         input.location ?? null,
@@ -169,8 +176,9 @@ export class JobRepository {
 
     // Determine if content changed (title or description)
     const titleChanged = input.title !== undefined && input.title !== currentJob.title;
-    const descChanged =
-      input.description !== undefined && input.description !== currentJob.description;
+    // Compare description by serializing to JSON string
+    const newDescJson = input.description ? JSON.stringify(input.description) : undefined;
+    const descChanged = newDescJson !== undefined && newDescJson !== currentJob.description;
     const contentChanged = titleChanged || descChanged;
 
     // Build update fields
@@ -182,8 +190,13 @@ export class JobRepository {
       values.push(input.title);
     }
     if (input.description !== undefined) {
+      // Serialize Tiptap doc and extract plain text
+      const descriptionJson = JSON.stringify(input.description);
+      const descriptionText = extractPlainText(input.description as TiptapDoc);
       updates.push("description = ?");
-      values.push(input.description);
+      values.push(descriptionJson);
+      updates.push("description_text = ?");
+      values.push(descriptionText);
     }
     if (input.companyName !== undefined) {
       updates.push("company_name = ?");
@@ -707,6 +720,7 @@ export class JobRepository {
       public_slug: string | null;
       work_type: string;
       employment_type: string;
+      department: string | null;
       location: string | null;
       created_at: string;
       published_at: string | null;
@@ -721,7 +735,7 @@ export class JobRepository {
         .prepare(
           `
           SELECT id, title, status, questions_status, pipeline_status, public_slug,
-                 work_type, employment_type, location, created_at, published_at
+                 work_type, employment_type, department, location, created_at, published_at
           FROM jobs
           WHERE org_id = ?
             AND (created_at < ? OR (created_at = ? AND id < ?))
@@ -737,7 +751,7 @@ export class JobRepository {
         .prepare(
           `
           SELECT id, title, status, questions_status, pipeline_status, public_slug,
-                 work_type, employment_type, location, created_at, published_at
+                 work_type, employment_type, department, location, created_at, published_at
           FROM jobs
           WHERE org_id = ? ${statusFilter}
           ORDER BY created_at DESC, id DESC
@@ -771,6 +785,7 @@ export class JobRepository {
       publicSlug: row.public_slug,
       workType: row.work_type as "remote" | "hybrid" | "onsite",
       employmentType: row.employment_type as "fulltime" | "parttime" | "contract" | "internship",
+      department: row.department,
       location: row.location,
       createdAt: row.created_at,
       publishedAt: row.published_at,

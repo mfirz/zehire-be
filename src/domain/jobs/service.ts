@@ -14,6 +14,7 @@
  * Question generation: none → pending → processing → completed/failed
  */
 
+import { renderToHtml, type TiptapDoc } from "../../lib/tiptap";
 import type { Env } from "../../types/bindings";
 import { generateInitialConfig } from "../pipeline/advisor";
 import { PipelineConfigSchema, PipelineRecommendationSchema } from "../pipeline/types";
@@ -831,6 +832,10 @@ export class JobService {
     // Parse questions
     const questions = this.parseJsonArray(job.questions, RenderedQuestionSchema);
 
+    // Render description to HTML for SSR
+    const descriptionDoc = JSON.parse(job.description) as TiptapDoc;
+    const descriptionHtml = renderToHtml(descriptionDoc);
+
     return {
       title: job.title,
       companyName: job.company_name,
@@ -843,8 +848,8 @@ export class JobService {
       salaryMin: job.salary_min,
       salaryMax: job.salary_max,
       salaryCurrency: job.salary_currency,
-      // Content
-      description: job.description,
+      // Content - pre-rendered HTML for SSR
+      descriptionHtml,
       questions: questions.map((q, index) => ({
         id: `q${index + 1}`,
         text: q.questionText,
@@ -870,7 +875,8 @@ export class JobService {
           questionsStatus: job.questions_status,
           pipelineStatus: job.pipeline_status ?? "none",
           title: job.title,
-          description: job.description,
+          // Parse description JSON for Tiptap editor
+          description: JSON.parse(job.description) as TiptapDoc,
           companyName: job.company_name,
           department: job.department,
           location: job.location,
@@ -921,7 +927,8 @@ export class JobService {
           questionsStatus: "completed", // Always completed when published
           pipelineStatus: "completed", // Always completed when published
           title: job.title,
-          description: job.description,
+          // Render description to HTML (read-only)
+          descriptionHtml: renderToHtml(JSON.parse(job.description) as TiptapDoc),
           companyName: job.company_name,
           department: job.department,
           location: job.location,
@@ -959,7 +966,8 @@ export class JobService {
           questionsStatus: "completed",
           pipelineStatus: "completed",
           title: job.title,
-          description: job.description,
+          // Render description to HTML (read-only)
+          descriptionHtml: renderToHtml(JSON.parse(job.description) as TiptapDoc),
           companyName: job.company_name,
           department: job.department,
           location: job.location,
@@ -997,7 +1005,8 @@ export class JobService {
           questionsStatus: "completed",
           pipelineStatus: "completed",
           title: job.title,
-          description: job.description,
+          // Render description to HTML (read-only)
+          descriptionHtml: renderToHtml(JSON.parse(job.description) as TiptapDoc),
           companyName: job.company_name,
           department: job.department,
           location: job.location,
