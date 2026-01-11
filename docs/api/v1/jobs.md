@@ -185,7 +185,9 @@ List jobs for the authenticated organization with cursor-based pagination.
       "pipelineStatus": "completed",
       "workType": "remote",
       "employmentType": "fulltime",
+      "department": "Engineering",
       "location": "Remote",
+      "descriptionPreview": "We're looking for a senior backend engineer to join our team and help build scalable APIs...",
       "publicSlug": "acme-corp-senior-backend-engineer-x7k3m",
       "createdAt": "2026-01-01T10:00:00Z",
       "publishedAt": "2026-01-01T12:00:00Z"
@@ -198,7 +200,9 @@ List jobs for the authenticated organization with cursor-based pagination.
       "pipelineStatus": "none",
       "workType": "hybrid",
       "employmentType": "contract",
+      "department": null,
       "location": "San Francisco, CA",
+      "descriptionPreview": "Join our frontend team to build beautiful, responsive user interfaces using React and...",
       "publicSlug": null,
       "createdAt": "2026-01-01T09:30:00Z",
       "publishedAt": null
@@ -215,6 +219,24 @@ List jobs for the authenticated organization with cursor-based pagination.
   }
 }
 ```
+
+**Job List Item Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique job identifier |
+| `title` | string | Job title |
+| `status` | enum | `draft`, `published`, `paused`, or `closed` |
+| `questionsStatus` | enum | Question generation status |
+| `pipelineStatus` | enum | Pipeline generation status |
+| `workType` | enum | `remote`, `hybrid`, or `onsite` |
+| `employmentType` | enum | `fulltime`, `parttime`, `contract`, or `internship` |
+| `department` | string | Department name (may be null) |
+| `location` | string | Job location (may be null) |
+| `descriptionPreview` | string | Plain text preview of description, truncated to 150 chars at word boundary (may be null) |
+| `publicSlug` | string | URL slug for public job page (null if not published) |
+| `createdAt` | string | ISO 8601 creation timestamp |
+| `publishedAt` | string | ISO 8601 publish timestamp (null if not published) |
 
 The `capacity` object shows the organization's active role usage:
 - `activeRoles`: Count of published + paused jobs

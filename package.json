@@ -19,6 +19,10 @@
     "db:reset:local": "rm -rf .wrangler/state && bun run db:migrate:local && bun run db:seed:local"
   },
   "dependencies": {
+    "@tiptap/extension-link": "^3.15.3",
+    "@tiptap/extension-underline": "^3.15.3",
+    "@tiptap/starter-kit": "^3.15.3",
+    "@tiptap/static-renderer": "^3.15.3",
     "hono": "^4.6.14",
     "nanoid": "^5.0.9",
     "zod": "^3.24.1"

@@ -32,6 +32,34 @@ import type {
 } from "./schemas";
 
 // =============================================================================
+// HELPERS
+// =============================================================================
+
+/**
+ * Truncate text at word boundary with ellipsis.
+ * Replaces newlines with spaces for single-line display.
+ */
+function truncateAtWordBoundary(text: string | null, maxLength: number): string | null {
+  if (!text) return null;
+
+  // Normalize: replace newlines with spaces, collapse multiple spaces
+  const normalized = text.replace(/\s+/g, " ").trim();
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  // Find last space before maxLength
+  const truncated = normalized.slice(0, maxLength);
+  const lastSpace = truncated.lastIndexOf(" ");
+
+  // If no space found, just cut at maxLength
+  const cutPoint = lastSpace > maxLength * 0.5 ? lastSpace : maxLength;
+
+  return normalized.slice(0, cutPoint).trim() + "...";
+}
+
+// =============================================================================
 // CONSTANTS
 // =============================================================================
 
@@ -722,6 +750,7 @@ export class JobRepository {
       employment_type: string;
       department: string | null;
       location: string | null;
+      description_text: string | null;
       created_at: string;
       published_at: string | null;
     };
@@ -735,7 +764,8 @@ export class JobRepository {
         .prepare(
           `
           SELECT id, title, status, questions_status, pipeline_status, public_slug,
-                 work_type, employment_type, department, location, created_at, published_at
+                 work_type, employment_type, department, location, description_text,
+                 created_at, published_at
           FROM jobs
           WHERE org_id = ?
             AND (created_at < ? OR (created_at = ? AND id < ?))
@@ -751,7 +781,8 @@ export class JobRepository {
         .prepare(
           `
           SELECT id, title, status, questions_status, pipeline_status, public_slug,
-                 work_type, employment_type, department, location, created_at, published_at
+                 work_type, employment_type, department, location, description_text,
+                 created_at, published_at
           FROM jobs
           WHERE org_id = ? ${statusFilter}
           ORDER BY created_at DESC, id DESC
@@ -787,6 +818,7 @@ export class JobRepository {
       employmentType: row.employment_type as "fulltime" | "parttime" | "contract" | "internship",
       department: row.department,
       location: row.location,
+      descriptionPreview: truncateAtWordBoundary(row.description_text, 150),
       createdAt: row.created_at,
       publishedAt: row.published_at,
     }));

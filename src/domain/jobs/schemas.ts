@@ -263,6 +263,7 @@ export const JobListItemSchema = z.object({
   employmentType: z.enum(EMPLOYMENT_TYPES),
   department: z.string().nullable(),
   location: z.string().nullable(),
+  descriptionPreview: z.string().nullable(),
   createdAt: z.string(),
   publishedAt: z.string().nullable(),
 });

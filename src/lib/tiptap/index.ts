@@ -7,9 +7,13 @@
  * - Strict node/mark allowlists
  * - Depth and size limits
  * - Safe link validation (https only)
- * - Pure JS HTML rendering (no DOM, works in Cloudflare Workers)
+ * - Static HTML rendering via @tiptap/static-renderer (no DOM)
  */
 
+import Link from "@tiptap/extension-link";
+import Underline from "@tiptap/extension-underline";
+import StarterKit from "@tiptap/starter-kit";
+import { renderToHTMLString } from "@tiptap/static-renderer/pm/html-string";
 import { z } from "zod";
 
 import {
@@ -18,7 +22,6 @@ import {
   TIPTAP_LIMITS,
   type AllowedNodeType,
   type TiptapDoc,
-  type TiptapMark,
   type TiptapNode,
 } from "./types";
 
@@ -195,156 +198,34 @@ function isBlockNode(type: AllowedNodeType): boolean {
 }
 
 // =============================================================================
-// HTML RENDERING (Pure JS - no DOM dependencies)
+// HTML RENDERING (via @tiptap/static-renderer - no DOM)
 // =============================================================================
 
 /**
- * Escape HTML special characters to prevent XSS.
+ * Extensions for static rendering.
+ * Configured with secure link attributes.
  */
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+const extensions = [
+  StarterKit,
+  Underline,
+  Link.configure({
+    openOnClick: false,
+    HTMLAttributes: {
+      rel: "noopener noreferrer nofollow",
+      target: "_blank",
+    },
+  }),
+];
 
 /**
- * Render marks (formatting) as opening HTML tags.
- */
-function renderMarksOpen(marks?: TiptapMark[]): string {
-  if (!marks || marks.length === 0) return "";
-
-  return marks
-    .map((mark) => {
-      switch (mark.type) {
-        case "bold":
-          return "<strong>";
-        case "italic":
-          return "<em>";
-        case "underline":
-          return "<u>";
-        case "strike":
-          return "<s>";
-        case "code":
-          return "<code>";
-        case "link": {
-          const href = mark.attrs?.href;
-          if (href && /^https?:\/\//i.test(href)) {
-            return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer nofollow">`;
-          }
-          return "<span>";
-        }
-        default:
-          return "";
-      }
-    })
-    .join("");
-}
-
-/**
- * Render marks (formatting) as closing HTML tags.
- */
-function renderMarksClose(marks?: TiptapMark[]): string {
-  if (!marks || marks.length === 0) return "";
-
-  // Close in reverse order
-  return marks
-    .slice()
-    .reverse()
-    .map((mark) => {
-      switch (mark.type) {
-        case "bold":
-          return "</strong>";
-        case "italic":
-          return "</em>";
-        case "underline":
-          return "</u>";
-        case "strike":
-          return "</s>";
-        case "code":
-          return "</code>";
-        case "link": {
-          const href = mark.attrs?.href;
-          if (href && /^https?:\/\//i.test(href)) {
-            return "</a>";
-          }
-          return "</span>";
-        }
-        default:
-          return "";
-      }
-    })
-    .join("");
-}
-
-/**
- * Render a single node to HTML.
- */
-function renderNode(node: TiptapNode): string {
-  // Text node
-  if (node.type === "text") {
-    const text = escapeHtml(node.text || "");
-    return renderMarksOpen(node.marks) + text + renderMarksClose(node.marks);
-  }
-
-  // Get children HTML
-  const children = node.content?.map(renderNode).join("") || "";
-
-  switch (node.type) {
-    case "paragraph":
-      return `<p>${children}</p>`;
-
-    case "heading": {
-      const level = (node.attrs?.level as number) || 1;
-      const safeLevel = Math.min(Math.max(level, 1), 6);
-      return `<h${safeLevel}>${children}</h${safeLevel}>`;
-    }
-
-    case "bulletList":
-      return `<ul>${children}</ul>`;
-
-    case "orderedList": {
-      const start = node.attrs?.start as number | undefined;
-      if (start && start !== 1) {
-        return `<ol start="${start}">${children}</ol>`;
-      }
-      return `<ol>${children}</ol>`;
-    }
-
-    case "listItem":
-      return `<li>${children}</li>`;
-
-    case "blockquote":
-      return `<blockquote>${children}</blockquote>`;
-
-    case "codeBlock": {
-      const language = node.attrs?.language as string | undefined;
-      if (language) {
-        return `<pre><code class="language-${escapeHtml(language)}">${children}</code></pre>`;
-      }
-      return `<pre><code>${children}</code></pre>`;
-    }
-
-    case "hardBreak":
-      return "<br>";
-
-    case "horizontalRule":
-      return "<hr>";
-
-    default:
-      // Unknown node type - render children only (safe fallback)
-      return children;
-  }
-}
-
-/**
- * Render a Tiptap document to HTML.
- * Pure JS implementation - works in Cloudflare Workers.
+ * Render a Tiptap document to HTML using static renderer.
+ * Works in Cloudflare Workers (no DOM dependencies).
  */
 export function renderToHtml(doc: TiptapDoc): string {
-  return doc.content.map(renderNode).join("");
+  return renderToHTMLString({
+    content: doc,
+    extensions,
+  });
 }
 
 // =============================================================================
