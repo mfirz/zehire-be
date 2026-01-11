@@ -126,8 +126,10 @@ All errors follow a consistent format:
 | POST   | `/v1/jobs/:id/resume`           | Required | Resume paused job              |
 | POST   | `/v1/jobs/:id/close`            | Required | Close job permanently          |
 | GET    | `/v1/assessment-providers`      | Required | List assessment providers      |
-| GET    | `/v1/billing`                   | Required | Get billing overview           |
-| GET    | `/v1/billing/history`           | Required | Get billing history            |
+| GET    | `/v1/billing`                   | Required | Current month usage summary    |
+| GET    | `/v1/billing/preview`           | Required | Preview current charges        |
+| GET    | `/v1/billing/:year/:month`      | Required | Usage for specific month       |
+| GET    | `/v1/billing/:year/:month/invoice` | Required | Invoice for specific month  |
 
 ### Public (No Auth)
 

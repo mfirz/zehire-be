@@ -83,7 +83,7 @@
                   "// Auto-save JWT token from session cookie",
                   "const cookies = pm.response.headers.get('Set-Cookie');",
                   "if (cookies) {",
-                  "    const sessionMatch = cookies.match(/session=([^;]+)/);",
+                  "    const sessionMatch = cookies.match(/zehire_session=([^;]+)/);",
                   "    if (sessionMatch && sessionMatch[1]) {",
                   "        pm.collectionVariables.set('jwt_token', sessionMatch[1]);",
                   "        console.log('JWT token saved to collection variable');",

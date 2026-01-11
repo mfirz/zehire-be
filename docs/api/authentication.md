@@ -155,8 +155,10 @@ curl "https://api.zehire.com/auth/callback?token=abc123..."
 Headers:
 
 ```
-Set-Cookie: zehire_session=<jwt>; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400
+Set-Cookie: zehire_session=<jwt>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=86400
 ```
+
+Note: `SameSite=Lax` allows magic link navigation from email clients while still providing CSRF protection.
 
 #### Errors
 
@@ -212,9 +214,10 @@ curl https://api.zehire.com/auth/me \
 ```json
 {
   "user": {
-    "userId": "user_abc123",
+    "id": "user_abc123",
     "email": "user@example.com",
-    "role": "recruiter"
+    "role": "recruiter",
+    "orgId": "org_xyz789"
   }
 }
 ```
@@ -279,7 +282,7 @@ All authentication errors follow a consistent format:
 
 - **HttpOnly**: Prevents JavaScript access (XSS protection)
 - **Secure**: HTTPS only (in production)
-- **SameSite=Strict**: CSRF protection
+- **SameSite=Lax**: CSRF protection while allowing magic link navigation from email clients
 
 ### Magic Link Security
 

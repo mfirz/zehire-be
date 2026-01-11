@@ -64,33 +64,60 @@ APIs are contracts:
 ## Component Overview
 
 ```
-┌─────────────────────────────────────────────┐
-│              Cloudflare Edge                │
-│  ┌───────────────────────────────────────┐  │
-│  │          Cloudflare Worker            │  │
-│  │  ┌─────────────────────────────────┐  │  │
-│  │  │           Hono App              │  │  │
-│  │  │  ┌───────────┐ ┌─────────────┐  │  │  │
-│  │  │  │  /v1/*    │ │ /internal/* │  │  │  │
-│  │  │  └───────────┘ └─────────────┘  │  │  │
-│  │  └─────────────────────────────────┘  │  │
-│  └───────────────────────────────────────┘  │
-│                     │                       │
-│    ┌────────────────┼────────────────┐      │
-│    ▼                ▼                ▼      │
-│  ┌────┐         ┌─────┐          ┌─────┐   │
-│  │ D1 │         │ KV  │          │ R2  │   │
-│  │(future)      │(future)        │(future) │
-│  └────┘         └─────┘          └─────┘   │
-└─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                      Cloudflare Edge                              │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │                    Cloudflare Worker                        │  │
+│  │  ┌──────────────────────────────────────────────────────┐  │  │
+│  │  │                     Hono App                          │  │  │
+│  │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ │  │  │
+│  │  │  │  /auth/* │ │  /v1/*   │ │ /public/*│ │/internal*│ │  │  │
+│  │  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘ │  │  │
+│  │  └──────────────────────────────────────────────────────┘  │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                              │                                    │
+│    ┌─────────────────────────┼─────────────────────────┐         │
+│    ▼                         ▼                         ▼         │
+│  ┌──────────┐          ┌──────────┐            ┌──────────┐      │
+│  │    D1    │          │  Queue   │            │Workers AI│      │
+│  │ (SQLite) │          │ (Jobs)   │            │  (LLM)   │      │
+│  └──────────┘          └──────────┘            └──────────┘      │
+└──────────────────────────────────────────────────────────────────┘
 ```
+
+## Services Used
+
+| Service | Purpose |
+|---------|---------|
+| **D1** | SQLite database for jobs, users, organizations, billing events |
+| **Queues** | Async job processing for question/pipeline generation |
+| **Workers AI** | LLM inference for job context, archetypes, questions, pipeline |
+| **SES** | Email delivery for magic link authentication |
 
 ## Current State
 
-The backend currently implements:
+The backend implements a complete hiring platform API:
 
-- `GET /v1/` — API root
-- `GET /internal/health` — Health check
-- `POST /v1/jobs` — Create job (documented, implementation pending)
+### Authentication (`/auth/*`)
+- Magic link login via email
+- JWT-based sessions (24h TTL)
+- Multi-tenancy with organizations
 
-No database or external services are connected. All responses are stateless.
+### Jobs API (`/v1/jobs/*`)
+- Full CRUD for job postings
+- AI-powered screening question generation
+- AI-powered hiring pipeline recommendations
+- Job lifecycle: draft → published → paused → closed
+- Public job listings for candidates
+
+### Billing API (`/v1/billing/*`)
+- Usage tracking per active role
+- Prorated billing by milliseconds
+- Invoice generation with pricing history
+
+### Pipeline (`/v1/assessment-providers`)
+- Assessment provider registry
+- Interview round configuration
+
+### Public API (`/public/*`)
+- Public job listings by slug (for candidates)
