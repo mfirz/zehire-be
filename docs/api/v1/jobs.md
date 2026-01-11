@@ -183,6 +183,7 @@ List jobs for the authenticated organization with cursor-based pagination.
       "status": "published",
       "questionsStatus": "completed",
       "pipelineStatus": "completed",
+      "companyName": "Acme Corp",
       "workType": "remote",
       "employmentType": "fulltime",
       "department": "Engineering",
@@ -198,6 +199,7 @@ List jobs for the authenticated organization with cursor-based pagination.
       "status": "draft",
       "questionsStatus": "none",
       "pipelineStatus": "none",
+      "companyName": null,
       "workType": "hybrid",
       "employmentType": "contract",
       "department": null,
@@ -229,6 +231,7 @@ List jobs for the authenticated organization with cursor-based pagination.
 | `status` | enum | `draft`, `published`, `paused`, or `closed` |
 | `questionsStatus` | enum | Question generation status |
 | `pipelineStatus` | enum | Pipeline generation status |
+| `companyName` | string | Company name (may be null) |
 | `workType` | enum | `remote`, `hybrid`, or `onsite` |
 | `employmentType` | enum | `fulltime`, `parttime`, `contract`, or `internship` |
 | `department` | string | Department name (may be null) |

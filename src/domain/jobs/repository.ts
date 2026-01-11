@@ -799,6 +799,7 @@ export class JobRepository {
       questions_status: QuestionsStatus;
       pipeline_status: PipelineStatus;
       public_slug: string | null;
+      company_name: string | null;
       work_type: string;
       employment_type: string;
       department: string | null;
@@ -817,8 +818,8 @@ export class JobRepository {
         .prepare(
           `
           SELECT id, title, status, questions_status, pipeline_status, public_slug,
-                 work_type, employment_type, department, location, description_text,
-                 created_at, published_at
+                 company_name, work_type, employment_type, department, location,
+                 description_text, created_at, published_at
           FROM jobs
           WHERE org_id = ?
             AND (created_at < ? OR (created_at = ? AND id < ?))
@@ -834,8 +835,8 @@ export class JobRepository {
         .prepare(
           `
           SELECT id, title, status, questions_status, pipeline_status, public_slug,
-                 work_type, employment_type, department, location, description_text,
-                 created_at, published_at
+                 company_name, work_type, employment_type, department, location,
+                 description_text, created_at, published_at
           FROM jobs
           WHERE org_id = ? ${statusFilter}
           ORDER BY created_at DESC, id DESC
@@ -867,6 +868,7 @@ export class JobRepository {
       questionsStatus: row.questions_status,
       pipelineStatus: row.pipeline_status ?? ("none" as PipelineStatus),
       publicSlug: row.public_slug,
+      companyName: row.company_name,
       workType: row.work_type as "remote" | "hybrid" | "onsite",
       employmentType: row.employment_type as "fulltime" | "parttime" | "contract" | "internship",
       department: row.department,

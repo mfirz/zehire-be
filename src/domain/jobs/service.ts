@@ -154,8 +154,8 @@ export class JobService {
       };
     }
 
-    // Invalidate cache if content changed (questions were reset)
-    if (result.contentChanged && job.org_id) {
+    // Invalidate list cache when any field is updated
+    if (result.updated && job.org_id) {
       await this.orgRepository.incrementJobsListVersion(job.org_id);
     }
 

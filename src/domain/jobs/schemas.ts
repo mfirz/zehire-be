@@ -259,6 +259,7 @@ export const JobListItemSchema = z.object({
   questionsStatus: z.enum(QUESTIONS_STATUSES),
   pipelineStatus: z.enum(PIPELINE_STATUSES),
   publicSlug: z.string().nullable(),
+  companyName: z.string().nullable(),
   workType: z.enum(WORK_TYPES),
   employmentType: z.enum(EMPLOYMENT_TYPES),
   department: z.string().nullable(),
