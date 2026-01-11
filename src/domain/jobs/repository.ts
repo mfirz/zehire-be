@@ -354,26 +354,25 @@ export class JobRepository {
 
   /**
    * Mark job's questions as pending (queued for generation).
-   * Also increments regeneration count and updates last_regeneration_at.
    */
   async markQuestionsPending(id: string): Promise<void> {
     const now = new Date().toISOString();
 
-    await this.db
-      .prepare(
-        `
+    await withDbRetry(() =>
+      this.db
+        .prepare(
+          `
         UPDATE jobs
         SET questions_status = 'pending',
-            regeneration_count = regeneration_count + 1,
-            last_regeneration_at = ?,
             error_message = NULL,
             error_code = NULL,
             updated_at = ?
         WHERE id = ? AND status = 'draft'
         `
-      )
-      .bind(now, now, id)
-      .run();
+        )
+        .bind(now, id)
+        .run()
+    );
   }
 
   /**
@@ -504,26 +503,25 @@ export class JobRepository {
 
   /**
    * Mark job's pipeline as pending (queued for generation).
-   * Also increments pipeline_regeneration_count and updates pipeline_last_regeneration_at.
    */
   async markPipelinePending(id: string): Promise<void> {
     const now = new Date().toISOString();
 
-    await this.db
-      .prepare(
-        `
+    await withDbRetry(() =>
+      this.db
+        .prepare(
+          `
         UPDATE jobs
         SET pipeline_status = 'pending',
-            pipeline_regeneration_count = pipeline_regeneration_count + 1,
-            pipeline_last_regeneration_at = ?,
             pipeline_error = NULL,
             pipeline_error_code = NULL,
             updated_at = ?
         WHERE id = ? AND status = 'draft'
         `
-      )
-      .bind(now, now, id)
-      .run();
+        )
+        .bind(now, id)
+        .run()
+    );
   }
 
   /**

@@ -5,9 +5,8 @@
  *
  * Requires JWT authentication. Only draft jobs can generate pipeline.
  *
- * Rate limited:
- * - Maximum 20 regenerations per job
- * - 1 minute cooldown between regenerations
+ * Pipeline can only be generated once per job. To generate a new pipeline,
+ * edit the job title or description (which resets the status).
  *
  * Returns 202 Accepted when successfully queued.
  */
@@ -36,21 +35,6 @@ export async function generatePipeline(
   const result = await service.generatePipeline(jobId, orgId);
 
   if (!result.success) {
-    // Rate limit errors return 429
-    if (
-      result.error.code === "REGENERATION_LIMIT_REACHED" ||
-      result.error.code === "REGENERATION_COOLDOWN"
-    ) {
-      const response = c.json({ error: result.error }, 429);
-
-      // Add Retry-After header for cooldown errors
-      if (result.error.code === "REGENERATION_COOLDOWN") {
-        response.headers.set("Retry-After", result.error.retryAfter.toString());
-      }
-
-      return response;
-    }
-
     const statusCode = result.error.code === "NOT_FOUND" ? 404 : 400;
     return c.json({ error: result.error }, statusCode);
   }

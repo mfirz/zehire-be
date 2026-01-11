@@ -520,10 +520,7 @@ Delete a draft job.
 
 Queue a job for question generation.
 
-### Rate Limits
-
-- Maximum 20 regenerations per job
-- 10 minute cooldown between regenerations
+**Note:** Questions can only be generated once per job. To generate new questions, edit the job title or description (which resets `questionsStatus` to `none`).
 
 ### Response
 
@@ -535,21 +532,29 @@ Queue a job for question generation.
 }
 ```
 
-#### 429 Too Many Requests
+#### 400 Bad Request
 
 ```json
 {
   "error": {
-    "code": "REGENERATION_COOLDOWN",
-    "message": "Please wait before regenerating questions",
-    "retryAfter": 542
+    "code": "ALREADY_GENERATED",
+    "message": "Questions already generated. Edit the job title or description to generate new questions."
   }
 }
 ```
 
-Also returns `Retry-After` header with seconds to wait.
+Or if already in progress:
 
-#### 400 Bad Request
+```json
+{
+  "error": {
+    "code": "ALREADY_PROCESSING",
+    "message": "Question generation is already in progress"
+  }
+}
+```
+
+Or if not a draft:
 
 ```json
 {
@@ -566,10 +571,7 @@ Also returns `Retry-After` header with seconds to wait.
 
 Queue a job for pipeline generation. The pipeline recommends assessment types and interview rounds based on job details.
 
-### Rate Limits
-
-- Maximum 20 regenerations per job
-- 10 minute cooldown between regenerations
+**Note:** Pipeline can only be generated once per job. To generate a new pipeline, edit the job title or description (which resets `pipelineStatus` to `none`).
 
 ### Response
 
@@ -581,21 +583,29 @@ Queue a job for pipeline generation. The pipeline recommends assessment types an
 }
 ```
 
-#### 429 Too Many Requests
+#### 400 Bad Request
 
 ```json
 {
   "error": {
-    "code": "REGENERATION_COOLDOWN",
-    "message": "Please wait before regenerating pipeline",
-    "retryAfter": 542
+    "code": "ALREADY_GENERATED",
+    "message": "Pipeline already generated. Edit the job title or description to generate a new pipeline."
   }
 }
 ```
 
-Also returns `Retry-After` header with seconds to wait.
+Or if already in progress:
 
-#### 400 Bad Request
+```json
+{
+  "error": {
+    "code": "ALREADY_PROCESSING",
+    "message": "Pipeline generation is already in progress"
+  }
+}
+```
+
+Or if not a draft:
 
 ```json
 {
@@ -1156,8 +1166,8 @@ https://yourapp.com/apply/acme-corp-senior-software-engineer-x7k3m
 | `PIPELINE_NOT_READY` | Pipeline must be completed before publishing |
 | `PIPELINE_NOT_GENERATED` | Pipeline must be generated before updating |
 | `CAPACITY_EXCEEDED` | Organization has reached active role capacity |
-| `REGENERATION_LIMIT_REACHED` | Maximum 20 regenerations per job reached |
-| `REGENERATION_COOLDOWN` | Must wait before regenerating (check retryAfter) |
+| `ALREADY_GENERATED` | Questions/pipeline already generated (edit job to reset) |
+| `ALREADY_PROCESSING` | Generation already in progress |
 | `INFERENCE_FAILED` | LLM inference step failed |
 | `ARCHETYPE_RESOLUTION_FAILED` | Archetype resolution failed |
 | `QUESTION_RENDERING_FAILED` | Question rendering failed |
@@ -1203,11 +1213,10 @@ Some errors are **retryable** (transient infrastructure issues) and the queue wi
 
 For retryable errors:
 - `questionsStatus` / `pipelineStatus` is reset to `pending` for queue retry
-- `regenerationCount` is **not** incremented (the attempt doesn't count)
 
 For permanent errors:
 - `questionsStatus` / `pipelineStatus` is set to `failed`
-- User must call the respective generate endpoint (`/generate` or `/generate-pipeline`) again to retry
+- User must edit the job title or description (to reset status), then call `/generate` or `/generate-pipeline` again
 
 ---
 

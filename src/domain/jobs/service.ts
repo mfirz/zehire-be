@@ -35,8 +35,8 @@ import { generateUniqueSlug } from "./slug";
 // CONSTANTS (imported from bindings but defined locally for reference)
 // =============================================================================
 
-const MAX_REGENERATIONS = 20; // MAX_REGENERATIONS_PER_JOB
-const COOLDOWN_MS = 1 * 60 * 1000; // REGENERATION_COOLDOWN_MINUTES * 60 * 1000
+// Note: Regeneration is not allowed. Questions/pipeline can only be generated once.
+// To get different results, edit the job content (which resets status to 'none').
 
 // =============================================================================
 // ERROR TYPES
@@ -46,8 +46,8 @@ export type JobServiceError =
   | { code: "NOT_FOUND"; message: string }
   | { code: "FORBIDDEN"; message: string }
   | { code: "INVALID_STATE"; message: string }
-  | { code: "REGENERATION_LIMIT_REACHED"; message: string }
-  | { code: "REGENERATION_COOLDOWN"; message: string; retryAfter: number }
+  | { code: "ALREADY_GENERATED"; message: string }
+  | { code: "ALREADY_PROCESSING"; message: string }
   | { code: "QUESTIONS_NOT_READY"; message: string }
   | { code: "PIPELINE_NOT_READY"; message: string }
   | {
@@ -194,37 +194,30 @@ export class JobService {
       };
     }
 
-    // Check regeneration limit
-    if (job.regeneration_count >= MAX_REGENERATIONS) {
+    // Check if already generated - no regeneration allowed
+    if (job.questions_status === "completed") {
       return {
         success: false,
         error: {
-          code: "REGENERATION_LIMIT_REACHED",
-          message: `Maximum ${MAX_REGENERATIONS} regenerations per job reached`,
+          code: "ALREADY_GENERATED",
+          message:
+            "Questions already generated. Edit the job title or description to generate new questions.",
         },
       };
     }
 
-    // Check cooldown
-    if (job.last_regeneration_at) {
-      const lastRegen = new Date(job.last_regeneration_at).getTime();
-      const cooldownEnd = lastRegen + COOLDOWN_MS;
-      const now = Date.now();
-
-      if (now < cooldownEnd) {
-        const retryAfter = Math.ceil((cooldownEnd - now) / 1000);
-        return {
-          success: false,
-          error: {
-            code: "REGENERATION_COOLDOWN",
-            message: `Please wait before regenerating questions`,
-            retryAfter,
-          },
-        };
-      }
+    // Check if already in progress
+    if (job.questions_status === "pending" || job.questions_status === "processing") {
+      return {
+        success: false,
+        error: {
+          code: "ALREADY_PROCESSING",
+          message: "Question generation is already in progress",
+        },
+      };
     }
 
-    // Mark as pending (this increments regeneration_count and sets last_regeneration_at)
+    // Mark as pending
     await this.repository.markQuestionsPending(jobId);
 
     // Queue for processing
@@ -238,9 +231,7 @@ export class JobService {
       await this.orgRepository.incrementJobsListVersion(job.org_id);
     }
 
-    console.log(
-      `[Service] Job ${jobId} queued for question generation (attempt ${job.regeneration_count + 1})`
-    );
+    console.log(`[Service] Job ${jobId} queued for question generation`);
 
     return { success: true, data: { queued: true } };
   }
@@ -277,38 +268,30 @@ export class JobService {
       };
     }
 
-    // Check regeneration limit
-    const pipelineRegenCount = job.pipeline_regeneration_count ?? 0;
-    if (pipelineRegenCount >= MAX_REGENERATIONS) {
+    // Check if already generated - no regeneration allowed
+    if (job.pipeline_status === "completed") {
       return {
         success: false,
         error: {
-          code: "REGENERATION_LIMIT_REACHED",
-          message: `Maximum ${MAX_REGENERATIONS} pipeline regenerations per job reached`,
+          code: "ALREADY_GENERATED",
+          message:
+            "Pipeline already generated. Edit the job title or description to generate a new pipeline.",
         },
       };
     }
 
-    // Check cooldown
-    if (job.pipeline_last_regeneration_at) {
-      const lastRegen = new Date(job.pipeline_last_regeneration_at).getTime();
-      const cooldownEnd = lastRegen + COOLDOWN_MS;
-      const now = Date.now();
-
-      if (now < cooldownEnd) {
-        const retryAfter = Math.ceil((cooldownEnd - now) / 1000);
-        return {
-          success: false,
-          error: {
-            code: "REGENERATION_COOLDOWN",
-            message: `Please wait before regenerating pipeline`,
-            retryAfter,
-          },
-        };
-      }
+    // Check if already in progress
+    if (job.pipeline_status === "pending" || job.pipeline_status === "processing") {
+      return {
+        success: false,
+        error: {
+          code: "ALREADY_PROCESSING",
+          message: "Pipeline generation is already in progress",
+        },
+      };
     }
 
-    // Mark as pending (this increments pipeline_regeneration_count and sets pipeline_last_regeneration_at)
+    // Mark as pending
     await this.repository.markPipelinePending(jobId);
 
     // Queue for processing with pipeline type
@@ -323,9 +306,7 @@ export class JobService {
       await this.orgRepository.incrementJobsListVersion(job.org_id);
     }
 
-    console.log(
-      `[Service] Job ${jobId} queued for pipeline generation (attempt ${pipelineRegenCount + 1})`
-    );
+    console.log(`[Service] Job ${jobId} queued for pipeline generation`);
 
     return { success: true, data: { queued: true } };
   }
