@@ -109,16 +109,43 @@ export class JobProcessor {
       const { code, message, retryable } = this.categorizeError(error);
 
       if (retryable) {
-        // For transient errors, reset to pending so queue can retry
-        // Also decrements regeneration_count since this attempt doesn't count
-        await this.repository.resetQuestionsForRetry(jobId);
+        // For transient errors, try to reset to pending so queue can retry
+        try {
+          await this.repository.resetQuestionsForRetry(jobId);
 
-        console.log(
-          `[Processor] Job ${jobId} hit transient error (${code}), reset for retry: ${message}`
-        );
+          console.log(
+            `[Processor] Job ${jobId} hit transient error (${code}), reset for retry: ${message}`
+          );
 
-        // Re-throw for queue retry mechanism
-        throw error;
+          // Re-throw for queue retry mechanism
+          throw error;
+        } catch (resetError) {
+          // If reset fails (e.g., persistent DB lock), fallback to marking as failed
+          console.log(
+            `[Processor] Job ${jobId} reset failed, falling back to failed status: ${resetError}`
+          );
+
+          try {
+            await this.repository.markQuestionsFailed(jobId, {
+              message: `${message} (reset also failed: ${resetError instanceof Error ? resetError.message : "unknown"})`,
+              code,
+            });
+
+            if (job.org_id) {
+              await this.orgRepository.incrementJobsListVersion(job.org_id);
+            }
+
+            console.log(`[Processor] Job ${jobId} marked as failed after reset failure`);
+          } catch (failError) {
+            // Last resort: log and let it go to DLQ
+            console.error(
+              `[Processor] Job ${jobId} could not be marked as failed: ${failError}`
+            );
+          }
+
+          // Don't re-throw - we've handled it (either marked failed or gave up)
+          return;
+        }
       }
 
       // For permanent errors, mark as failed
@@ -199,15 +226,43 @@ export class JobProcessor {
       const { code, message, retryable } = this.categorizePipelineError(error);
 
       if (retryable) {
-        // For transient errors, reset to pending so queue can retry
-        await this.repository.resetPipelineForRetry(jobId);
+        // For transient errors, try to reset to pending so queue can retry
+        try {
+          await this.repository.resetPipelineForRetry(jobId);
 
-        console.log(
-          `[Processor] Job ${jobId} pipeline hit transient error (${code}), reset for retry: ${message}`
-        );
+          console.log(
+            `[Processor] Job ${jobId} pipeline hit transient error (${code}), reset for retry: ${message}`
+          );
 
-        // Re-throw for queue retry mechanism
-        throw error;
+          // Re-throw for queue retry mechanism
+          throw error;
+        } catch (resetError) {
+          // If reset fails (e.g., persistent DB lock), fallback to marking as failed
+          console.log(
+            `[Processor] Job ${jobId} pipeline reset failed, falling back to failed status: ${resetError}`
+          );
+
+          try {
+            await this.repository.markPipelineFailed(jobId, {
+              message: `${message} (reset also failed: ${resetError instanceof Error ? resetError.message : "unknown"})`,
+              code,
+            });
+
+            if (job.org_id) {
+              await this.orgRepository.incrementJobsListVersion(job.org_id);
+            }
+
+            console.log(`[Processor] Job ${jobId} pipeline marked as failed after reset failure`);
+          } catch (failError) {
+            // Last resort: log and let it go to DLQ
+            console.error(
+              `[Processor] Job ${jobId} pipeline could not be marked as failed: ${failError}`
+            );
+          }
+
+          // Don't re-throw - we've handled it (either marked failed or gave up)
+          return;
+        }
       }
 
       // For permanent errors, mark as failed

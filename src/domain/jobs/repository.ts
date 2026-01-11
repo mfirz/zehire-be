@@ -480,9 +480,10 @@ export class JobRepository {
   async resetQuestionsForRetry(id: string): Promise<void> {
     const now = new Date().toISOString();
 
-    await this.db
-      .prepare(
-        `
+    await withDbRetry(() =>
+      this.db
+        .prepare(
+          `
         UPDATE jobs
         SET questions_status = 'pending',
             regeneration_count = MAX(0, regeneration_count - 1),
@@ -492,9 +493,10 @@ export class JobRepository {
             updated_at = ?
         WHERE id = ?
         `
-      )
-      .bind(now, id)
-      .run();
+        )
+        .bind(now, id)
+        .run()
+    );
   }
 
   // ===========================================================================
@@ -626,9 +628,10 @@ export class JobRepository {
   async resetPipelineForRetry(id: string): Promise<void> {
     const now = new Date().toISOString();
 
-    await this.db
-      .prepare(
-        `
+    await withDbRetry(() =>
+      this.db
+        .prepare(
+          `
         UPDATE jobs
         SET pipeline_status = 'pending',
             pipeline_regeneration_count = MAX(0, pipeline_regeneration_count - 1),
@@ -638,9 +641,10 @@ export class JobRepository {
             updated_at = ?
         WHERE id = ?
         `
-      )
-      .bind(now, id)
-      .run();
+        )
+        .bind(now, id)
+        .run()
+    );
   }
 
   /**
