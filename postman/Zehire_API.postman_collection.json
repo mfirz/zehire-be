@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "zehire-api-collection-v1",
     "name": "Zehire API",
-    "description": "Complete API collection for Zehire Backend.\n\n## Setup\n\n1. Set the `base_url` variable to your environment (default: `http://localhost:8787`)\n2. Use **Auth > Login** to initiate magic link login\n3. Check your email and copy the token from the magic link\n4. Use **Auth > Callback** with the token - JWT will be auto-saved\n5. All authenticated endpoints will use the saved JWT automatically\n\n## Variables\n\n- `base_url`: API base URL\n- `jwt_token`: JWT token (auto-saved after callback)\n- `job_id`: Current job ID for testing\n- `public_slug`: Public job slug for testing\n- `draft_id`: Application draft ID (auto-saved)\n- `resume_token`: Draft resume token (auto-saved)",
+    "description": "Complete API collection for Zehire Backend.\n\n## Setup\n\n1. Set the `base_url` variable to your environment (default: `http://localhost:8787`)\n2. Use **Auth > Login** to initiate magic link login\n3. Check your email and copy the token from the magic link\n4. Use **Auth > Callback** with the token - JWT will be auto-saved\n5. All authenticated endpoints will use the saved JWT automatically\n\n## Variables\n\n- `base_url`: API base URL\n- `jwt_token`: JWT token (auto-saved after callback)\n- `job_id`: Current job ID for testing\n- `public_slug`: Public job slug for testing\n- `draft_id`: Application draft ID (auto-saved)\n- `resume_token`: Draft resume token (auto-saved)\n- `application_id`: Application ID for testing",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -38,6 +38,11 @@
     },
     {
       "key": "resume_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "application_id",
       "value": "",
       "type": "string"
     }
@@ -494,6 +499,133 @@
               "response": []
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "Applications",
+      "description": "Application management endpoints for recruiters.\n\nAll endpoints require JWT authentication.\n\n**Application Status Flow:**\n```\npending → screening → assessment → interview → offer\n                                              ↓\n                                          rejected\n```\n\n**Decision Postures:**\n- LOW_REGRET_RISK: Strong signals, confident hire\n- SOME_UNCERTAINTY: Mixed signals, proceed with caution\n- HIGH_UNCERTAINTY: Weak signals, higher risk",
+      "item": [
+        {
+          "name": "List Applications for Job",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has applications array', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('applications');",
+                  "    pm.expect(jsonData.applications).to.be.an('array');",
+                  "    pm.expect(jsonData).to.have.property('pagination');",
+                  "});",
+                  "",
+                  "// Save first application ID if available",
+                  "const jsonData = pm.response.json();",
+                  "if (jsonData.applications && jsonData.applications.length > 0) {",
+                  "    pm.collectionVariables.set('application_id', jsonData.applications[0].id);",
+                  "    console.log('Application ID saved:', jsonData.applications[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/jobs/{{job_id}}/applications?limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "jobs", "{{job_id}}", "applications"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Number of results (1-100, default: 50)"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Pagination offset",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "pending",
+                  "description": "Filter: pending, screening, assessment, interview, offer, rejected, withdrawn",
+                  "disabled": true
+                },
+                {
+                  "key": "signalsStatus",
+                  "value": "completed",
+                  "description": "Filter: pending, processing, completed, failed",
+                  "disabled": true
+                },
+                {
+                  "key": "posture",
+                  "value": "LOW_REGRET_RISK",
+                  "description": "Filter: LOW_REGRET_RISK, SOME_UNCERTAINTY, HIGH_UNCERTAINTY",
+                  "disabled": true
+                },
+                {
+                  "key": "sort",
+                  "value": "createdAt",
+                  "description": "Sort field: createdAt, updatedAt, candidateName",
+                  "disabled": true
+                },
+                {
+                  "key": "order",
+                  "value": "desc",
+                  "description": "Sort order: asc, desc",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List all applications for a job.\n\n**Supports filtering by:**\n- `status`: Application pipeline status\n- `signalsStatus`: Signal extraction status\n- `posture`: Decision posture (after signals computed)\n\n**Pagination:**\n- `limit`: Max results (1-100)\n- `offset`: Skip first N results\n\n**Sorting:**\n- `sort`: createdAt, updatedAt, candidateName\n- `order`: asc, desc"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Application Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/applications/{{application_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "applications", "{{application_id}}"]
+            },
+            "description": "Get full application details including answers and extracted signals.\n\n**Returns:**\n- Candidate info (email, name)\n- Application status\n- Signal extraction status and results\n- Decision posture\n- All answers with extracted signals per answer\n\n**Note:** signalEvaluations and extractedSignals will be null until signal extraction completes."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Application Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"screening\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/applications/{{application_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "applications", "{{application_id}}"]
+            },
+            "description": "Update application status to move candidate through the hiring pipeline.\n\n**Valid status values:**\n- `pending` - Just submitted\n- `screening` - Under initial review\n- `assessment` - In assessment phase\n- `interview` - Interview scheduled/in progress\n- `offer` - Offer extended\n- `rejected` - Rejected by recruiter\n- `withdrawn` - Withdrawn by candidate\n\n**Typical flow:**\npending → screening → assessment → interview → offer"
+          },
+          "response": []
         }
       ]
     },

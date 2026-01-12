@@ -17,9 +17,12 @@ import {
   type Application,
   type ApplicationDraft,
   type ApplicationDraftRow,
+  type ApplicationDetail,
   type ApplicationRow,
+  type ApplicationSummary,
   type Answer,
   type AnswerRow,
+  type ListApplicationsQuery,
   type PublicApplyInput,
   type SaveDraftInput,
 } from "./schemas";
@@ -400,6 +403,152 @@ export class ApplicationRepository {
       .run();
 
     return result.meta.changes ?? 0;
+  }
+
+  // ===========================================================================
+  // RECRUITER API (Phase 0B)
+  // ===========================================================================
+
+  /**
+   * List applications for a job with optional filtering.
+   */
+  async listByJobId(
+    jobId: string,
+    query: ListApplicationsQuery
+  ): Promise<{ applications: ApplicationSummary[]; total: number }> {
+    const conditions: string[] = ["job_id = ?"];
+    const params: unknown[] = [jobId];
+
+    if (query.status) {
+      conditions.push("status = ?");
+      params.push(query.status);
+    }
+
+    if (query.signalsStatus) {
+      conditions.push("signals_status = ?");
+      params.push(query.signalsStatus);
+    }
+
+    if (query.posture) {
+      conditions.push("decision_posture = ?");
+      params.push(query.posture);
+    }
+
+    const whereClause = conditions.join(" AND ");
+
+    // Get total count
+    const countResult = await this.db
+      .prepare(`SELECT COUNT(*) as count FROM applications WHERE ${whereClause}`)
+      .bind(...params)
+      .first<{ count: number }>();
+
+    const total = countResult?.count ?? 0;
+
+    // Get paginated results
+    const sortColumn = {
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+      candidateName: "candidate_name",
+    }[query.sort];
+
+    const results = await this.db
+      .prepare(
+        `
+        SELECT
+          id, candidate_email, candidate_name, status,
+          signals_status, decision_posture, created_at, updated_at
+        FROM applications
+        WHERE ${whereClause}
+        ORDER BY ${sortColumn} ${query.order.toUpperCase()}
+        LIMIT ? OFFSET ?
+        `
+      )
+      .bind(...params, query.limit, query.offset)
+      .all();
+
+    const applications: ApplicationSummary[] = results.results.map((row) => ({
+      id: row.id as string,
+      candidateEmail: row.candidate_email as string,
+      candidateName: row.candidate_name as string | null,
+      status: row.status as string,
+      signalsStatus: row.signals_status as string,
+      decisionPosture: row.decision_posture as string | null,
+      createdAt: row.created_at as string,
+      updatedAt: row.updated_at as string,
+    }));
+
+    return { applications, total };
+  }
+
+  /**
+   * Get full application details including answers.
+   */
+  async getDetailById(id: string): Promise<ApplicationDetail | null> {
+    const application = await this.findById(id);
+    if (!application) return null;
+
+    const answers = await this.getAnswers(id);
+
+    return {
+      id: application.id,
+      jobId: application.jobId,
+      candidateEmail: application.candidateEmail,
+      candidateName: application.candidateName,
+      status: application.status,
+      signalsStatus: application.signalsStatus,
+      decisionPosture: application.decisionPosture,
+      signalEvaluations: application.signalEvaluations
+        ? JSON.parse(application.signalEvaluations)
+        : null,
+      signalsErrorMessage: application.signalsErrorMessage,
+      signalsErrorCode: application.signalsErrorCode,
+      createdAt: application.createdAt,
+      updatedAt: application.updatedAt,
+      signalsComputedAt: application.signalsComputedAt,
+      answers: answers.map((a) => ({
+        id: a.id,
+        archetypeId: a.archetypeId,
+        questionText: a.questionText,
+        answerText: a.answerText,
+        extractedSignals: a.extractedSignals ? JSON.parse(a.extractedSignals) : null,
+        extractionStatus: a.extractionStatus,
+        answeredAt: a.answeredAt,
+        extractedAt: a.extractedAt,
+      })),
+    };
+  }
+
+  /**
+   * Update application status.
+   */
+  async updateStatus(id: string, status: string): Promise<Application | null> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .prepare(
+        `
+        UPDATE applications
+        SET status = ?, updated_at = ?
+        WHERE id = ?
+        `
+      )
+      .bind(status, now, id)
+      .run();
+
+    return this.findById(id);
+  }
+
+  /**
+   * Get the job_id for an application.
+   * Used for authorization checks.
+   */
+  async getJobId(applicationId: string): Promise<string | null> {
+    const result = await this.db
+      .prepare(`SELECT job_id FROM applications WHERE id = ?`)
+      .bind(applicationId)
+      .first<{ job_id: string }>();
+
+    return result?.job_id ?? null;
   }
 
   // ===========================================================================

@@ -284,3 +284,81 @@ export interface ApplicationDraft {
   createdAt: string;
   updatedAt: string;
 }
+
+// =============================================================================
+// RECRUITER API SCHEMAS (Phase 0B)
+// =============================================================================
+
+/**
+ * Schema for updating application status.
+ */
+export const UpdateApplicationSchema = z.object({
+  status: z.enum(APPLICATION_STATUSES),
+});
+
+export type UpdateApplicationInput = z.infer<typeof UpdateApplicationSchema>;
+
+/**
+ * Application summary for list view.
+ * Includes computed posture but not full signal details.
+ */
+export const ApplicationSummarySchema = z.object({
+  id: z.string(),
+  candidateEmail: z.string(),
+  candidateName: z.string().nullable(),
+  status: z.string(),
+  signalsStatus: z.string(),
+  decisionPosture: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type ApplicationSummary = z.infer<typeof ApplicationSummarySchema>;
+
+/**
+ * Full application detail including answers and signals.
+ */
+export const ApplicationDetailSchema = z.object({
+  id: z.string(),
+  jobId: z.string(),
+  candidateEmail: z.string(),
+  candidateName: z.string().nullable(),
+  status: z.string(),
+  signalsStatus: z.string(),
+  decisionPosture: z.string().nullable(),
+  signalEvaluations: z.unknown().nullable(), // Parsed JSON
+  signalsErrorMessage: z.string().nullable(),
+  signalsErrorCode: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  signalsComputedAt: z.string().nullable(),
+  answers: z.array(
+    z.object({
+      id: z.string(),
+      archetypeId: z.string(),
+      questionText: z.string(),
+      answerText: z.string().nullable(),
+      extractedSignals: z.unknown().nullable(), // Parsed JSON
+      extractionStatus: z.string(),
+      answeredAt: z.string().nullable(),
+      extractedAt: z.string().nullable(),
+    })
+  ),
+});
+
+export type ApplicationDetail = z.infer<typeof ApplicationDetailSchema>;
+
+/**
+ * Query parameters for listing applications.
+ */
+export const ListApplicationsQuerySchema = z.object({
+  status: z.enum(APPLICATION_STATUSES).optional(),
+  signalsStatus: z.enum(SIGNALS_STATUSES).optional(),
+  posture: z.enum(["LOW_REGRET_RISK", "SOME_UNCERTAINTY", "HIGH_UNCERTAINTY"]).optional(),
+  limit: z.coerce.number().min(1).max(100).default(50),
+  offset: z.coerce.number().min(0).default(0),
+  sort: z.enum(["createdAt", "updatedAt", "candidateName"]).default("createdAt"),
+  order: z.enum(["asc", "desc"]).default("desc"),
+});
+
+export type ListApplicationsQuery = z.infer<typeof ListApplicationsQuerySchema>;

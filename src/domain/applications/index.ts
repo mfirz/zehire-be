@@ -25,6 +25,11 @@ export {
   PublicApplyResponseSchema,
   ResumeDraftResponseSchema,
   SaveDraftResponseSchema,
+  // Phase 0B: Recruiter API schemas
+  ApplicationDetailSchema,
+  ApplicationSummarySchema,
+  ListApplicationsQuerySchema,
+  UpdateApplicationSchema,
 } from "./schemas";
 
 // Types
@@ -46,4 +51,9 @@ export type {
   SaveDraftInput,
   SaveDraftResponse,
   SignalsStatus,
+  // Phase 0B: Recruiter API types
+  ApplicationDetail,
+  ApplicationSummary,
+  ListApplicationsQuery,
+  UpdateApplicationInput,
 } from "./schemas";

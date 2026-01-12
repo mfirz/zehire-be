@@ -125,6 +125,9 @@ All errors follow a consistent format:
 | POST   | `/v1/jobs/:id/pause`            | Required | Pause published job            |
 | POST   | `/v1/jobs/:id/resume`           | Required | Resume paused job              |
 | POST   | `/v1/jobs/:id/close`            | Required | Close job permanently          |
+| GET    | `/v1/jobs/:id/applications`     | Required | List applications for job      |
+| GET    | `/v1/applications/:id`          | Required | Get application details        |
+| PATCH  | `/v1/applications/:id`          | Required | Update application status      |
 | GET    | `/v1/assessment-providers`      | Required | List assessment providers      |
 | GET    | `/v1/billing`                   | Required | Current month usage summary    |
 | GET    | `/v1/billing/preview`           | Required | Preview current charges        |
@@ -140,7 +143,9 @@ All errors follow a consistent format:
 | POST   | `/public/jobs/:slug/apply/draft`        | Save application progress       |
 | GET    | `/public/jobs/:slug/apply/draft/:id`    | Resume saved application        |
 
-See [Public Applications API](./public-applications.md) for application endpoint details.
+See [Public Applications API](./public-applications.md) for candidate-facing application endpoints.
+
+See [Applications Management API](./applications.md) for recruiter-facing application management.
 
 ### Internal (Public)
 
