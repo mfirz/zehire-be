@@ -7,15 +7,18 @@
  * - Signal-first evaluation
  * - No ranking or scoring
  * - Explicit, auditable selection reasons
- * - Candidate fatigue protection (max 5 questions)
+ * - Candidate fatigue protection (max 3 questions)
+ * - Critical signal prioritization
  */
 import {
   ARCHETYPE_PRIORITY,
+  CRITICAL_ARCHETYPES,
   EXCLUSION_REASONS,
   MAX_ARCHETYPES_PER_JOB,
   meetsExperienceLevel,
   meetsRiskLevel,
   MIN_ARCHETYPES_PER_JOB,
+  MIN_CRITICAL_ARCHETYPES,
   SELECTION_REASONS,
 } from "./constants";
 import { ARCHETYPE_REGISTRY, findArchetype } from "./registry";
@@ -242,7 +245,13 @@ export interface ResolveArchetypesOptions {
  *
  * This is the main entry point for archetype selection.
  * It evaluates all archetypes against the job context,
- * sorts by priority, and caps at the maximum limit.
+ * prioritizes critical archetypes, sorts by priority, and caps at the maximum limit.
+ *
+ * Updated logic for "All Required + Smart Design":
+ * 1. First, activate critical archetypes (if rules match)
+ * 2. Then, fill remaining slots with supporting archetypes
+ * 3. Ensure critical signal coverage for posture computation
+ * 4. Cap at MAX_ARCHETYPES_PER_JOB (3)
  *
  * @example
  * ```typescript
@@ -261,7 +270,7 @@ export interface ResolveArchetypesOptions {
  * })
  *
  * console.log(result.archetypes.map(a => a.id))
- * // ["situational_uncertainty_story", "explaining_complexity", "technical_depth_probe", ...]
+ * // ["situational_uncertainty_story", "ownership_of_outcome", "technical_depth_probe"]
  * ```
  */
 export function resolveArchetypes(options: ResolveArchetypesOptions): ArchetypeResolutionResult {
@@ -272,18 +281,29 @@ export function resolveArchetypes(options: ResolveArchetypesOptions): ArchetypeR
     includeExcluded = true,
   } = options;
 
-  const activated: ResolvedArchetype[] = [];
+  const criticalActivated: ResolvedArchetype[] = [];
+  const supportingActivated: ResolvedArchetype[] = [];
   const excluded: Array<{ id: string; reason: string }> = [];
 
-  // Evaluate each archetype
+  // Set for O(1) lookup of critical archetype IDs
+  const criticalArchetypeIds = new Set<string>(CRITICAL_ARCHETYPES);
+
+  // Evaluate each archetype and separate into critical vs supporting
   for (const archetype of registry.archetypes) {
     const result = evaluateActivationRules(archetype, jobContext);
+    const isCritical = criticalArchetypeIds.has(archetype.id);
 
     if (result.activated) {
-      activated.push({
+      const resolved: ResolvedArchetype = {
         ...archetype,
         selectionReason: result.reason,
-      });
+      };
+
+      if (isCritical) {
+        criticalActivated.push(resolved);
+      } else {
+        supportingActivated.push(resolved);
+      }
     } else if (includeExcluded) {
       excluded.push({
         id: archetype.id,
@@ -292,16 +312,31 @@ export function resolveArchetypes(options: ResolveArchetypesOptions): ArchetypeR
     }
   }
 
-  // Sort by priority
-  const sorted = sortByPriority(activated);
+  // Sort each group by priority
+  const sortedCritical = sortByPriority(criticalActivated);
+  const sortedSupporting = sortByPriority(supportingActivated);
 
-  // Apply capacity limit
-  const selected = sorted.slice(0, maxArchetypes);
-  const capacityExcluded = sorted.slice(maxArchetypes);
+  // Build final selection:
+  // 1. Include critical archetypes first (prioritized)
+  // 2. Fill remaining slots with supporting archetypes
+  const selected: ResolvedArchetype[] = [];
 
-  // Add capacity-excluded archetypes to excluded list
-  if (includeExcluded) {
-    for (const archetype of capacityExcluded) {
+  // Add critical archetypes (up to maxArchetypes)
+  const criticalToAdd = Math.min(sortedCritical.length, maxArchetypes);
+  selected.push(...sortedCritical.slice(0, criticalToAdd));
+
+  // Add supporting archetypes to fill remaining slots
+  const remainingSlots = maxArchetypes - selected.length;
+  if (remainingSlots > 0) {
+    selected.push(...sortedSupporting.slice(0, remainingSlots));
+  }
+
+  // Track capacity-excluded archetypes
+  const selectedIds = new Set(selected.map((a) => a.id));
+
+  // Add unselected critical archetypes to excluded list
+  for (const archetype of sortedCritical) {
+    if (!selectedIds.has(archetype.id) && includeExcluded) {
       excluded.push({
         id: archetype.id,
         reason: EXCLUSION_REASONS.capacityReached,
@@ -309,11 +344,33 @@ export function resolveArchetypes(options: ResolveArchetypesOptions): ArchetypeR
     }
   }
 
-  // Ensure minimum diversity
+  // Add unselected supporting archetypes to excluded list
+  for (const archetype of sortedSupporting) {
+    if (!selectedIds.has(archetype.id) && includeExcluded) {
+      excluded.push({
+        id: archetype.id,
+        reason: EXCLUSION_REASONS.capacityReached,
+      });
+    }
+  }
+
+  // Calculate critical coverage for metadata
+  const criticalCount = selected.filter((a) => criticalArchetypeIds.has(a.id)).length;
+
+  // Warn if not enough critical archetypes
+  if (criticalCount < MIN_CRITICAL_ARCHETYPES) {
+    console.warn(
+      `Only ${criticalCount} critical archetypes activated (recommended minimum: ${MIN_CRITICAL_ARCHETYPES}). ` +
+        `Posture computation may produce HIGH_UNCERTAINTY for applications. ` +
+        `Consider reviewing job context or activation rules.`
+    );
+  }
+
+  // Warn if total is below minimum
   if (selected.length < MIN_ARCHETYPES_PER_JOB) {
     console.warn(
       `Only ${selected.length} archetypes activated for job context. ` +
-        `Consider reviewing job context or activation rules.`
+        `Minimum is ${MIN_ARCHETYPES_PER_JOB}.`
     );
   }
 
@@ -322,6 +379,11 @@ export function resolveArchetypes(options: ResolveArchetypesOptions): ArchetypeR
     archetypes: selected,
     excluded,
     resolvedAt: new Date().toISOString(),
+    metadata: {
+      criticalCount,
+      supportingCount: selected.length - criticalCount,
+      maxArchetypes,
+    },
   };
 }
 

@@ -49,6 +49,7 @@ export type {
   Archetype,
   ArchetypeCategory,
   ArchetypeRegistry,
+  ArchetypeResolutionMetadata,
   ArchetypeResolutionResult,
   CollaborationLevel,
   DecisionImpact,
@@ -88,6 +89,8 @@ export {
 export {
   // Priority
   ARCHETYPE_PRIORITY,
+  // Critical archetypes for signal coverage
+  CRITICAL_ARCHETYPES,
   // Defaults
   DEFAULT_RENDERING_CONSTRAINTS,
   // Domain groups
@@ -98,6 +101,7 @@ export {
   // Limits
   MAX_ARCHETYPES_PER_JOB,
   MIN_ARCHETYPES_PER_JOB,
+  MIN_CRITICAL_ARCHETYPES,
   RISK_LEVEL_ORDER,
   // Reason templates
   SELECTION_REASONS,

@@ -402,6 +402,20 @@ export interface ResolvedArchetype extends Archetype {
 }
 
 /**
+ * Metadata about archetype resolution for transparency.
+ */
+export interface ArchetypeResolutionMetadata {
+  /** Number of critical archetypes included in selection */
+  criticalCount: number;
+
+  /** Number of supporting (non-critical) archetypes included */
+  supportingCount: number;
+
+  /** Maximum archetypes allowed (config value) */
+  maxArchetypes: number;
+}
+
+/**
  * Result of archetype resolution for a job.
  */
 export interface ArchetypeResolutionResult {
@@ -419,4 +433,7 @@ export interface ArchetypeResolutionResult {
 
   /** Timestamp of resolution */
   resolvedAt: string;
+
+  /** Resolution metadata for transparency (critical vs supporting breakdown) */
+  metadata?: ArchetypeResolutionMetadata;
 }

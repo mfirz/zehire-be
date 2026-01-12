@@ -11,15 +11,47 @@ import type { ExperienceLevel, RiskLevel } from "./types";
 // =============================================================================
 
 /**
- * Maximum archetypes per job (candidate fatigue protection).
- * Research shows >5 questions significantly reduces completion rates.
+ * Maximum archetypes per job.
+ *
+ * Reduced from 5 to 3 based on "All Required + Smart Design" approach:
+ * - 3 questions = ~10 min completion time
+ * - 80% completion rate (with save & continue)
+ * - 95% signal quality
+ *
+ * See: prompts-core-adjustment/README.md for design rationale.
  */
-export const MAX_ARCHETYPES_PER_JOB = 5;
+export const MAX_ARCHETYPES_PER_JOB = 3;
 
 /**
  * Minimum archetypes per job (ensures signal diversity).
+ * Must have at least 2 to cover critical signals.
  */
 export const MIN_ARCHETYPES_PER_JOB = 2;
+
+// =============================================================================
+// CRITICAL ARCHETYPES
+// =============================================================================
+
+/**
+ * Critical archetypes that should be prioritized for selection.
+ * These archetypes probe signals required for LOW_REGRET_RISK posture.
+ *
+ * Critical signals:
+ * - decision_under_uncertainty → situational_uncertainty_story
+ * - accountability → ownership_of_outcome
+ * - learning_from_failure → failure_and_recovery
+ */
+export const CRITICAL_ARCHETYPES = [
+  "situational_uncertainty_story", // → decision_under_uncertainty
+  "ownership_of_outcome", // → accountability
+  "failure_and_recovery", // → learning_from_failure
+] as const;
+
+/**
+ * Minimum number of critical archetypes that should be included.
+ * With 3 max archetypes, we aim for at least 2 critical ones.
+ */
+export const MIN_CRITICAL_ARCHETYPES = 2;
 
 // =============================================================================
 // ARCHETYPE PRIORITY ORDER
