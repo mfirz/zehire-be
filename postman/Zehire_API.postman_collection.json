@@ -573,6 +573,26 @@
       ]
     },
     {
+      "name": "Capacity",
+      "description": "Organization capacity endpoints.\n\nGet capacity status for various resources.\n\n**Currently Available:**\n- jobs: Active roles capacity (published + paused jobs)\n\n**Future:**\n- users: Team member capacity\n- candidates: Candidate pool capacity",
+      "item": [
+        {
+          "name": "Get Capacity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/capacity",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "capacity"]
+            },
+            "description": "Get organization capacity status.\n\n**Response:**\n```json\n{\n  \"jobs\": {\n    \"activeRoles\": 2,\n    \"capacity\": 3,\n    \"isOverCapacity\": false,\n    \"canActivate\": true\n  }\n}\n```\n\n**Fields:**\n- `activeRoles`: Count of published + paused jobs\n- `capacity`: Maximum allowed active roles\n- `isOverCapacity`: True if activeRoles > capacity (soft warning)\n- `canActivate`: True if a new role can be published"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "Assessment Providers",
       "description": "Assessment provider endpoints.\n\nProviders are used when configuring job pipelines.\n\n**Available Providers:**\n- hackerrank: Technical assessments\n- codility: Coding tests\n- testgorilla: Pre-employment testing\n- takehome: Custom take-home projects\n- none: Skip assessment",
       "item": [

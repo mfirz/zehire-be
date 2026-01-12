@@ -212,12 +212,6 @@ List jobs for the authenticated organization with cursor-based pagination.
   ],
   "page": {
     "nextCursor": "eyJjIjoiMjAyNi0wMS0wMVQwOTozMDowMFoiLCJpIjoieHl6Nzg5YWJjMDEyZGVmMzQifQ"
-  },
-  "capacity": {
-    "activeRoles": 1,
-    "capacity": 3,
-    "isOverCapacity": false,
-    "canActivate": true
   }
 }
 ```
@@ -241,11 +235,7 @@ List jobs for the authenticated organization with cursor-based pagination.
 | `createdAt` | string | ISO 8601 creation timestamp |
 | `publishedAt` | string | ISO 8601 publish timestamp (null if not published) |
 
-The `capacity` object shows the organization's active role usage:
-- `activeRoles`: Count of published + paused jobs
-- `capacity`: Maximum allowed active roles
-- `isOverCapacity`: True if activeRoles > capacity (soft warning)
-- `canActivate`: True if a new role can be published
+**Note:** Organization capacity status is available via [GET /v1/capacity](./capacity.md).
 
 ---
 

@@ -14,22 +14,18 @@
  * Query Parameters:
  * - limit: number of items per page (default: 20, max: 50)
  * - cursor: opaque cursor for pagination
+ *
+ * Note: Capacity status has been moved to GET /v1/capacity
  */
 
 import type { Context } from "hono";
+import { CACHE_DOMAIN, CACHE_TTL, CACHE_VERSIONS } from "../../../config/cache";
 import {
   JobRepository,
   OrgRepository,
   type JobListResponse,
 } from "../../../domain/jobs";
 import { JOB_STATUSES, type AuthVariables, type Env, type JobStatus } from "../../../types/bindings";
-
-// =============================================================================
-// CONSTANTS
-// =============================================================================
-
-/** Cache for 1 year (effectively forever, invalidated by version change) */
-const CACHE_MAX_AGE_SECONDS = 31536000;
 
 /** Default page size */
 const DEFAULT_LIMIT = 20;
@@ -75,14 +71,9 @@ export async function listJobs(
     }
   }
 
-  // Get org repository for cache versioning and capacity
+  // Get org repository for cache versioning
   const orgRepository = new OrgRepository(c.env.DB);
-
-  // Get version and capacity in parallel
-  const [jobsListVersion, capacityStatus] = await Promise.all([
-    orgRepository.getJobsListVersion(orgId),
-    orgRepository.getCapacityStatus(orgId),
-  ]);
+  const jobsListVersion = await orgRepository.getJobsListVersion(orgId);
 
   // Construct cache key with version
   // When version changes, this becomes a different cache key = automatic invalidation
@@ -93,13 +84,10 @@ export async function listJobs(
   const cachedResponse = await cache.match(cacheKey);
 
   if (cachedResponse) {
-    // Cache hit - but we need to inject fresh capacity status
-    // Capacity can change independently of job list version
-    const cachedData = await cachedResponse.json() as JobListResponse;
-    return c.json({
-      ...cachedData,
-      capacity: capacityStatus,
-    }, 200);
+    return new Response(cachedResponse.body, {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   // Cache miss - query database
@@ -116,7 +104,6 @@ export async function listJobs(
     page: {
       nextCursor,
     },
-    capacity: capacityStatus,
   };
 
   // Create response with cache headers
@@ -127,7 +114,7 @@ export async function listJobs(
     status: 200,
     headers: {
       "Content-Type": "application/json",
-      "Cache-Control": `public, max-age=${CACHE_MAX_AGE_SECONDS}`,
+      "Cache-Control": `public, max-age=${CACHE_TTL.jobsList}`,
     },
   });
 
@@ -143,16 +130,19 @@ export async function listJobs(
 // =============================================================================
 
 /**
- * Build cache key including org ID and version.
+ * Build cache key including org ID, data version, and API version.
  *
  * Cloudflare Cache API matches on URL only, not headers.
- * We use a synthetic internal URL that encodes org, version, and query params.
- * When jobs_list_version increments, the URL changes = automatic cache miss.
+ * We use a synthetic internal URL that encodes org, versions, and query params.
+ *
+ * Cache invalidation happens when:
+ * - jobsListVersion increments (job data changed)
+ * - CACHE_VERSIONS.jobsList increments (API schema changed)
  *
  * User-facing URL: GET /v1/jobs?limit=20
- * Cache key URL:   https://cache.zehire.internal/jobs-list/org_123/5?limit=20
+ * Cache key URL:   https://cache.zehire.internal/jobs-list/v2/org_123/5?limit=20
  */
 function buildCacheKey(url: URL, orgId: string, jobsListVersion: number): Request {
-  const cacheKeyUrl = `https://cache.zehire.internal/jobs-list/${orgId}/${jobsListVersion}${url.search}`;
+  const cacheKeyUrl = `https://${CACHE_DOMAIN}/jobs-list/v${CACHE_VERSIONS.jobsList}/${orgId}/${jobsListVersion}${url.search}`;
   return new Request(cacheKeyUrl);
 }

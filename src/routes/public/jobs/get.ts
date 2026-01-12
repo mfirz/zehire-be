@@ -15,15 +15,9 @@
  */
 
 import type { Context } from "hono";
+import { CACHE_DOMAIN, CACHE_TTL, CACHE_VERSIONS } from "../../../config/cache";
 import { JobRepository, JobService, OrgRepository } from "../../../domain/jobs";
 import type { Env } from "../../../types/bindings";
-
-// =============================================================================
-// CONSTANTS
-// =============================================================================
-
-/** Cache for 1 hour - published jobs are stable but may be paused/closed */
-const CACHE_MAX_AGE_SECONDS = 3600;
 
 // =============================================================================
 // HANDLER
@@ -63,7 +57,7 @@ export async function getPublicJob(c: Context<{ Bindings: Env }>): Promise<Respo
     status: 200,
     headers: {
       "Content-Type": "application/json",
-      "Cache-Control": `public, max-age=${CACHE_MAX_AGE_SECONDS}`,
+      "Cache-Control": `public, max-age=${CACHE_TTL.publicJob}`,
     },
   });
 
@@ -79,7 +73,10 @@ export async function getPublicJob(c: Context<{ Bindings: Env }>): Promise<Respo
 
 /**
  * Build cache key for a public job.
+ *
+ * Includes API version for schema change invalidation.
+ * Cache key URL: https://cache.zehire.internal/public/jobs/v1/{slug}
  */
 function buildCacheKey(slug: string): Request {
-  return new Request(`https://cache.zehire.internal/public/jobs/${slug}`);
+  return new Request(`https://${CACHE_DOMAIN}/public/jobs/v${CACHE_VERSIONS.publicJob}/${slug}`);
 }
