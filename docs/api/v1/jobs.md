@@ -188,6 +188,9 @@ List jobs for the authenticated organization with cursor-based pagination.
       "employmentType": "fulltime",
       "department": "Engineering",
       "location": "Remote",
+      "salaryMin": 120000,
+      "salaryMax": 180000,
+      "salaryCurrency": "USD",
       "descriptionPreview": "We're looking for a senior backend engineer to join our team and help build scalable APIs...",
       "publicSlug": "acme-corp-senior-backend-engineer-x7k3m",
       "createdAt": "2026-01-01T10:00:00Z",
@@ -204,6 +207,9 @@ List jobs for the authenticated organization with cursor-based pagination.
       "employmentType": "contract",
       "department": null,
       "location": "San Francisco, CA",
+      "salaryMin": null,
+      "salaryMax": null,
+      "salaryCurrency": null,
       "descriptionPreview": "Join our frontend team to build beautiful, responsive user interfaces using React and...",
       "publicSlug": null,
       "createdAt": "2026-01-01T09:30:00Z",
@@ -230,6 +236,9 @@ List jobs for the authenticated organization with cursor-based pagination.
 | `employmentType` | enum | `fulltime`, `parttime`, `contract`, or `internship` |
 | `department` | string | Department name (may be null) |
 | `location` | string | Job location (may be null) |
+| `salaryMin` | number | Minimum salary (may be null) |
+| `salaryMax` | number | Maximum salary (may be null) |
+| `salaryCurrency` | enum | `USD`, `EUR`, `GBP`, `SGD`, or `IDR` (may be null) |
 | `descriptionPreview` | string | Plain text preview of description, truncated to 150 chars at word boundary (may be null) |
 | `publicSlug` | string | URL slug for public job page (null if not published) |
 | `createdAt` | string | ISO 8601 creation timestamp |

@@ -816,6 +816,9 @@ export class JobRepository {
       employment_type: string;
       department: string | null;
       location: string | null;
+      salary_min: number | null;
+      salary_max: number | null;
+      salary_currency: string | null;
       description_text: string | null;
       created_at: string;
       published_at: string | null;
@@ -831,6 +834,7 @@ export class JobRepository {
           `
           SELECT id, title, status, questions_status, pipeline_status, public_slug,
                  company_name, work_type, employment_type, department, location,
+                 salary_min, salary_max, salary_currency,
                  description_text, created_at, published_at
           FROM jobs
           WHERE org_id = ?
@@ -848,6 +852,7 @@ export class JobRepository {
           `
           SELECT id, title, status, questions_status, pipeline_status, public_slug,
                  company_name, work_type, employment_type, department, location,
+                 salary_min, salary_max, salary_currency,
                  description_text, created_at, published_at
           FROM jobs
           WHERE org_id = ? ${statusFilter}
@@ -885,6 +890,9 @@ export class JobRepository {
       employmentType: row.employment_type as "fulltime" | "parttime" | "contract" | "internship",
       department: row.department,
       location: row.location,
+      salaryMin: row.salary_min,
+      salaryMax: row.salary_max,
+      salaryCurrency: row.salary_currency as "USD" | "EUR" | "GBP" | "SGD" | "IDR" | null,
       descriptionPreview: truncateAtWordBoundary(row.description_text, 150),
       createdAt: row.created_at,
       publishedAt: row.published_at,

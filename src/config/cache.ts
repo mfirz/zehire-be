@@ -27,8 +27,9 @@ export const CACHE_VERSIONS = {
    * Version history:
    * - v1: Initial version
    * - v2: Removed `capacity` field (moved to GET /v1/capacity)
+   * - v3: Added `salaryMin`, `salaryMax`, `salaryCurrency` fields
    */
-  jobsList: 2,
+  jobsList: 3,
 
   /**
    * GET /public/jobs/:slug - Public job details for candidates
