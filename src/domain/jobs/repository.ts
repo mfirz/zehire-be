@@ -73,13 +73,19 @@ function isDbLockError(error: unknown): boolean {
 }
 
 /**
- * Retry a database operation with exponential backoff.
+ * Retry a database operation with exponential backoff + jitter.
  * Handles D1 lock contention in local dev and production edge cases.
+ *
+ * Uses 5 retries with 150ms base delay to handle "cold start" scenarios
+ * where DB needs time to wake up after being idle.
+ *
+ * Adds random jitter (0-50% of delay) to desynchronize concurrent retries,
+ * preventing multiple processors from colliding repeatedly.
  */
 async function withDbRetry<T>(
   operation: () => Promise<T>,
-  maxRetries = 3,
-  baseDelayMs = 100
+  maxRetries = 5,
+  baseDelayMs = 150
 ): Promise<T> {
   let lastError: unknown;
 
@@ -93,8 +99,10 @@ async function withDbRetry<T>(
         throw error;
       }
 
-      // Exponential backoff: 100ms, 200ms, 400ms
-      const delay = baseDelayMs * Math.pow(2, attempt);
+      // Exponential backoff with jitter to desynchronize concurrent retries
+      const baseDelay = baseDelayMs * Math.pow(2, attempt);
+      const jitter = Math.random() * baseDelay * 0.5; // 0-50% jitter
+      const delay = Math.round(baseDelay + jitter);
       console.log(`[DB] Lock detected, retry ${attempt + 1}/${maxRetries} in ${delay}ms...`);
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
