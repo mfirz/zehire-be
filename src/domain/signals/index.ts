@@ -1,7 +1,7 @@
 /**
  * Signals Domain
  * ===============
- * Signal extraction and aggregation for candidate answers.
+ * Signal extraction, aggregation, and conflict detection for candidate answers.
  */
 
 // Types
@@ -13,6 +13,9 @@ export type {
   AggregatedSignalState,
   SignalExtractionInput,
   LLMExtractionResponse,
+  SignalConflict,
+  CriticalSignalAnalysis,
+  SignalStateResult,
 } from "./types";
 
 // Extractor
@@ -22,6 +25,14 @@ export {
   parseExtractionResponse,
   extractSignalsFromAnswer,
 } from "./extractor";
+
+// Aggregator
+export {
+  aggregateSignals,
+  analyzeCriticalSignals,
+  detectConflicts,
+  computeSignalState,
+} from "./aggregator";
 
 // Service
 export { SignalExtractionService } from "./service";

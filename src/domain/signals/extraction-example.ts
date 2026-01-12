@@ -14,8 +14,12 @@ import {
   parseExtractionResponse,
   SIGNAL_EXTRACTION_SYSTEM_PROMPT,
 } from "./extractor";
-import { SignalExtractionService } from "./service";
-import type { AnswerExtractionResult, SignalExtractionInput } from "./types";
+import { aggregateSignals, detectConflicts, analyzeCriticalSignals } from "./aggregator";
+import type {
+  AnswerExtractionResult,
+  SignalConfidence,
+  SignalExtractionInput,
+} from "./types";
 
 // =============================================================================
 // EXAMPLE INPUTS
@@ -151,6 +155,9 @@ class MockLLMClient implements LLMClient {
     temperature?: number;
     maxTokens?: number;
   }): Promise<string> {
+    // Simulate async behavior
+    await Promise.resolve();
+
     // Find archetype in the prompt
     for (const [archetype, response] of Object.entries(mockResponses)) {
       if (params.user.includes(archetype)) {
@@ -198,7 +205,7 @@ function testResponseParsing(): void {
   console.log("=".repeat(60));
 
   // Test valid response
-  const validResponse = mockResponses["incomplete information"];
+  const validResponse = mockResponses["incomplete information"]!;
   const parsed = parseExtractionResponse(validResponse, exampleInput.targetSignals);
 
   console.log("\n--- Parsed Response ---");
@@ -334,9 +341,11 @@ function testSignalAggregation(): void {
     "technical_depth", // Never asked about
   ];
 
-  // Use a mock DB (null) - we're just testing the aggregation logic
-  const service = new SignalExtractionService(null as never);
-  const aggregated = service.aggregateSignals(results, allSignals);
+  // Test the standalone aggregateSignals function
+  const aggregated = aggregateSignals({
+    extractions: results,
+    allSignalIds: allSignals,
+  });
 
   console.log("\n--- Aggregated Signals ---");
   console.log("Present (clear):", aggregated.present);
@@ -346,9 +355,14 @@ function testSignalAggregation(): void {
 
   console.log("\n--- Details ---");
   for (const [signalId, detail] of Object.entries(aggregated.details)) {
+    const typedDetail = detail as {
+      bestConfidence: SignalConfidence;
+      evaluationCount: number;
+      evidence: string[];
+    };
     console.log(`${signalId}:`);
-    console.log(`  Best confidence: ${detail.bestConfidence}`);
-    console.log(`  Evaluation count: ${detail.evaluationCount}`);
+    console.log(`  Best confidence: ${typedDetail.bestConfidence}`);
+    console.log(`  Evaluation count: ${typedDetail.evaluationCount}`);
   }
 
   // Verify results
@@ -387,6 +401,188 @@ function testSignalAggregation(): void {
   console.log("");
 }
 
+/**
+ * Test 5: Conflict Detection
+ */
+function testConflictDetection(): void {
+  console.log("=".repeat(60));
+  console.log("TEST 5: Conflict Detection");
+  console.log("=".repeat(60));
+
+  // Create extraction results with conflicting evidence
+  // Scenario: Candidate claims accountability but blames others
+  const conflictingResults: AnswerExtractionResult[] = [
+    {
+      answerId: "conflict-a1",
+      archetypeId: "accountability_question",
+      responseQuality: "substantial",
+      signals: [
+        {
+          signalId: "accountability" as SignalId,
+          confidence: "clear",
+          evidence:
+            "I took full ownership of the project outcome and was responsible for all decisions.",
+        },
+      ],
+      extractedAt: new Date().toISOString(),
+    },
+    {
+      answerId: "conflict-a2",
+      archetypeId: "failure_question",
+      responseQuality: "substantial",
+      signals: [
+        {
+          signalId: "learning_from_failure" as SignalId,
+          confidence: "partial",
+          evidence:
+            "The project failed because it wasn't my fault - the team didn't deliver and their mistake caused the delay.",
+        },
+      ],
+      extractedAt: new Date().toISOString(),
+    },
+  ];
+
+  console.log("\n--- Testing Accountability vs Blame-Shifting Conflict ---");
+  console.log("Answer 1 (accountability): 'I took full ownership...'");
+  console.log("Answer 2 (learning_from_failure): 'wasn't my fault...their mistake...'");
+
+  const conflicts = detectConflicts(conflictingResults);
+
+  console.log(`\nDetected conflicts: ${conflicts.length}`);
+  for (const conflict of conflicts) {
+    console.log(`\n  Conflict: ${conflict.signals[0]} vs ${conflict.signals[1]}`);
+    console.log(`  Reason: ${conflict.reason}`);
+    console.log(`  Evidence signal1: "${conflict.evidence.signal1.quote.slice(0, 50)}..."`);
+    console.log(`  Evidence signal2: "${conflict.evidence.signal2.quote.slice(0, 50)}..."`);
+  }
+
+  // Test case with NO conflict (consistent answers)
+  console.log("\n--- Testing Consistent Answers (No Conflict) ---");
+  const consistentResults: AnswerExtractionResult[] = [
+    {
+      answerId: "consistent-a1",
+      archetypeId: "accountability_question",
+      responseQuality: "substantial",
+      signals: [
+        {
+          signalId: "accountability" as SignalId,
+          confidence: "clear",
+          evidence: "I took full ownership and when things went wrong, I owned up to it.",
+        },
+      ],
+      extractedAt: new Date().toISOString(),
+    },
+    {
+      answerId: "consistent-a2",
+      archetypeId: "failure_question",
+      responseQuality: "substantial",
+      signals: [
+        {
+          signalId: "learning_from_failure" as SignalId,
+          confidence: "clear",
+          evidence:
+            "I made a mistake in the architecture decision. I learned to validate assumptions earlier.",
+        },
+      ],
+      extractedAt: new Date().toISOString(),
+    },
+  ];
+
+  const noConflicts = detectConflicts(consistentResults);
+  console.log(`Detected conflicts: ${noConflicts.length}`);
+  console.log(noConflicts.length === 0 ? "✓ Correctly found no conflicts" : "✗ Unexpected conflict");
+
+  // Verify results
+  console.log("\n--- Verification ---");
+  console.log(conflicts.length > 0 ? "✓ Detected blame-shifting conflict" : "✗ Missed conflict");
+  console.log(
+    noConflicts.length === 0 ? "✓ No false positives on consistent answers" : "✗ False positive"
+  );
+
+  console.log("");
+}
+
+/**
+ * Test 6: Critical Signal Analysis
+ */
+function testCriticalSignalAnalysis(): void {
+  console.log("=".repeat(60));
+  console.log("TEST 6: Critical Signal Analysis");
+  console.log("=".repeat(60));
+
+  // Create aggregated state
+  const aggregatedState = {
+    present: ["decision_under_uncertainty", "accountability"] as SignalId[],
+    partial: ["risk_reasoning"] as SignalId[],
+    missing: ["learning_from_failure"] as SignalId[],
+    notAsked: ["technical_depth", "ethical_awareness"] as SignalId[],
+    details: {},
+  };
+
+  // Define primary (critical) signals for a job
+  const primarySignals: SignalId[] = [
+    "decision_under_uncertainty",
+    "risk_reasoning",
+    "accountability",
+    "learning_from_failure",
+  ];
+
+  console.log("\n--- Primary (Critical) Signals for Job ---");
+  console.log(primarySignals);
+
+  console.log("\n--- Aggregated State ---");
+  console.log("Present:", aggregatedState.present);
+  console.log("Partial:", aggregatedState.partial);
+  console.log("Missing:", aggregatedState.missing);
+  console.log("Not Asked:", aggregatedState.notAsked);
+
+  const analysis = analyzeCriticalSignals({
+    aggregatedState,
+    primarySignals,
+  });
+
+  console.log("\n--- Critical Signal Analysis ---");
+  console.log("Critical Signals:", analysis.criticalSignals);
+  console.log("Satisfied:", analysis.satisfied);
+  console.log("Gaps:", analysis.gaps);
+  console.log("Has Critical Gap:", analysis.hasCriticalGap);
+
+  // Verification
+  console.log("\n--- Verification ---");
+  const checks = [
+    {
+      name: "decision_under_uncertainty is satisfied (present)",
+      pass: analysis.satisfied.includes("decision_under_uncertainty" as SignalId),
+    },
+    {
+      name: "accountability is satisfied (present)",
+      pass: analysis.satisfied.includes("accountability" as SignalId),
+    },
+    {
+      name: "risk_reasoning is a gap with status 'partial'",
+      pass: analysis.gaps.some(
+        (g) => g.signalId === "risk_reasoning" && g.status === "partial" && g.wasAsked === true
+      ),
+    },
+    {
+      name: "learning_from_failure is a gap with status 'missing'",
+      pass: analysis.gaps.some(
+        (g) => g.signalId === "learning_from_failure" && g.status === "missing" && g.wasAsked === true
+      ),
+    },
+    {
+      name: "hasCriticalGap is true (because of risk_reasoning and learning_from_failure)",
+      pass: analysis.hasCriticalGap === true,
+    },
+  ];
+
+  for (const check of checks) {
+    console.log(`${check.pass ? "✓" : "✗"} ${check.name}`);
+  }
+
+  console.log("");
+}
+
 // =============================================================================
 // HELPERS
 // =============================================================================
@@ -418,6 +614,8 @@ async function main(): Promise<void> {
   testResponseParsing();
   await testSignalExtraction();
   testSignalAggregation();
+  testConflictDetection();
+  testCriticalSignalAnalysis();
 
   console.log("=".repeat(60));
   console.log("All tests completed!");

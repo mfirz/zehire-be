@@ -643,6 +643,78 @@ export class ApplicationRepository {
     };
   }
 
+  /**
+   * Save computed signal state for an application.
+   * Computes decision posture from critical analysis.
+   */
+  async saveSignalState(
+    applicationId: string,
+    signalState: {
+      aggregated: unknown;
+      criticalAnalysis: { hasCriticalGap: boolean; gaps: Array<{ status: string }> };
+      conflicts: unknown[];
+      computedAt: string;
+    }
+  ): Promise<void> {
+    // Compute decision posture from critical analysis
+    let posture: string;
+    const { hasCriticalGap, gaps } = signalState.criticalAnalysis;
+
+    if (!hasCriticalGap) {
+      posture = "LOW_REGRET_RISK";
+    } else {
+      // Count severity of gaps
+      const missingCount = gaps.filter((g) => g.status === "missing").length;
+      const partialCount = gaps.filter((g) => g.status === "partial").length;
+
+      if (missingCount >= 2 || signalState.conflicts.length > 0) {
+        posture = "HIGH_UNCERTAINTY";
+      } else if (missingCount >= 1 || partialCount >= 2) {
+        posture = "SOME_UNCERTAINTY";
+      } else {
+        posture = "LOW_REGRET_RISK";
+      }
+    }
+
+    await this.db
+      .prepare(
+        `
+        UPDATE applications
+        SET signal_evaluations = ?,
+            decision_posture = ?,
+            signals_status = 'completed',
+            signals_computed_at = ?,
+            updated_at = ?
+        WHERE id = ?
+        `
+      )
+      .bind(
+        JSON.stringify(signalState),
+        posture,
+        signalState.computedAt,
+        signalState.computedAt,
+        applicationId
+      )
+      .run();
+  }
+
+  /**
+   * Retrieve parsed signal state for an application.
+   */
+  async getSignalState<T>(applicationId: string): Promise<T | null> {
+    const result = await this.db
+      .prepare(
+        `
+        SELECT signal_evaluations FROM applications WHERE id = ?
+        `
+      )
+      .bind(applicationId)
+      .first<{ signal_evaluations: string | null }>();
+
+    if (!result?.signal_evaluations) return null;
+    return JSON.parse(result.signal_evaluations) as T;
+  }
+
   // ===========================================================================
   // MAPPERS
   // ===========================================================================

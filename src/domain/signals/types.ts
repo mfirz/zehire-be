@@ -131,3 +131,65 @@ export interface LLMExtractionResponse {
     reasoning?: string;
   }>;
 }
+
+// =============================================================================
+// SIGNAL CONFLICTS
+// =============================================================================
+
+/**
+ * A detected conflict between signals.
+ * Indicates contradictory evidence across different answers.
+ */
+export interface SignalConflict {
+  /** The two signals that conflict */
+  signals: [SignalId, SignalId];
+
+  /** Why they conflict */
+  reason: string;
+
+  /** Evidence from answers showing the conflict */
+  evidence: {
+    signal1: { answerId: string; quote: string };
+    signal2: { answerId: string; quote: string };
+  };
+}
+
+// =============================================================================
+// CRITICAL SIGNAL ANALYSIS
+// =============================================================================
+
+/**
+ * Analysis of critical (primary) signals for a job.
+ */
+export interface CriticalSignalAnalysis {
+  /** Primary signals for this job (from JobContext) */
+  criticalSignals: SignalId[];
+
+  /** Which critical signals are clearly present */
+  satisfied: SignalId[];
+
+  /** Which critical signals are missing or unclear */
+  gaps: Array<{
+    signalId: SignalId;
+    status: "missing" | "partial" | "unclear";
+    wasAsked: boolean; // Was there a question targeting this?
+  }>;
+
+  /** Overall: is there a critical gap? */
+  hasCriticalGap: boolean;
+}
+
+// =============================================================================
+// COMPLETE SIGNAL STATE
+// =============================================================================
+
+/**
+ * Complete signal state for an application.
+ * Combines aggregation, critical analysis, and conflict detection.
+ */
+export interface SignalStateResult {
+  aggregated: AggregatedSignalState;
+  criticalAnalysis: CriticalSignalAnalysis;
+  conflicts: SignalConflict[];
+  computedAt: string;
+}
