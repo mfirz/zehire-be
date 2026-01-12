@@ -552,6 +552,98 @@ export class ApplicationRepository {
   }
 
   // ===========================================================================
+  // SIGNAL EXTRACTION (Phase 1)
+  // ===========================================================================
+
+  /**
+   * Save extracted signals for an answer.
+   */
+  async saveExtractedSignals(
+    answerId: string,
+    signals: unknown,
+    _responseQuality: string
+  ): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .prepare(
+        `
+        UPDATE answers
+        SET extracted_signals = ?,
+            extraction_status = 'completed',
+            extracted_at = ?,
+            updated_at = ?
+        WHERE id = ?
+        `
+      )
+      .bind(JSON.stringify(signals), now, now, answerId)
+      .run();
+  }
+
+  /**
+   * Update answer extraction status.
+   */
+  async updateAnswerExtractionStatus(
+    answerId: string,
+    status: "pending" | "processing" | "completed" | "failed" | "skipped"
+  ): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .prepare(
+        `
+        UPDATE answers
+        SET extraction_status = ?,
+            updated_at = ?
+        WHERE id = ?
+        `
+      )
+      .bind(status, now, answerId)
+      .run();
+  }
+
+  /**
+   * Save aggregated signal evaluations and decision posture for an application.
+   */
+  async saveSignalEvaluations(
+    applicationId: string,
+    evaluations: unknown,
+    posture: string
+  ): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .prepare(
+        `
+        UPDATE applications
+        SET signal_evaluations = ?,
+            decision_posture = ?,
+            signals_status = 'completed',
+            signals_computed_at = ?,
+            updated_at = ?
+        WHERE id = ?
+        `
+      )
+      .bind(JSON.stringify(evaluations), posture, now, now, applicationId)
+      .run();
+  }
+
+  /**
+   * Get application with job context for signal extraction.
+   */
+  async getApplicationForExtraction(
+    applicationId: string
+  ): Promise<{ application: Application; jobId: string } | null> {
+    const application = await this.findById(applicationId);
+    if (!application) return null;
+
+    return {
+      application,
+      jobId: application.jobId,
+    };
+  }
+
+  // ===========================================================================
   // MAPPERS
   // ===========================================================================
 
