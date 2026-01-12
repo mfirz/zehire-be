@@ -831,8 +831,8 @@ export class JobService {
       salaryCurrency: job.salary_currency,
       // Content - pre-rendered HTML for SSR
       descriptionHtml,
-      questions: questions.map((q, index) => ({
-        id: `q${index + 1}`,
+      questions: questions.map((q) => ({
+        archetypeId: q.archetypeId,
         text: q.questionText,
         ...(q.minAnswerWords && { minWords: q.minAnswerWords }),
       })),

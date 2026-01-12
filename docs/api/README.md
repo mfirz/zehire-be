@@ -133,9 +133,14 @@ All errors follow a consistent format:
 
 ### Public (No Auth)
 
-| Method | Path                  | Description                |
-| ------ | --------------------- | -------------------------- |
-| GET    | `/public/jobs/:slug`  | Get job details by slug    |
+| Method | Path                                    | Description                     |
+| ------ | --------------------------------------- | ------------------------------- |
+| GET    | `/public/jobs/:slug`                    | Get job details by slug         |
+| POST   | `/public/jobs/:slug/apply`              | Submit job application          |
+| POST   | `/public/jobs/:slug/apply/draft`        | Save application progress       |
+| GET    | `/public/jobs/:slug/apply/draft/:id`    | Resume saved application        |
+
+See [Public Applications API](./public-applications.md) for application endpoint details.
 
 ### Internal (Public)
 

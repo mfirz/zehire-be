@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "zehire-api-collection-v1",
     "name": "Zehire API",
-    "description": "Complete API collection for Zehire Backend.\n\n## Setup\n\n1. Set the `base_url` variable to your environment (default: `http://localhost:8787`)\n2. Use **Auth > Login** to initiate magic link login\n3. Check your email and copy the token from the magic link\n4. Use **Auth > Callback** with the token - JWT will be auto-saved\n5. All authenticated endpoints will use the saved JWT automatically\n\n## Variables\n\n- `base_url`: API base URL\n- `jwt_token`: JWT token (auto-saved after callback)\n- `job_id`: Current job ID for testing\n- `public_slug`: Public job slug for testing",
+    "description": "Complete API collection for Zehire Backend.\n\n## Setup\n\n1. Set the `base_url` variable to your environment (default: `http://localhost:8787`)\n2. Use **Auth > Login** to initiate magic link login\n3. Check your email and copy the token from the magic link\n4. Use **Auth > Callback** with the token - JWT will be auto-saved\n5. All authenticated endpoints will use the saved JWT automatically\n\n## Variables\n\n- `base_url`: API base URL\n- `jwt_token`: JWT token (auto-saved after callback)\n- `job_id`: Current job ID for testing\n- `public_slug`: Public job slug for testing\n- `draft_id`: Application draft ID (auto-saved)\n- `resume_token`: Draft resume token (auto-saved)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -29,6 +29,16 @@
     {
       "key": "user_email",
       "value": "farizzx77@gmail.com",
+      "type": "string"
+    },
+    {
+      "key": "draft_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "resume_token",
+      "value": "",
       "type": "string"
     }
   ],
@@ -489,7 +499,7 @@
     },
     {
       "name": "Public",
-      "description": "Public-facing endpoints for candidates.\n\nNo authentication required.",
+      "description": "Public-facing endpoints for candidates.\n\nNo authentication required.\n\n**Application Flow:**\n1. GET job details to see questions\n2. POST apply to submit (all answers required)\n3. Optional: Use draft endpoints to save/resume progress",
       "item": [
         {
           "name": "Get Public Job",
@@ -505,6 +515,136 @@
               "path": ["public", "jobs", "{{public_slug}}"]
             },
             "description": "Get public job details by slug for candidates.\n\n**No authentication required.**\n\nOnly returns published jobs.\n\nReturns: title, companyName, department, location, workType, employmentType, salaryMin, salaryMax, salaryCurrency, description, questions"
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Application",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Test response",
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response contains applicationId', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.equal(true);",
+                  "    pm.expect(jsonData).to.have.property('applicationId');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"candidate@example.com\",\n  \"name\": \"Jane Doe\",\n  \"answers\": [\n    {\n      \"archetypeId\": \"situational_uncertainty_story\",\n      \"answerText\": \"When I was leading the migration project at my previous company, we faced a critical decision about our database architecture with incomplete performance data. I gathered the team, outlined the known risks and unknowns, and we decided to run a parallel proof-of-concept for 2 weeks before committing. This approach let us validate assumptions without betting the entire project on uncertain outcomes.\"\n    },\n    {\n      \"archetypeId\": \"ownership_of_outcome\",\n      \"answerText\": \"I take full responsibility for the outcomes of my projects. In my last role, when our release caused a production incident, I immediately took ownership - communicated status to stakeholders, led the incident response, and afterward conducted a thorough retrospective. I documented what went wrong and implemented guardrails to prevent similar issues.\"\n    },\n    {\n      \"archetypeId\": \"failure_and_recovery\",\n      \"answerText\": \"During the Q3 release, we encountered a critical bug that slipped through our testing. Rather than blame anyone, I analyzed our process and discovered gaps in our integration tests. I proposed and implemented a new testing strategy, added monitoring alerts, and created runbooks. The next quarter we had zero production incidents of that type.\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/public/jobs/{{public_slug}}/apply",
+              "host": ["{{base_url}}"],
+              "path": ["public", "jobs", "{{public_slug}}", "apply"]
+            },
+            "description": "Submit a complete job application.\n\n**No authentication required.**\n\n**All questions must be answered** (minimum 50 characters each).\n\n**Request body:**\n- `email`: Candidate's email (must be valid)\n- `name`: Candidate's full name\n- `answers`: Array of all question answers\n  - `archetypeId`: Question identifier (from job questions)\n  - `answerText`: Answer text (min 50 chars)\n\n**Note:** Get question archetypeIds from GET /public/jobs/:slug response.\n\n**Duplicate Prevention:** Returns 409 if email has already applied to this job."
+          },
+          "response": []
+        },
+        {
+          "name": "Save Draft (Save & Continue)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Save draft info for resume",
+                  "if (pm.response.code === 200) {",
+                  "    const jsonData = pm.response.json();",
+                  "    if (jsonData.draftId) {",
+                  "        pm.collectionVariables.set('draft_id', jsonData.draftId);",
+                  "        console.log('Draft ID saved:', jsonData.draftId);",
+                  "    }",
+                  "    if (jsonData.resumeToken) {",
+                  "        pm.collectionVariables.set('resume_token', jsonData.resumeToken);",
+                  "        console.log('Resume token saved');",
+                  "    }",
+                  "}",
+                  "",
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response contains draft info', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.equal(true);",
+                  "    pm.expect(jsonData).to.have.property('draftId');",
+                  "    pm.expect(jsonData).to.have.property('resumeToken');",
+                  "    pm.expect(jsonData).to.have.property('expiresAt');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"candidate@example.com\",\n  \"name\": \"Jane Doe\",\n  \"answers\": [\n    {\n      \"archetypeId\": \"situational_uncertainty_story\",\n      \"answerText\": \"When I was leading the migration project...\"\n    },\n    {\n      \"archetypeId\": \"ownership_of_outcome\",\n      \"answerText\": \"\"\n    },\n    {\n      \"archetypeId\": \"failure_and_recovery\",\n      \"answerText\": \"\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/public/jobs/{{public_slug}}/apply/draft",
+              "host": ["{{base_url}}"],
+              "path": ["public", "jobs", "{{public_slug}}", "apply", "draft"]
+            },
+            "description": "Save application progress for later completion.\n\n**No authentication required.**\n\nAnswers can be partial or empty - useful for Save & Continue feature.\n\n**Response includes:**\n- `draftId`: Unique draft identifier\n- `resumeToken`: Secure token to resume (store this!)\n- `expiresAt`: Draft expiry (7 days from creation)\n- `progress`: How many questions answered\n\n**Note:** Drafts are auto-deleted when application is submitted."
+          },
+          "response": []
+        },
+        {
+          "name": "Resume Draft",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/public/jobs/{{public_slug}}/apply/draft/{{draft_id}}?token={{resume_token}}",
+              "host": ["{{base_url}}"],
+              "path": ["public", "jobs", "{{public_slug}}", "apply", "draft", "{{draft_id}}"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{resume_token}}",
+                  "description": "Resume token from save draft response"
+                }
+              ]
+            },
+            "description": "Resume a previously saved application draft.\n\n**No authentication required.**\n\n**Query Parameters:**\n- `token`: Resume token (required) - received from save draft response\n\nAlternatively, send token in `X-Resume-Token` header.\n\n**Returns:**\n- `candidateEmail`: Saved email\n- `candidateName`: Saved name\n- `answers`: Array of saved answers\n- `expiresAt`: When draft expires\n- `progress`: Completion status\n\n**Note:** Returns 404 if draft has expired (after 7 days)."
           },
           "response": []
         }

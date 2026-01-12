@@ -517,7 +517,7 @@ export const PublicJobResponseSchema = z.object({
   descriptionHtml: z.string(),
   questions: z.array(
     z.object({
-      id: z.string(),
+      archetypeId: z.string(),
       text: z.string(),
       minWords: z.number().optional(),
     })

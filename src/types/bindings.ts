@@ -298,23 +298,48 @@ export type LLMProvider = (typeof LLM_PROVIDERS)[number];
  * Type of job processing to perform.
  * - questions: Generate interview questions (default)
  * - pipeline: Generate hiring pipeline recommendation
+ * - evaluate_application: Extract signals from application answers (Phase 1)
  */
-export type JobQueueType = "questions" | "pipeline";
+export type JobQueueType = "questions" | "pipeline" | "evaluate_application";
 
 /**
- * Message payload for job processing queue.
+ * Base message payload for job processing queue.
  * Keep this small - full job data is in D1.
  */
-export interface JobQueueMessage {
+export interface JobQueueMessageBase {
+  /** Timestamp when message was created (for debugging) */
+  createdAt: string;
+}
+
+/**
+ * Message for job-related processing (questions or pipeline).
+ */
+export interface JobProcessingMessage extends JobQueueMessageBase {
   /** Job ID to process */
   jobId: string;
 
-  /** Timestamp when message was created (for debugging) */
-  createdAt: string;
-
   /** Type of processing to perform (defaults to 'questions' for backwards compatibility) */
-  type?: JobQueueType;
+  type?: "questions" | "pipeline";
 }
+
+/**
+ * Message for application evaluation (signal extraction).
+ */
+export interface ApplicationEvaluationMessage extends JobQueueMessageBase {
+  /** Type discriminator */
+  type: "evaluate_application";
+
+  /** Application ID to evaluate */
+  applicationId: string;
+
+  /** Job ID for context */
+  jobId: string;
+}
+
+/**
+ * Union type for all queue message types.
+ */
+export type JobQueueMessage = JobProcessingMessage | ApplicationEvaluationMessage;
 
 // =============================================================================
 // BILLING TYPES

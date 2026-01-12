@@ -1,0 +1,49 @@
+/**
+ * Applications Domain
+ * ===================
+ * Public exports for candidate applications.
+ */
+
+// Repository
+export { ApplicationRepository } from "./repository";
+
+// Schemas
+export {
+  // Constants
+  APPLICATION_STATUSES,
+  DRAFT_EXPIRY_DAYS,
+  EXTRACTION_STATUSES,
+  MIN_ANSWER_LENGTH,
+  SIGNALS_STATUSES,
+  // Input schemas
+  AnswerInputSchema,
+  DraftAnswerSchema,
+  PublicApplySchema,
+  ResumeDraftSchema,
+  SaveDraftSchema,
+  // Response schemas
+  PublicApplyResponseSchema,
+  ResumeDraftResponseSchema,
+  SaveDraftResponseSchema,
+} from "./schemas";
+
+// Types
+export type {
+  Answer,
+  AnswerInput,
+  AnswerRow,
+  Application,
+  ApplicationDraft,
+  ApplicationDraftRow,
+  ApplicationRow,
+  ApplicationStatus,
+  DraftAnswer,
+  ExtractionStatus,
+  PublicApplyInput,
+  PublicApplyResponse,
+  ResumeDraftInput,
+  ResumeDraftResponse,
+  SaveDraftInput,
+  SaveDraftResponse,
+  SignalsStatus,
+} from "./schemas";

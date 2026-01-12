@@ -36,8 +36,9 @@ export const CACHE_VERSIONS = {
    *
    * Version history:
    * - v1: Initial version
+   * - v2: Changed questions `id` to `archetypeId` for apply endpoint compatibility
    */
-  publicJob: 1,
+  publicJob: 2,
 } as const;
 
 /**
