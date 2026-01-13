@@ -130,6 +130,7 @@ All errors follow a consistent format:
 | GET    | `/v1/applications/:id/posture`  | Required | Get application posture        |
 | PATCH  | `/v1/applications/:id`          | Required | Update application status      |
 | GET    | `/v1/assessment-providers`      | Required | List assessment providers      |
+| GET    | `/v1/capacity`                  | Required | Get organization capacity      |
 | GET    | `/v1/billing`                   | Required | Current month usage summary    |
 | GET    | `/v1/billing/preview`           | Required | Preview current charges        |
 | GET    | `/v1/billing/:year/:month`      | Required | Usage for specific month       |

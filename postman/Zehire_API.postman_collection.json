@@ -466,7 +466,7 @@
                   "host": ["{{base_url}}"],
                   "path": ["v1", "jobs", "{{job_id}}", "pause"]
                 },
-                "description": "Pause a published job.\n\n**Effects:**\n- Hides job from public view\n- Stops billing\n- Can be resumed later"
+                "description": "Pause a published job.\n\n**Effects:**\n- Hides job from public view\n- Can be resumed later\n\n**Note:** Pausing does NOT stop billing - paused jobs are still considered 'active' because Zehire is on the hook for candidate evaluations. To stop billing, close the job."
               },
               "response": []
             },
@@ -480,7 +480,7 @@
                   "host": ["{{base_url}}"],
                   "path": ["v1", "jobs", "{{job_id}}", "resume"]
                 },
-                "description": "Resume a paused job.\n\n**Effects:**\n- Makes job public again\n- Restarts billing"
+                "description": "Resume a paused job.\n\n**Effects:**\n- Makes job public again\n- Accepts new applications\n\n**Note:** Billing continues unchanged - both paused and published jobs count as active."
               },
               "response": []
             },
@@ -660,7 +660,7 @@
               "host": ["{{base_url}}"],
               "path": ["public", "jobs", "{{public_slug}}"]
             },
-            "description": "Get public job details by slug for candidates.\n\n**No authentication required.**\n\nOnly returns published jobs.\n\nReturns: title, companyName, department, location, workType, employmentType, salaryMin, salaryMax, salaryCurrency, description, questions"
+            "description": "Get public job details by slug for candidates.\n\n**No authentication required.**\n\nOnly returns published jobs.\n\n**Returns:**\n- title, companyName, department, location\n- workType, employmentType\n- salaryMin, salaryMax, salaryCurrency\n- descriptionHtml (pre-rendered HTML)\n- questions array with: archetypeId, text, minWords"
           },
           "response": []
         },

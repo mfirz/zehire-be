@@ -139,10 +139,11 @@ Links must use `http://` or `https://` protocols.
   "id": "abc123def456ghi78",
   "status": "draft",
   "questionsStatus": "none",
-  "pipelineStatus": "none",
   "createdAt": "2026-01-07T10:30:00Z"
 }
 ```
+
+**Note:** `pipelineStatus` is not returned in the create response. Use `GET /v1/jobs/:id` to check both `questionsStatus` and `pipelineStatus`.
 
 #### 400 Bad Request
 
@@ -1056,12 +1057,12 @@ GET /public/jobs/acme-corp-senior-software-engineer-x7k3m
   "descriptionHtml": "<p>We are looking for a <strong>senior engineer</strong> to lead our backend team.</p><ul><li><p>Design scalable systems</p></li></ul>",
   "questions": [
     {
-      "id": "q1",
+      "archetypeId": "situational_uncertainty_story",
       "text": "Describe a complex system you designed and the tradeoffs you considered.",
       "minWords": 150
     },
     {
-      "id": "q2",
+      "archetypeId": "ownership_of_outcome",
       "text": "Tell us about a time you mentored a junior developer.",
       "minWords": 100
     }
@@ -1082,6 +1083,14 @@ GET /public/jobs/acme-corp-senior-software-engineer-x7k3m
 | `salaryCurrency` | enum   | `USD`, `EUR`, `GBP`, `SGD`, `IDR` (may be null) |
 | `descriptionHtml`| string | Pre-rendered HTML job description (safe for SSR) |
 | `questions`      | array  | Application questions                |
+
+**Question Object:**
+
+| Field         | Type   | Description                               |
+| ------------- | ------ | ----------------------------------------- |
+| `archetypeId` | string | Question archetype identifier             |
+| `text`        | string | The question text for candidates to answer |
+| `minWords`    | number | Optional minimum word count               |
 
 #### 404 Not Found
 
