@@ -127,6 +127,7 @@ All errors follow a consistent format:
 | POST   | `/v1/jobs/:id/close`            | Required | Close job permanently          |
 | GET    | `/v1/jobs/:id/applications`     | Required | List applications for job      |
 | GET    | `/v1/applications/:id`          | Required | Get application details        |
+| GET    | `/v1/applications/:id/posture`  | Required | Get application posture        |
 | PATCH  | `/v1/applications/:id`          | Required | Update application status      |
 | GET    | `/v1/assessment-providers`      | Required | List assessment providers      |
 | GET    | `/v1/billing`                   | Required | Current month usage summary    |

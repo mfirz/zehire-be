@@ -626,6 +626,20 @@
             "description": "Update application status to move candidate through the hiring pipeline.\n\n**Valid status values:**\n- `pending` - Just submitted\n- `screening` - Under initial review\n- `assessment` - In assessment phase\n- `interview` - Interview scheduled/in progress\n- `offer` - Offer extended\n- `rejected` - Rejected by recruiter\n- `withdrawn` - Withdrawn by candidate\n\n**Typical flow:**\npending → screening → assessment → interview → offer"
           },
           "response": []
+        },
+        {
+          "name": "Get Application Posture",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/applications/{{application_id}}/posture",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "applications", "{{application_id}}", "posture"]
+            },
+            "description": "Get the decision posture for an application.\n\n**Returns when signals are computed:**\n- `posture`: LOW_REGRET_RISK, SOME_UNCERTAINTY, or HIGH_UNCERTAINTY\n- `primaryReason`: Human-readable explanation\n- `reasons`: Array of all contributing reasons with severity\n- `signals`: Object with present/partial/missing/criticalGaps arrays\n- `conflicts`: Any detected contradictions\n- `suggestedActions`: Recommended next steps for hiring manager\n\n**Returns 202 when:**\n- Signals not yet started\n- Signals currently processing\n\n**Returns 500 when:**\n- Signal extraction failed"
+          },
+          "response": []
         }
       ]
     },

@@ -16,6 +16,7 @@ import type { MessageBatch } from "@cloudflare/workers-types";
 import { ApplicationRepository } from "../domain/applications/repository";
 import { JobProcessor } from "../domain/jobs/processor";
 import { JobRepository, OrgRepository } from "../domain/jobs/repository";
+import { SignalExtractionService } from "../domain/signals/service";
 import { createLLMClient } from "../lib/llm";
 import type {
   ApplicationEvaluationMessage,
@@ -39,7 +40,7 @@ function isDbLockError(error: unknown): boolean {
 
 /**
  * Process application evaluation (signal extraction).
- * Phase 1 will implement the actual signal extraction logic.
+ * Runs full pipeline: extraction → aggregation → posture computation.
  */
 async function processApplicationEvaluation(
   msg: ApplicationEvaluationMessage,
@@ -47,23 +48,43 @@ async function processApplicationEvaluation(
 ): Promise<void> {
   const { applicationId, jobId } = msg;
   const applicationRepository = new ApplicationRepository(env.DB);
+  const llmClient = createLLMClient({ env });
+  const signalService = new SignalExtractionService(env.DB);
 
-  // Mark as processing
-  await applicationRepository.updateSignalsStatus(applicationId, "processing");
+  console.log(`[Queue] Starting signal extraction for application ${applicationId} (job ${jobId})`);
 
-  // TODO: Phase 1 will implement the signal extraction pipeline
-  // For now, just mark as completed (placeholder)
-  console.log(
-    `[Queue] Application ${applicationId} for job ${jobId} - signal extraction not yet implemented`
-  );
+  try {
+    // Run full signal extraction pipeline:
+    // 1. Fetch application and answers
+    // 2. Extract signals from each answer via LLM
+    // 3. Aggregate signals across all answers
+    // 4. Analyze critical signals
+    // 5. Detect conflicts
+    // 6. Compute decision posture
+    // 7. Save results to DB
+    const { posture } = await signalService.processApplication(llmClient, applicationId, {
+      parallel: false, // Sequential to avoid rate limits
+      maxRetries: 2,
+    });
 
-  // Keep status as processing until Phase 1 is implemented
-  // When Phase 1 is ready, it will:
-  // 1. Fetch application and answers
-  // 2. Run signal extraction LLM for each answer
-  // 3. Aggregate signals
-  // 4. Compute decision posture
-  // 5. Update application with results
+    // Mark as completed
+    await applicationRepository.updateSignalsStatus(applicationId, "completed");
+
+    console.log(
+      `[Queue] Signal extraction completed for application ${applicationId}: posture=${posture.posture}`
+    );
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error(`[Queue] Signal extraction failed for application ${applicationId}: ${errorMessage}`);
+
+    // Mark as failed with error details
+    await applicationRepository.updateSignalsStatus(applicationId, "failed", {
+      message: errorMessage,
+      code: "EXTRACTION_FAILED",
+    });
+
+    throw error; // Re-throw to trigger retry
+  }
 }
 
 /**

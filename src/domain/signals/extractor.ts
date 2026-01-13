@@ -39,9 +39,9 @@ Signals are observable indicators of how a candidate thinks, decides, and behave
 
 For each target signal, evaluate the candidate's answer and assign a confidence level:
 
-- **clear**: The candidate provides specific, detailed examples that clearly demonstrate this signal. They show concrete actions, decisions, and outcomes.
+- **clear**: The candidate describes a SPECIFIC past situation with concrete details: what happened, what they specifically did, and the outcome. REQUIRES all three: (1) a specific event/situation, (2) their specific actions, (3) results or outcomes. Example: "When our API went down in March, I coordinated the incident response and we restored service in 23 minutes."
 
-- **partial**: The candidate touches on the signal but lacks specificity, depth, or concrete examples. They mention relevant concepts but don't fully demonstrate the behavior.
+- **partial**: The candidate touches on the signal but lacks specificity. This includes: philosophical statements about general approach, beliefs about how they work, or vague references to past experiences without concrete details. Example: "I always try to take ownership when things go wrong" or "Throughout my career, I have handled many difficult situations."
 
 - **absent**: The candidate had an opportunity to demonstrate this signal (the question asked about it) but did not. Their answer shows no evidence of this behavior.
 
@@ -64,6 +64,7 @@ Also assess the overall response quality:
 4. **Calibrate to experience level** - "clear" for entry-level may mean less depth than for senior
 5. **"absent" is information, not judgment** - It means the signal wasn't shown, not that the candidate is bad
 6. **Look for behaviors and examples, not keywords** - Candidates saying "I take ownership" without examples is weak
+7. **CRITICAL: Philosophical statements are NEVER "clear"** - General statements about approach or beliefs (e.g., "I always try to...", "I believe strongly in...", "Throughout my career...", "I approach problems by...") without describing a SPECIFIC situation are "partial" at best. Length does not equal specificity - a 200-word philosophical essay is still "partial" if it lacks a concrete example with specific details.
 
 ## Output Format
 

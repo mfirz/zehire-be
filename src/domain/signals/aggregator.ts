@@ -202,11 +202,16 @@ export function analyzeCriticalSignals(input: AnalyzeCriticalSignalsInput): Crit
     }
   }
 
+  // Only count gaps where the signal was actually asked about
+  // wasAsked: false means the job's questions didn't cover this signal
+  // (system design issue, not candidate failing)
+  const askedGaps = gaps.filter((g) => g.wasAsked);
+
   return {
     criticalSignals: primarySignals,
     satisfied,
     gaps,
-    hasCriticalGap: gaps.length > 0,
+    hasCriticalGap: askedGaps.length > 0,
   };
 }
 
@@ -260,11 +265,71 @@ const CONFLICT_PATTERNS: ConflictPattern[] = [
 ];
 
 /**
+ * Negation phrases that negate the following words.
+ * E.g., "Rather than blame" means NO blame, "didn't blame" means NO blame.
+ */
+const NEGATION_PATTERNS = [
+  /rather than\s+/gi,
+  /instead of\s+/gi,
+  /didn't\s+/gi,
+  /did not\s+/gi,
+  /don't\s+/gi,
+  /do not\s+/gi,
+  /wasn't\s+/gi,
+  /was not\s+/gi,
+  /weren't\s+/gi,
+  /were not\s+/gi,
+  /isn't\s+/gi,
+  /is not\s+/gi,
+  /aren't\s+/gi,
+  /are not\s+/gi,
+  /not\s+/gi,
+  /never\s+/gi,
+  /without\s+/gi,
+  /avoided\s+/gi,
+  /avoiding\s+/gi,
+  /refused to\s+/gi,
+];
+
+/**
  * Check if text contains any of the indicator phrases (case-insensitive).
+ * Ignores matches that are negated (e.g., "Rather than blame" won't match "blame").
  */
 function containsIndicator(text: string, indicators: string[]): boolean {
   const lowerText = text.toLowerCase();
-  return indicators.some((indicator) => lowerText.includes(indicator.toLowerCase()));
+
+  for (const indicator of indicators) {
+    const lowerIndicator = indicator.toLowerCase();
+
+    // Find all occurrences of the indicator
+    let searchStart = 0;
+    while (true) {
+      const matchIndex = lowerText.indexOf(lowerIndicator, searchStart);
+      if (matchIndex === -1) break;
+
+      // Check if this match is negated by looking at preceding context
+      const precedingText = lowerText.slice(Math.max(0, matchIndex - 30), matchIndex);
+
+      // Check if any negation pattern appears right before this match
+      const isNegated = NEGATION_PATTERNS.some((pattern) => {
+        // Find the last match of the negation pattern in preceding text
+        const matches = precedingText.match(pattern);
+        if (!matches || matches.length === 0) return false;
+
+        // Check if the negation ends right at (or very close to) the indicator
+        const lastMatch = matches[matches.length - 1]!;
+        return precedingText.trimEnd().endsWith(lastMatch.trimEnd());
+      });
+
+      if (!isNegated) {
+        return true; // Found a non-negated match
+      }
+
+      searchStart = matchIndex + 1;
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -327,6 +392,12 @@ export function detectConflicts(extractions: AnswerExtractionResult[]): SignalCo
     // Look for conflicting evidence
     for (const e1 of evidence1List) {
       for (const e2 of evidence2List) {
+        // Skip if both signals are from the same answer
+        // (same answer can't conflict with itself - it's a coherent response)
+        if (e1.answerId === e2.answerId) {
+          continue;
+        }
+
         // Check if signal1 evidence contains negative indicators for signal2
         const signal1HasConflict = containsIndicator(
           e1.evidence,

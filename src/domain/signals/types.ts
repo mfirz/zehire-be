@@ -193,3 +193,48 @@ export interface SignalStateResult {
   conflicts: SignalConflict[];
   computedAt: string;
 }
+
+// =============================================================================
+// DECISION POSTURE
+// =============================================================================
+
+/**
+ * Decision posture levels.
+ * Must match frontend DecisionPosture enum exactly.
+ */
+export type DecisionPosture = "LOW_REGRET_RISK" | "SOME_UNCERTAINTY" | "HIGH_UNCERTAINTY";
+
+/**
+ * Severity of a posture reason.
+ */
+export type ReasonSeverity = "info" | "warning" | "critical";
+
+/**
+ * A reason contributing to the posture decision.
+ */
+export interface PostureReason {
+  code: string; // Machine-readable code
+  message: string; // Human-readable message
+  severity: ReasonSeverity;
+}
+
+/**
+ * Complete posture computation result.
+ */
+export interface PostureResult {
+  posture: DecisionPosture;
+
+  /** Primary reason for this posture (shown prominently in UI) */
+  primaryReason: string;
+
+  /** All contributing reasons */
+  reasons: PostureReason[];
+
+  /** Signal state that led to this posture */
+  signalState: SignalStateResult;
+
+  /** Suggested actions for the hiring manager */
+  suggestedActions: string[];
+
+  computedAt: string;
+}

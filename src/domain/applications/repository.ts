@@ -715,6 +715,59 @@ export class ApplicationRepository {
     return JSON.parse(result.signal_evaluations) as T;
   }
 
+  /**
+   * Save posture result for an application.
+   */
+  async savePostureResult(
+    applicationId: string,
+    posture: {
+      posture: string;
+      primaryReason: string;
+      reasons: unknown[];
+      signalState: unknown;
+      suggestedActions: string[];
+      computedAt: string;
+    }
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        `
+        UPDATE applications
+        SET decision_posture = ?,
+            signal_evaluations = ?,
+            signals_status = 'completed',
+            signals_computed_at = ?,
+            updated_at = ?
+        WHERE id = ?
+        `
+      )
+      .bind(
+        posture.posture,
+        JSON.stringify(posture),
+        posture.computedAt,
+        posture.computedAt,
+        applicationId
+      )
+      .run();
+  }
+
+  /**
+   * Get posture result for an application.
+   */
+  async getPostureResult<T>(applicationId: string): Promise<T | null> {
+    const result = await this.db
+      .prepare(
+        `
+        SELECT signal_evaluations FROM applications WHERE id = ?
+        `
+      )
+      .bind(applicationId)
+      .first<{ signal_evaluations: string | null }>();
+
+    if (!result?.signal_evaluations) return null;
+    return JSON.parse(result.signal_evaluations) as T;
+  }
+
   // ===========================================================================
   // MAPPERS
   // ===========================================================================

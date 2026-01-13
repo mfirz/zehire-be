@@ -15,10 +15,12 @@ import {
   SIGNAL_EXTRACTION_SYSTEM_PROMPT,
 } from "./extractor";
 import { aggregateSignals, detectConflicts, analyzeCriticalSignals } from "./aggregator";
+import { computePosture } from "./posture";
 import type {
   AnswerExtractionResult,
   SignalConfidence,
   SignalExtractionInput,
+  SignalStateResult,
 } from "./types";
 
 // =============================================================================
@@ -583,6 +585,217 @@ function testCriticalSignalAnalysis(): void {
   console.log("");
 }
 
+/**
+ * Test 7: Posture Computation
+ */
+function testPostureComputation(): void {
+  console.log("=".repeat(60));
+  console.log("TEST 7: Posture Computation");
+  console.log("=".repeat(60));
+
+  // Test 1: LOW_REGRET_RISK (all critical signals satisfied)
+  console.log("\n--- Test: LOW_REGRET_RISK ---");
+  const lowRiskState: SignalStateResult = {
+    aggregated: {
+      present: [
+        "decision_under_uncertainty",
+        "accountability",
+        "risk_reasoning",
+        "learning_from_failure",
+      ] as SignalId[],
+      partial: [] as SignalId[],
+      missing: [] as SignalId[],
+      notAsked: ["technical_depth"] as SignalId[],
+      details: {
+        decision_under_uncertainty: { bestConfidence: "clear", evaluationCount: 1, evidence: [] },
+        accountability: { bestConfidence: "clear", evaluationCount: 1, evidence: [] },
+        risk_reasoning: { bestConfidence: "clear", evaluationCount: 1, evidence: [] },
+        learning_from_failure: { bestConfidence: "clear", evaluationCount: 1, evidence: [] },
+      },
+    },
+    criticalAnalysis: {
+      criticalSignals: [
+        "decision_under_uncertainty",
+        "accountability",
+        "risk_reasoning",
+      ] as SignalId[],
+      satisfied: [
+        "decision_under_uncertainty",
+        "accountability",
+        "risk_reasoning",
+      ] as SignalId[],
+      gaps: [],
+      hasCriticalGap: false,
+    },
+    conflicts: [],
+    computedAt: new Date().toISOString(),
+  };
+
+  const lowRiskPosture = computePosture(lowRiskState);
+  console.log(`Posture: ${lowRiskPosture.posture}`);
+  console.log(`Primary Reason: ${lowRiskPosture.primaryReason}`);
+  console.log(`Suggested Actions: ${lowRiskPosture.suggestedActions.length}`);
+  console.log(
+    lowRiskPosture.posture === "LOW_REGRET_RISK"
+      ? "✓ Correctly computed LOW_REGRET_RISK"
+      : "✗ Expected LOW_REGRET_RISK"
+  );
+
+  // Test 2: SOME_UNCERTAINTY (critical gap)
+  console.log("\n--- Test: SOME_UNCERTAINTY (critical gap) ---");
+  const someUncertaintyState: SignalStateResult = {
+    aggregated: {
+      present: ["decision_under_uncertainty", "accountability"] as SignalId[],
+      partial: ["risk_reasoning"] as SignalId[],
+      missing: ["learning_from_failure"] as SignalId[],
+      notAsked: [] as SignalId[],
+      details: {
+        decision_under_uncertainty: { bestConfidence: "clear", evaluationCount: 1, evidence: [] },
+        accountability: { bestConfidence: "clear", evaluationCount: 1, evidence: [] },
+        risk_reasoning: { bestConfidence: "partial", evaluationCount: 1, evidence: [] },
+        learning_from_failure: { bestConfidence: "absent", evaluationCount: 1, evidence: [] },
+      },
+    },
+    criticalAnalysis: {
+      criticalSignals: [
+        "decision_under_uncertainty",
+        "accountability",
+        "risk_reasoning",
+      ] as SignalId[],
+      satisfied: ["decision_under_uncertainty", "accountability"] as SignalId[],
+      gaps: [{ signalId: "risk_reasoning" as SignalId, status: "partial", wasAsked: true }],
+      hasCriticalGap: true,
+    },
+    conflicts: [],
+    computedAt: new Date().toISOString(),
+  };
+
+  const someUncertaintyPosture = computePosture(someUncertaintyState);
+  console.log(`Posture: ${someUncertaintyPosture.posture}`);
+  console.log(`Primary Reason: ${someUncertaintyPosture.primaryReason}`);
+  console.log(`Reasons: ${someUncertaintyPosture.reasons.map((r) => r.code).join(", ")}`);
+  console.log(`Suggested Actions: ${someUncertaintyPosture.suggestedActions.join("; ")}`);
+  console.log(
+    someUncertaintyPosture.posture === "SOME_UNCERTAINTY"
+      ? "✓ Correctly computed SOME_UNCERTAINTY"
+      : "✗ Expected SOME_UNCERTAINTY"
+  );
+
+  // Test 3: HIGH_UNCERTAINTY (majority critical missing)
+  console.log("\n--- Test: HIGH_UNCERTAINTY (majority critical missing) ---");
+  const highUncertaintyState: SignalStateResult = {
+    aggregated: {
+      present: [] as SignalId[],
+      partial: [] as SignalId[],
+      missing: [
+        "decision_under_uncertainty",
+        "accountability",
+        "risk_reasoning",
+      ] as SignalId[],
+      notAsked: [] as SignalId[],
+      details: {
+        decision_under_uncertainty: { bestConfidence: "absent", evaluationCount: 1, evidence: [] },
+        accountability: { bestConfidence: "absent", evaluationCount: 1, evidence: [] },
+        risk_reasoning: { bestConfidence: "absent", evaluationCount: 1, evidence: [] },
+      },
+    },
+    criticalAnalysis: {
+      criticalSignals: [
+        "decision_under_uncertainty",
+        "accountability",
+        "risk_reasoning",
+      ] as SignalId[],
+      satisfied: [] as SignalId[],
+      gaps: [
+        { signalId: "decision_under_uncertainty" as SignalId, status: "missing", wasAsked: true },
+        { signalId: "accountability" as SignalId, status: "missing", wasAsked: true },
+        { signalId: "risk_reasoning" as SignalId, status: "missing", wasAsked: true },
+      ],
+      hasCriticalGap: true,
+    },
+    conflicts: [],
+    computedAt: new Date().toISOString(),
+  };
+
+  const highUncertaintyPosture = computePosture(highUncertaintyState);
+  console.log(`Posture: ${highUncertaintyPosture.posture}`);
+  console.log(`Primary Reason: ${highUncertaintyPosture.primaryReason}`);
+  console.log(`Reasons: ${highUncertaintyPosture.reasons.map((r) => r.code).join(", ")}`);
+  console.log(`Suggested Actions: ${highUncertaintyPosture.suggestedActions.join("; ")}`);
+  console.log(
+    highUncertaintyPosture.posture === "HIGH_UNCERTAINTY"
+      ? "✓ Correctly computed HIGH_UNCERTAINTY"
+      : "✗ Expected HIGH_UNCERTAINTY"
+  );
+
+  // Test 4: HIGH_UNCERTAINTY (multiple conflicts)
+  console.log("\n--- Test: HIGH_UNCERTAINTY (multiple conflicts) ---");
+  const conflictState: SignalStateResult = {
+    aggregated: {
+      present: ["decision_under_uncertainty", "accountability"] as SignalId[],
+      partial: [] as SignalId[],
+      missing: [] as SignalId[],
+      notAsked: [] as SignalId[],
+      details: {
+        decision_under_uncertainty: { bestConfidence: "clear", evaluationCount: 1, evidence: [] },
+        accountability: { bestConfidence: "clear", evaluationCount: 1, evidence: [] },
+      },
+    },
+    criticalAnalysis: {
+      criticalSignals: ["decision_under_uncertainty", "accountability"] as SignalId[],
+      satisfied: ["decision_under_uncertainty", "accountability"] as SignalId[],
+      gaps: [],
+      hasCriticalGap: false,
+    },
+    conflicts: [
+      {
+        signals: ["accountability", "learning_from_failure"] as [SignalId, SignalId],
+        reason: "Claims accountability but blames others",
+        evidence: {
+          signal1: { answerId: "a1", quote: "I took ownership" },
+          signal2: { answerId: "a2", quote: "It wasn't my fault" },
+        },
+      },
+      {
+        signals: ["decision_under_uncertainty", "risk_reasoning"] as [SignalId, SignalId],
+        reason: "Claims decisiveness but shows analysis paralysis",
+        evidence: {
+          signal1: { answerId: "a1", quote: "I made quick decisions" },
+          signal2: { answerId: "a3", quote: "I couldn't decide for weeks" },
+        },
+      },
+    ],
+    computedAt: new Date().toISOString(),
+  };
+
+  const conflictPosture = computePosture(conflictState);
+  console.log(`Posture: ${conflictPosture.posture}`);
+  console.log(`Primary Reason: ${conflictPosture.primaryReason}`);
+  console.log(`Reasons: ${conflictPosture.reasons.map((r) => r.code).join(", ")}`);
+  console.log(
+    conflictPosture.posture === "HIGH_UNCERTAINTY"
+      ? "✓ Correctly computed HIGH_UNCERTAINTY for multiple conflicts"
+      : "✗ Expected HIGH_UNCERTAINTY"
+  );
+
+  // Summary
+  console.log("\n--- Summary ---");
+  console.log(
+    `LOW_REGRET_RISK: ${lowRiskPosture.posture === "LOW_REGRET_RISK" ? "✓" : "✗"}`
+  );
+  console.log(
+    `SOME_UNCERTAINTY (gap): ${someUncertaintyPosture.posture === "SOME_UNCERTAINTY" ? "✓" : "✗"}`
+  );
+  console.log(
+    `HIGH_UNCERTAINTY (missing): ${highUncertaintyPosture.posture === "HIGH_UNCERTAINTY" ? "✓" : "✗"}`
+  );
+  console.log(
+    `HIGH_UNCERTAINTY (conflicts): ${conflictPosture.posture === "HIGH_UNCERTAINTY" ? "✓" : "✗"}`
+  );
+
+  console.log("");
+}
+
 // =============================================================================
 // HELPERS
 // =============================================================================
@@ -616,6 +829,7 @@ async function main(): Promise<void> {
   testSignalAggregation();
   testConflictDetection();
   testCriticalSignalAnalysis();
+  testPostureComputation();
 
   console.log("=".repeat(60));
   console.log("All tests completed!");

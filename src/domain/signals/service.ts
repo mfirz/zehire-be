@@ -19,7 +19,8 @@ import type { LLMClient } from "../jobs/archetypes/inference";
 
 import { extractSignalsFromAnswer } from "./extractor";
 import { computeSignalState } from "./aggregator";
-import type { AnswerExtractionResult, SignalStateResult } from "./types";
+import { computePosture } from "./posture";
+import type { AnswerExtractionResult, PostureResult } from "./types";
 
 // =============================================================================
 // SERVICE CLASS
@@ -160,7 +161,8 @@ export class SignalExtractionService {
    *
    * 1. Extract signals from all answers
    * 2. Compute signal state (aggregation + critical analysis + conflicts)
-   * 3. Save results to DB
+   * 3. Compute decision posture from signal state
+   * 4. Save results to DB
    */
   async processApplication(
     client: LLMClient,
@@ -171,7 +173,7 @@ export class SignalExtractionService {
     }
   ): Promise<{
     results: AnswerExtractionResult[];
-    signalState: SignalStateResult;
+    posture: PostureResult;
   }> {
     try {
       // Get the application to access job context
@@ -198,10 +200,13 @@ export class SignalExtractionService {
         primarySignals: jobContext.primarySignals,
       });
 
-      // Save signal state to DB (posture is computed inside saveSignalState)
-      await this.applicationRepository.saveSignalState(applicationId, signalState);
+      // Compute decision posture from signal state
+      const posture = computePosture(signalState);
 
-      return { results, signalState };
+      // Save posture result to DB
+      await this.applicationRepository.savePostureResult(applicationId, posture);
+
+      return { results, posture };
     } catch (error) {
       // Mark application as failed
       await this.applicationRepository.updateSignalsStatus(applicationId, "failed", {

@@ -1,7 +1,7 @@
 /**
  * Signals Domain
  * ===============
- * Signal extraction, aggregation, and conflict detection for candidate answers.
+ * Signal extraction, aggregation, conflict detection, and posture computation.
  */
 
 // Types
@@ -16,6 +16,10 @@ export type {
   SignalConflict,
   CriticalSignalAnalysis,
   SignalStateResult,
+  DecisionPosture,
+  ReasonSeverity,
+  PostureReason,
+  PostureResult,
 } from "./types";
 
 // Extractor
@@ -33,6 +37,9 @@ export {
   detectConflicts,
   computeSignalState,
 } from "./aggregator";
+
+// Posture computation
+export { computePosture } from "./posture";
 
 // Service
 export { SignalExtractionService } from "./service";

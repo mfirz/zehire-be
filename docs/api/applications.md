@@ -8,11 +8,12 @@ Recruiter-facing endpoints for managing job applications.
 
 ## Endpoints
 
-| Method | Path                              | Description                    |
-| ------ | --------------------------------- | ------------------------------ |
-| GET    | `/v1/jobs/:jobId/applications`    | List applications for a job    |
-| GET    | `/v1/applications/:applicationId` | Get full application details   |
-| PATCH  | `/v1/applications/:applicationId` | Update application status      |
+| Method | Path                                      | Description                    |
+| ------ | ----------------------------------------- | ------------------------------ |
+| GET    | `/v1/jobs/:jobId/applications`            | List applications for a job    |
+| GET    | `/v1/applications/:applicationId`         | Get full application details   |
+| PATCH  | `/v1/applications/:applicationId`         | Update application status      |
+| GET    | `/v1/applications/:applicationId/posture` | Get decision posture           |
 
 ---
 
@@ -249,6 +250,122 @@ Returns the updated application:
 
 ---
 
+## GET /v1/applications/:applicationId/posture
+
+Get the decision posture for an application, including signal analysis and suggested actions.
+
+### Path Parameters
+
+| Parameter       | Type   | Description        |
+| --------------- | ------ | ------------------ |
+| `applicationId` | string | The application ID |
+
+### Response (200 OK)
+
+When signals have been computed:
+
+```json
+{
+  "posture": "SOME_UNCERTAINTY",
+  "primaryReason": "Some critical signals are missing or unclear",
+  "reasons": [
+    {
+      "code": "CRITICAL_GAP",
+      "message": "Some critical signals are missing or unclear",
+      "severity": "warning"
+    },
+    {
+      "code": "CRITICAL_ONLY_PARTIAL",
+      "message": "Some critical signals lack depth or specificity",
+      "severity": "info"
+    }
+  ],
+  "signals": {
+    "present": ["TAKES_OWNERSHIP", "LEARNS_FROM_FAILURE"],
+    "partial": ["HANDLES_AMBIGUITY"],
+    "missing": ["COMMUNICATES_PROACTIVELY"],
+    "criticalGaps": ["COMMUNICATES_PROACTIVELY"]
+  },
+  "conflicts": [],
+  "suggestedActions": [
+    "Probe these areas in interview: Proactive Communication",
+    "Ask for specific examples about: Handles Ambiguity"
+  ]
+}
+```
+
+### Response (202 Accepted)
+
+When signals are not yet computed:
+
+```json
+{
+  "status": "not_started",
+  "message": "Signal extraction has not started"
+}
+```
+
+Or when processing:
+
+```json
+{
+  "status": "processing",
+  "message": "Signal extraction in progress"
+}
+```
+
+### Response (500 Error)
+
+When signal extraction failed:
+
+```json
+{
+  "status": "failed",
+  "error": "LLM rate limit exceeded",
+  "code": "EXTRACTION_FAILED"
+}
+```
+
+### Response Fields
+
+| Field            | Type   | Description                                      |
+| ---------------- | ------ | ------------------------------------------------ |
+| `posture`        | string | Decision posture (see values below)              |
+| `primaryReason`  | string | Human-readable primary reason for the posture    |
+| `reasons`        | array  | All reasons contributing to posture              |
+| `signals`        | object | Signal state breakdown                           |
+| `signals.present`| array  | Signals clearly demonstrated                     |
+| `signals.partial`| array  | Signals partially demonstrated                   |
+| `signals.missing`| array  | Signals not demonstrated                         |
+| `signals.criticalGaps` | array | Critical signals that are missing/partial   |
+| `conflicts`      | array  | Any detected contradictions between signals      |
+| `suggestedActions`| array | Recommended next steps for hiring manager       |
+
+### Posture Values
+
+| Posture            | Description                                          |
+| ------------------ | ---------------------------------------------------- |
+| `LOW_REGRET_RISK`  | Critical signals clearly demonstrated, low risk      |
+| `SOME_UNCERTAINTY` | Some gaps or concerns, worth probing in interview    |
+| `HIGH_UNCERTAINTY` | Major concerns, significant gaps or contradictions   |
+
+### Reason Severities
+
+| Severity   | Description                          |
+| ---------- | ------------------------------------ |
+| `info`     | Informational, no action required    |
+| `warning`  | Notable concern, probe in interview  |
+| `critical` | Serious concern, high risk indicator |
+
+### Errors
+
+| Status | Message               |
+| ------ | --------------------- |
+| 404    | Application not found |
+| 404    | Posture not computed  |
+
+---
+
 ## Typical Workflow
 
 ```
@@ -265,11 +382,15 @@ Returns the updated application:
    GET /v1/jobs/:jobId/applications?posture=LOW_REGRET_RISK
    → Filter by posture to prioritize review
 
-4. Recruiter reviews candidate
+4. Recruiter reviews candidate posture
+   GET /v1/applications/:id/posture
+   → View posture, signals, and suggested actions
+
+5. Recruiter reviews full application
    GET /v1/applications/:id
    → View full answers and extracted signals
 
-5. Recruiter moves through pipeline
+6. Recruiter moves through pipeline
    PATCH /v1/applications/:id { "status": "screening" }
    PATCH /v1/applications/:id { "status": "interview" }
    PATCH /v1/applications/:id { "status": "offer" }
@@ -286,11 +407,17 @@ These APIs power the recruiter dashboard:
    - Shows candidate list with posture badges
    - Supports filtering by posture for prioritization
 
-2. **Application Detail View** (`/applications/:applicationId`)
+2. **Application Posture View**
+   - Uses `GET /v1/applications/:applicationId/posture`
+   - Shows decision posture with reasons
+   - Displays signal state (present/partial/missing)
+   - Shows suggested actions for hiring manager
+
+3. **Application Detail View** (`/applications/:applicationId`)
    - Uses `GET /v1/applications/:applicationId`
    - Shows full answers with extracted signals
    - Displays decision posture breakdown
 
-3. **Status Update Actions**
+4. **Status Update Actions**
    - Uses `PATCH /v1/applications/:applicationId`
    - Triggered by recruiter moving candidate through stages
