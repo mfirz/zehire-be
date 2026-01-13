@@ -16,7 +16,7 @@
  * - Job activated after period end → 0 active time
  */
 
-import type { BillingEvent } from "../jobs/repository";
+import type { BillingEventRecord } from "../jobs/repository";
 
 // =============================================================================
 // TYPES
@@ -166,7 +166,7 @@ export function getPreviousBillingPeriod(): BillingPeriod {
  */
 export function calculateJobUsage(
   jobId: string,
-  events: BillingEvent[],
+  events: BillingEventRecord[],
   period: BillingPeriod
 ): JobUsage {
   const periodStart = new Date(period.start).getTime();
@@ -276,7 +276,7 @@ export function calculateJobUsage(
  */
 export function calculateBillingUsage(
   orgId: string,
-  eventsByJob: Map<string, BillingEvent[]>,
+  eventsByJob: Map<string, BillingEventRecord[]>,
   period: BillingPeriod,
   billingWaived: boolean = false,
   billingWaivedReason: string | null = null

@@ -12,10 +12,12 @@ export {
   BILLING_EVENT_TYPES,
   type CapacityStatus,
   type OrgCapacityInfo,
-  type BillingEvent,
-  type BillingEventType,
+  type BillingEventRecord,
   type RecordBillingEventInput,
 } from "./repository";
+
+// Re-export BillingEventType from db schema
+export type { BillingEventType } from "../../db";
 
 // Service
 export { JobService, type JobServiceError, type JobServiceResult } from "./service";

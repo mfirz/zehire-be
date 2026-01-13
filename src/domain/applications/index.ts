@@ -36,11 +36,8 @@ export {
 export type {
   Answer,
   AnswerInput,
-  AnswerRow,
   Application,
   ApplicationDraft,
-  ApplicationDraftRow,
-  ApplicationRow,
   ApplicationStatus,
   DraftAnswer,
   ExtractionStatus,

@@ -1,7 +1,7 @@
 /**
  * Application Repository
  * ======================
- * Data access layer for applications, answers, and drafts.
+ * Data access layer for applications, answers, and drafts using Drizzle ORM.
  *
  * Handles:
  * - Application creation with answers
@@ -10,21 +10,27 @@
  */
 
 import type { D1Database } from "@cloudflare/workers-types";
+import { and, count, desc, eq, gt, sql } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 
 import {
-  DRAFT_EXPIRY_DAYS,
+  answers,
+  applicationDrafts,
+  applications,
+  createDb,
+  type Answer,
   type Application,
   type ApplicationDraft,
-  type ApplicationDraftRow,
-  type ApplicationDetail,
-  type ApplicationRow,
-  type ApplicationSummary,
-  type Answer,
-  type AnswerRow,
-  type ListApplicationsQuery,
-  type PublicApplyInput,
-  type SaveDraftInput,
+  type Database,
+  type ExtractionStatus,
+  type SignalsStatus,
+} from "../../db";
+import type {
+  ApplicationDetail,
+  ApplicationSummary,
+  ListApplicationsQuery,
+  PublicApplyInput,
+  SaveDraftInput,
 } from "./schemas";
 
 // Alphanumeric-only nanoid for IDs
@@ -32,6 +38,8 @@ const alphanumericId = customAlphabet(
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
   21
 );
+
+import { DRAFT_EXPIRY_DAYS } from "./schemas";
 
 // =============================================================================
 // CRYPTO HELPERS
@@ -63,7 +71,11 @@ function generateToken(): string {
 // =============================================================================
 
 export class ApplicationRepository {
-  constructor(private readonly db: D1Database) {}
+  private db: Database;
+
+  constructor(d1: D1Database) {
+    this.db = createDb(d1);
+  }
 
   // ===========================================================================
   // APPLICATIONS
@@ -92,54 +104,38 @@ export class ApplicationRepository {
       }
     }
 
-    // Use a batch for atomic insertion
-    const statements: D1PreparedStatement[] = [];
-
     // Insert application
-    statements.push(
-      this.db
-        .prepare(
-          `
-        INSERT INTO applications (
-          id, job_id, candidate_email, candidate_name,
-          status, signals_status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'pending', 'pending', ?, ?)
-        `
-        )
-        .bind(applicationId, jobId, input.email, input.name, now, now)
-    );
+    await this.db.insert(applications).values({
+      id: applicationId,
+      jobId,
+      candidateEmail: input.email,
+      candidateName: input.name,
+      status: "pending",
+      signalsStatus: "pending",
+      createdAt: now,
+      updatedAt: now,
+    });
 
     // Insert answers (all required)
-    for (const question of questions) {
+    const answerValues = questions.map((question) => {
       const answerId = alphanumericId();
       answerIds.push(answerId);
-      const answerText = answersMap.get(question.archetypeId)!;
+      return {
+        id: answerId,
+        applicationId,
+        archetypeId: question.archetypeId,
+        questionText: question.questionText,
+        answerText: answersMap.get(question.archetypeId)!,
+        extractionStatus: "pending" as const,
+        createdAt: now,
+        updatedAt: now,
+        answeredAt: now,
+      };
+    });
 
-      statements.push(
-        this.db
-          .prepare(
-            `
-          INSERT INTO answers (
-            id, application_id, archetype_id, question_text,
-            answer_text, extraction_status, created_at, updated_at, answered_at
-          ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)
-          `
-          )
-          .bind(
-            answerId,
-            applicationId,
-            question.archetypeId,
-            question.questionText,
-            answerText,
-            now,
-            now,
-            now
-          )
-      );
+    if (answerValues.length > 0) {
+      await this.db.insert(answers).values(answerValues);
     }
-
-    // Execute batch
-    await this.db.batch(statements);
 
     return { applicationId, answerIds };
   }
@@ -149,15 +145,10 @@ export class ApplicationRepository {
    */
   async findExistingApplication(jobId: string, email: string): Promise<{ id: string } | null> {
     const result = await this.db
-      .prepare(
-        `
-        SELECT id FROM applications
-        WHERE job_id = ? AND candidate_email = ?
-        LIMIT 1
-        `
-      )
-      .bind(jobId, email)
-      .first<{ id: string }>();
+      .select({ id: applications.id })
+      .from(applications)
+      .where(and(eq(applications.jobId, jobId), eq(applications.candidateEmail, email)))
+      .get();
 
     return result ?? null;
   }
@@ -167,12 +158,12 @@ export class ApplicationRepository {
    */
   async findById(id: string): Promise<Application | null> {
     const result = await this.db
-      .prepare(`SELECT * FROM applications WHERE id = ?`)
-      .bind(id)
-      .first<ApplicationRow>();
+      .select()
+      .from(applications)
+      .where(eq(applications.id, id))
+      .get();
 
-    if (!result) return null;
-    return this.mapApplication(result);
+    return result ?? null;
   }
 
   /**
@@ -180,17 +171,12 @@ export class ApplicationRepository {
    */
   async getAnswers(applicationId: string): Promise<Answer[]> {
     const result = await this.db
-      .prepare(
-        `
-        SELECT * FROM answers
-        WHERE application_id = ?
-        ORDER BY created_at ASC
-        `
-      )
-      .bind(applicationId)
-      .all<AnswerRow>();
+      .select()
+      .from(answers)
+      .where(eq(answers.applicationId, applicationId))
+      .orderBy(answers.createdAt);
 
-    return result.results.map((row) => this.mapAnswer(row));
+    return result;
   }
 
   /**
@@ -198,50 +184,38 @@ export class ApplicationRepository {
    */
   async updateSignalsStatus(
     id: string,
-    status: "processing" | "completed" | "failed",
+    status: SignalsStatus,
     error?: { message: string; code: string }
   ): Promise<void> {
     const now = new Date().toISOString();
 
     if (status === "failed" && error) {
       await this.db
-        .prepare(
-          `
-          UPDATE applications
-          SET signals_status = ?,
-              signals_error_message = ?,
-              signals_error_code = ?,
-              updated_at = ?
-          WHERE id = ?
-          `
-        )
-        .bind(status, error.message, error.code, now, id)
-        .run();
+        .update(applications)
+        .set({
+          signalsStatus: status,
+          signalsErrorMessage: error.message,
+          signalsErrorCode: error.code,
+          updatedAt: now,
+        })
+        .where(eq(applications.id, id));
     } else if (status === "completed") {
       await this.db
-        .prepare(
-          `
-          UPDATE applications
-          SET signals_status = ?,
-              signals_computed_at = ?,
-              updated_at = ?
-          WHERE id = ?
-          `
-        )
-        .bind(status, now, now, id)
-        .run();
+        .update(applications)
+        .set({
+          signalsStatus: status,
+          signalsComputedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(applications.id, id));
     } else {
       await this.db
-        .prepare(
-          `
-          UPDATE applications
-          SET signals_status = ?,
-              updated_at = ?
-          WHERE id = ?
-          `
-        )
-        .bind(status, now, id)
-        .run();
+        .update(applications)
+        .set({
+          signalsStatus: status,
+          updatedAt: now,
+        })
+        .where(eq(applications.id, id));
     }
   }
 
@@ -264,39 +238,23 @@ export class ApplicationRepository {
 
     // Check if draft already exists for this email + job
     const existing = await this.db
-      .prepare(
-        `
-        SELECT id FROM application_drafts
-        WHERE job_id = ? AND candidate_email = ?
-        LIMIT 1
-        `
-      )
-      .bind(jobId, input.email)
-      .first<{ id: string }>();
+      .select({ id: applicationDrafts.id })
+      .from(applicationDrafts)
+      .where(and(eq(applicationDrafts.jobId, jobId), eq(applicationDrafts.candidateEmail, input.email)))
+      .get();
 
     if (existing) {
       // Update existing draft
       await this.db
-        .prepare(
-          `
-          UPDATE application_drafts
-          SET candidate_name = ?,
-              answers = ?,
-              resume_token_hash = ?,
-              expires_at = ?,
-              updated_at = ?
-          WHERE id = ?
-          `
-        )
-        .bind(
-          input.name,
-          JSON.stringify(input.answers),
+        .update(applicationDrafts)
+        .set({
+          candidateName: input.name,
+          answers: JSON.stringify(input.answers),
           resumeTokenHash,
-          expiresAt.toISOString(),
-          now.toISOString(),
-          existing.id
-        )
-        .run();
+          expiresAt: expiresAt.toISOString(),
+          updatedAt: now.toISOString(),
+        })
+        .where(eq(applicationDrafts.id, existing.id));
 
       return {
         draftId: existing.id,
@@ -308,27 +266,17 @@ export class ApplicationRepository {
     // Create new draft
     const draftId = alphanumericId();
 
-    await this.db
-      .prepare(
-        `
-        INSERT INTO application_drafts (
-          id, job_id, candidate_email, candidate_name,
-          answers, resume_token_hash, expires_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      )
-      .bind(
-        draftId,
-        jobId,
-        input.email,
-        input.name,
-        JSON.stringify(input.answers),
-        resumeTokenHash,
-        expiresAt.toISOString(),
-        now.toISOString(),
-        now.toISOString()
-      )
-      .run();
+    await this.db.insert(applicationDrafts).values({
+      id: draftId,
+      jobId,
+      candidateEmail: input.email,
+      candidateName: input.name,
+      answers: JSON.stringify(input.answers),
+      resumeTokenHash,
+      expiresAt: expiresAt.toISOString(),
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
 
     return {
       draftId,
@@ -343,66 +291,73 @@ export class ApplicationRepository {
    */
   async getDraftByToken(draftId: string, resumeToken: string): Promise<ApplicationDraft | null> {
     const tokenHash = await hashToken(resumeToken);
+    const now = new Date().toISOString();
 
     const result = await this.db
-      .prepare(
-        `
-        SELECT * FROM application_drafts
-        WHERE id = ?
-          AND resume_token_hash = ?
-          AND expires_at > datetime('now')
-        LIMIT 1
-        `
+      .select()
+      .from(applicationDrafts)
+      .where(
+        and(
+          eq(applicationDrafts.id, draftId),
+          eq(applicationDrafts.resumeTokenHash, tokenHash),
+          gt(applicationDrafts.expiresAt, now)
+        )
       )
-      .bind(draftId, tokenHash)
-      .first<ApplicationDraftRow>();
+      .get();
 
-    if (!result) return null;
-    return this.mapDraft(result);
+    return result ?? null;
   }
 
   /**
    * Get a draft by job ID and email (for checking existence).
    */
   async getDraftByEmail(jobId: string, email: string): Promise<ApplicationDraft | null> {
-    const result = await this.db
-      .prepare(
-        `
-        SELECT * FROM application_drafts
-        WHERE job_id = ?
-          AND candidate_email = ?
-          AND expires_at > datetime('now')
-        LIMIT 1
-        `
-      )
-      .bind(jobId, email)
-      .first<ApplicationDraftRow>();
+    const now = new Date().toISOString();
 
-    if (!result) return null;
-    return this.mapDraft(result);
+    const result = await this.db
+      .select()
+      .from(applicationDrafts)
+      .where(
+        and(
+          eq(applicationDrafts.jobId, jobId),
+          eq(applicationDrafts.candidateEmail, email),
+          gt(applicationDrafts.expiresAt, now)
+        )
+      )
+      .get();
+
+    return result ?? null;
   }
 
   /**
    * Delete a draft (after successful application submission).
    */
   async deleteDraft(draftId: string): Promise<void> {
-    await this.db.prepare(`DELETE FROM application_drafts WHERE id = ?`).bind(draftId).run();
+    await this.db.delete(applicationDrafts).where(eq(applicationDrafts.id, draftId));
   }
 
   /**
    * Delete expired drafts (cleanup job).
    */
   async deleteExpiredDrafts(): Promise<number> {
-    const result = await this.db
-      .prepare(
-        `
-        DELETE FROM application_drafts
-        WHERE expires_at < datetime('now')
-        `
-      )
-      .run();
+    const now = new Date().toISOString();
 
-    return result.meta.changes ?? 0;
+    // Count before delete (D1/Drizzle doesn't return count from delete)
+    const countResult = await this.db
+      .select({ count: count() })
+      .from(applicationDrafts)
+      .where(sql`${applicationDrafts.expiresAt} < ${now}`)
+      .get();
+
+    const toDelete = countResult?.count ?? 0;
+
+    if (toDelete > 0) {
+      await this.db
+        .delete(applicationDrafts)
+        .where(sql`${applicationDrafts.expiresAt} < ${now}`);
+    }
+
+    return toDelete;
   }
 
   // ===========================================================================
@@ -416,68 +371,69 @@ export class ApplicationRepository {
     jobId: string,
     query: ListApplicationsQuery
   ): Promise<{ applications: ApplicationSummary[]; total: number }> {
-    const conditions: string[] = ["job_id = ?"];
-    const params: unknown[] = [jobId];
+    // Build conditions
+    const conditions = [eq(applications.jobId, jobId)];
 
     if (query.status) {
-      conditions.push("status = ?");
-      params.push(query.status);
+      conditions.push(eq(applications.status, query.status));
     }
 
     if (query.signalsStatus) {
-      conditions.push("signals_status = ?");
-      params.push(query.signalsStatus);
+      conditions.push(eq(applications.signalsStatus, query.signalsStatus));
     }
 
     if (query.posture) {
-      conditions.push("decision_posture = ?");
-      params.push(query.posture);
+      conditions.push(eq(applications.decisionPosture, query.posture));
     }
 
-    const whereClause = conditions.join(" AND ");
+    const whereClause = and(...conditions);
 
     // Get total count
     const countResult = await this.db
-      .prepare(`SELECT COUNT(*) as count FROM applications WHERE ${whereClause}`)
-      .bind(...params)
-      .first<{ count: number }>();
+      .select({ count: count() })
+      .from(applications)
+      .where(whereClause)
+      .get();
 
     const total = countResult?.count ?? 0;
 
-    // Get paginated results
+    // Map sort column
     const sortColumn = {
-      createdAt: "created_at",
-      updatedAt: "updated_at",
-      candidateName: "candidate_name",
+      createdAt: applications.createdAt,
+      updatedAt: applications.updatedAt,
+      candidateName: applications.candidateName,
     }[query.sort];
 
+    // Get paginated results
     const results = await this.db
-      .prepare(
-        `
-        SELECT
-          id, candidate_email, candidate_name, status,
-          signals_status, decision_posture, created_at, updated_at
-        FROM applications
-        WHERE ${whereClause}
-        ORDER BY ${sortColumn} ${query.order.toUpperCase()}
-        LIMIT ? OFFSET ?
-        `
-      )
-      .bind(...params, query.limit, query.offset)
-      .all();
+      .select({
+        id: applications.id,
+        candidateEmail: applications.candidateEmail,
+        candidateName: applications.candidateName,
+        status: applications.status,
+        signalsStatus: applications.signalsStatus,
+        decisionPosture: applications.decisionPosture,
+        createdAt: applications.createdAt,
+        updatedAt: applications.updatedAt,
+      })
+      .from(applications)
+      .where(whereClause)
+      .orderBy(query.order === "desc" ? desc(sortColumn) : sortColumn)
+      .limit(query.limit)
+      .offset(query.offset);
 
-    const applications: ApplicationSummary[] = results.results.map((row) => ({
-      id: row.id as string,
-      candidateEmail: row.candidate_email as string,
-      candidateName: row.candidate_name as string | null,
-      status: row.status as string,
-      signalsStatus: row.signals_status as string,
-      decisionPosture: row.decision_posture as string | null,
-      createdAt: row.created_at as string,
-      updatedAt: row.updated_at as string,
+    const applicationsList: ApplicationSummary[] = results.map((row) => ({
+      id: row.id,
+      candidateEmail: row.candidateEmail,
+      candidateName: row.candidateName,
+      status: row.status,
+      signalsStatus: row.signalsStatus,
+      decisionPosture: row.decisionPosture,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     }));
 
-    return { applications, total };
+    return { applications: applicationsList, total };
   }
 
   /**
@@ -487,7 +443,7 @@ export class ApplicationRepository {
     const application = await this.findById(id);
     if (!application) return null;
 
-    const answers = await this.getAnswers(id);
+    const answersList = await this.getAnswers(id);
 
     return {
       id: application.id,
@@ -505,7 +461,7 @@ export class ApplicationRepository {
       createdAt: application.createdAt,
       updatedAt: application.updatedAt,
       signalsComputedAt: application.signalsComputedAt,
-      answers: answers.map((a) => ({
+      answers: answersList.map((a) => ({
         id: a.id,
         archetypeId: a.archetypeId,
         questionText: a.questionText,
@@ -525,15 +481,12 @@ export class ApplicationRepository {
     const now = new Date().toISOString();
 
     await this.db
-      .prepare(
-        `
-        UPDATE applications
-        SET status = ?, updated_at = ?
-        WHERE id = ?
-        `
-      )
-      .bind(status, now, id)
-      .run();
+      .update(applications)
+      .set({
+        status: status as Application["status"],
+        updatedAt: now,
+      })
+      .where(eq(applications.id, id));
 
     return this.findById(id);
   }
@@ -544,11 +497,12 @@ export class ApplicationRepository {
    */
   async getJobId(applicationId: string): Promise<string | null> {
     const result = await this.db
-      .prepare(`SELECT job_id FROM applications WHERE id = ?`)
-      .bind(applicationId)
-      .first<{ job_id: string }>();
+      .select({ jobId: applications.jobId })
+      .from(applications)
+      .where(eq(applications.id, applicationId))
+      .get();
 
-    return result?.job_id ?? null;
+    return result?.jobId ?? null;
   }
 
   // ===========================================================================
@@ -566,40 +520,29 @@ export class ApplicationRepository {
     const now = new Date().toISOString();
 
     await this.db
-      .prepare(
-        `
-        UPDATE answers
-        SET extracted_signals = ?,
-            extraction_status = 'completed',
-            extracted_at = ?,
-            updated_at = ?
-        WHERE id = ?
-        `
-      )
-      .bind(JSON.stringify(signals), now, now, answerId)
-      .run();
+      .update(answers)
+      .set({
+        extractedSignals: JSON.stringify(signals),
+        extractionStatus: "completed",
+        extractedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(answers.id, answerId));
   }
 
   /**
    * Update answer extraction status.
    */
-  async updateAnswerExtractionStatus(
-    answerId: string,
-    status: "pending" | "processing" | "completed" | "failed" | "skipped"
-  ): Promise<void> {
+  async updateAnswerExtractionStatus(answerId: string, status: ExtractionStatus): Promise<void> {
     const now = new Date().toISOString();
 
     await this.db
-      .prepare(
-        `
-        UPDATE answers
-        SET extraction_status = ?,
-            updated_at = ?
-        WHERE id = ?
-        `
-      )
-      .bind(status, now, answerId)
-      .run();
+      .update(answers)
+      .set({
+        extractionStatus: status,
+        updatedAt: now,
+      })
+      .where(eq(answers.id, answerId));
   }
 
   /**
@@ -613,19 +556,15 @@ export class ApplicationRepository {
     const now = new Date().toISOString();
 
     await this.db
-      .prepare(
-        `
-        UPDATE applications
-        SET signal_evaluations = ?,
-            decision_posture = ?,
-            signals_status = 'completed',
-            signals_computed_at = ?,
-            updated_at = ?
-        WHERE id = ?
-        `
-      )
-      .bind(JSON.stringify(evaluations), posture, now, now, applicationId)
-      .run();
+      .update(applications)
+      .set({
+        signalEvaluations: JSON.stringify(evaluations),
+        decisionPosture: posture,
+        signalsStatus: "completed",
+        signalsComputedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(applications.id, applicationId));
   }
 
   /**
@@ -677,25 +616,15 @@ export class ApplicationRepository {
     }
 
     await this.db
-      .prepare(
-        `
-        UPDATE applications
-        SET signal_evaluations = ?,
-            decision_posture = ?,
-            signals_status = 'completed',
-            signals_computed_at = ?,
-            updated_at = ?
-        WHERE id = ?
-        `
-      )
-      .bind(
-        JSON.stringify(signalState),
-        posture,
-        signalState.computedAt,
-        signalState.computedAt,
-        applicationId
-      )
-      .run();
+      .update(applications)
+      .set({
+        signalEvaluations: JSON.stringify(signalState),
+        decisionPosture: posture,
+        signalsStatus: "completed",
+        signalsComputedAt: signalState.computedAt,
+        updatedAt: signalState.computedAt,
+      })
+      .where(eq(applications.id, applicationId));
   }
 
   /**
@@ -703,16 +632,13 @@ export class ApplicationRepository {
    */
   async getSignalState<T>(applicationId: string): Promise<T | null> {
     const result = await this.db
-      .prepare(
-        `
-        SELECT signal_evaluations FROM applications WHERE id = ?
-        `
-      )
-      .bind(applicationId)
-      .first<{ signal_evaluations: string | null }>();
+      .select({ signalEvaluations: applications.signalEvaluations })
+      .from(applications)
+      .where(eq(applications.id, applicationId))
+      .get();
 
-    if (!result?.signal_evaluations) return null;
-    return JSON.parse(result.signal_evaluations) as T;
+    if (!result?.signalEvaluations) return null;
+    return JSON.parse(result.signalEvaluations) as T;
   }
 
   /**
@@ -730,25 +656,15 @@ export class ApplicationRepository {
     }
   ): Promise<void> {
     await this.db
-      .prepare(
-        `
-        UPDATE applications
-        SET decision_posture = ?,
-            signal_evaluations = ?,
-            signals_status = 'completed',
-            signals_computed_at = ?,
-            updated_at = ?
-        WHERE id = ?
-        `
-      )
-      .bind(
-        posture.posture,
-        JSON.stringify(posture),
-        posture.computedAt,
-        posture.computedAt,
-        applicationId
-      )
-      .run();
+      .update(applications)
+      .set({
+        decisionPosture: posture.posture,
+        signalEvaluations: JSON.stringify(posture),
+        signalsStatus: "completed",
+        signalsComputedAt: posture.computedAt,
+        updatedAt: posture.computedAt,
+      })
+      .where(eq(applications.id, applicationId));
   }
 
   /**
@@ -756,67 +672,12 @@ export class ApplicationRepository {
    */
   async getPostureResult<T>(applicationId: string): Promise<T | null> {
     const result = await this.db
-      .prepare(
-        `
-        SELECT signal_evaluations FROM applications WHERE id = ?
-        `
-      )
-      .bind(applicationId)
-      .first<{ signal_evaluations: string | null }>();
+      .select({ signalEvaluations: applications.signalEvaluations })
+      .from(applications)
+      .where(eq(applications.id, applicationId))
+      .get();
 
-    if (!result?.signal_evaluations) return null;
-    return JSON.parse(result.signal_evaluations) as T;
-  }
-
-  // ===========================================================================
-  // MAPPERS
-  // ===========================================================================
-
-  private mapApplication(row: ApplicationRow): Application {
-    return {
-      id: row.id,
-      jobId: row.job_id,
-      candidateEmail: row.candidate_email,
-      candidateName: row.candidate_name,
-      status: row.status,
-      signalsStatus: row.signals_status,
-      signalEvaluations: row.signal_evaluations,
-      decisionPosture: row.decision_posture,
-      signalsErrorMessage: row.signals_error_message,
-      signalsErrorCode: row.signals_error_code,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      signalsComputedAt: row.signals_computed_at,
-    };
-  }
-
-  private mapAnswer(row: AnswerRow): Answer {
-    return {
-      id: row.id,
-      applicationId: row.application_id,
-      archetypeId: row.archetype_id,
-      questionText: row.question_text,
-      answerText: row.answer_text,
-      extractedSignals: row.extracted_signals,
-      extractionStatus: row.extraction_status,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      answeredAt: row.answered_at,
-      extractedAt: row.extracted_at,
-    };
-  }
-
-  private mapDraft(row: ApplicationDraftRow): ApplicationDraft {
-    return {
-      id: row.id,
-      jobId: row.job_id,
-      candidateEmail: row.candidate_email,
-      candidateName: row.candidate_name,
-      answers: row.answers,
-      resumeTokenHash: row.resume_token_hash,
-      expiresAt: row.expires_at,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
+    if (!result?.signalEvaluations) return null;
+    return JSON.parse(result.signalEvaluations) as T;
   }
 }

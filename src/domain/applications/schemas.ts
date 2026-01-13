@@ -183,107 +183,12 @@ export type ResumeDraftResponse = z.infer<typeof ResumeDraftResponseSchema>;
 // DATABASE RECORD TYPES
 // =============================================================================
 
-/**
- * Application record as stored in database.
- */
-export interface ApplicationRow {
-  id: string;
-  job_id: string;
-  candidate_email: string;
-  candidate_name: string;
-  status: ApplicationStatus;
-  signals_status: SignalsStatus;
-  signal_evaluations: string | null;
-  decision_posture: string | null;
-  signals_error_message: string | null;
-  signals_error_code: string | null;
-  created_at: string;
-  updated_at: string;
-  signals_computed_at: string | null;
-}
-
-/**
- * Application record (camelCase for API).
- */
-export interface Application {
-  id: string;
-  jobId: string;
-  candidateEmail: string;
-  candidateName: string;
-  status: ApplicationStatus;
-  signalsStatus: SignalsStatus;
-  signalEvaluations: string | null;
-  decisionPosture: string | null;
-  signalsErrorMessage: string | null;
-  signalsErrorCode: string | null;
-  createdAt: string;
-  updatedAt: string;
-  signalsComputedAt: string | null;
-}
-
-/**
- * Answer record as stored in database.
- */
-export interface AnswerRow {
-  id: string;
-  application_id: string;
-  archetype_id: string;
-  question_text: string;
-  answer_text: string;
-  extracted_signals: string | null;
-  extraction_status: ExtractionStatus;
-  created_at: string;
-  updated_at: string;
-  answered_at: string;
-  extracted_at: string | null;
-}
-
-/**
- * Answer record (camelCase for API).
- */
-export interface Answer {
-  id: string;
-  applicationId: string;
-  archetypeId: string;
-  questionText: string;
-  answerText: string;
-  extractedSignals: string | null;
-  extractionStatus: ExtractionStatus;
-  createdAt: string;
-  updatedAt: string;
-  answeredAt: string;
-  extractedAt: string | null;
-}
-
-/**
- * Draft record as stored in database.
- */
-export interface ApplicationDraftRow {
-  id: string;
-  job_id: string;
-  candidate_email: string;
-  candidate_name: string;
-  answers: string; // JSON
-  resume_token_hash: string;
-  expires_at: string;
-  created_at: string;
-  updated_at: string;
-}
-
-/**
- * Draft record (camelCase for API).
- */
-export interface ApplicationDraft {
-  id: string;
-  jobId: string;
-  candidateEmail: string;
-  candidateName: string;
-  answers: string; // JSON
-  resumeTokenHash: string;
-  expiresAt: string;
-  createdAt: string;
-  updatedAt: string;
-}
+// Re-export Drizzle types for database records (camelCase)
+export type {
+  Application,
+  Answer,
+  ApplicationDraft,
+} from "../../db";
 
 // =============================================================================
 // RECRUITER API SCHEMAS (Phase 0B)

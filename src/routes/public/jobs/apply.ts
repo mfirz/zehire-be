@@ -23,7 +23,7 @@ import {
   SaveDraftSchema,
   type DraftAnswer,
 } from "../../../domain/applications/schemas";
-import type { JobRow, RenderedQuestionOutput } from "../../../domain/jobs/schemas";
+import { JobRepository, type RenderedQuestionOutput } from "../../../domain/jobs";
 import type { Env } from "../../../types/bindings";
 
 // =============================================================================
@@ -33,23 +33,6 @@ import type { Env } from "../../../types/bindings";
 const applyRoutes = new Hono<{ Bindings: Env }>();
 
 // =============================================================================
-// HELPER: Get job by slug (unfiltered by status)
-// =============================================================================
-
-/**
- * Get a job by slug without filtering by status.
- * Allows us to provide better error messages for unpublished jobs.
- */
-async function getJobBySlug(db: D1Database, slug: string): Promise<JobRow | null> {
-  const result = await db
-    .prepare(`SELECT * FROM jobs WHERE public_slug = ? LIMIT 1`)
-    .bind(slug)
-    .first<JobRow>();
-
-  return result ?? null;
-}
-
-// =============================================================================
 // POST /:slug/apply - Submit complete application
 // =============================================================================
 
@@ -57,10 +40,11 @@ applyRoutes.post("/apply", zValidator("json", PublicApplySchema), async (c) => {
   const slug = c.req.param("slug")!;
   const input = c.req.valid("json");
 
+  const jobRepository = new JobRepository(c.env.DB);
   const applicationRepository = new ApplicationRepository(c.env.DB);
 
-  // 1. Find the job by slug
-  const job = await getJobBySlug(c.env.DB, slug);
+  // 1. Find the job by slug (returns any status, allows better error messages)
+  const job = await jobRepository.findBySlug(slug);
 
   if (!job) {
     return c.json({ error: "Job not found" }, 404);
@@ -71,7 +55,7 @@ applyRoutes.post("/apply", zValidator("json", PublicApplySchema), async (c) => {
     return c.json({ error: "This job is not accepting applications" }, 400);
   }
 
-  if (job.questions_status !== "completed" || !job.questions) {
+  if (job.questionsStatus !== "completed" || !job.questions) {
     return c.json({ error: "This job is not ready for applications" }, 400);
   }
 
@@ -171,10 +155,11 @@ applyRoutes.post("/apply/draft", zValidator("json", SaveDraftSchema), async (c) 
   const slug = c.req.param("slug")!;
   const input = c.req.valid("json");
 
+  const jobRepository = new JobRepository(c.env.DB);
   const applicationRepository = new ApplicationRepository(c.env.DB);
 
   // 1. Find the job by slug
-  const job = await getJobBySlug(c.env.DB, slug);
+  const job = await jobRepository.findBySlug(slug);
 
   if (!job) {
     return c.json({ error: "Job not found" }, 404);
@@ -234,10 +219,11 @@ applyRoutes.get("/apply/draft/:draftId", async (c) => {
     return c.json({ error: "Resume token is required" }, 400);
   }
 
+  const jobRepository = new JobRepository(c.env.DB);
   const applicationRepository = new ApplicationRepository(c.env.DB);
 
   // 1. Find the job
-  const job = await getJobBySlug(c.env.DB, slug);
+  const job = await jobRepository.findBySlug(slug);
 
   if (!job) {
     return c.json({ error: "Job not found" }, 404);

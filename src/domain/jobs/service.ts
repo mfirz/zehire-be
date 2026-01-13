@@ -100,8 +100,8 @@ export class JobService {
     return {
       id: job.id,
       status: job.status,
-      questionsStatus: job.questions_status,
-      createdAt: job.created_at,
+      questionsStatus: job.questionsStatus,
+      createdAt: job.createdAt,
     };
   }
 
@@ -155,8 +155,8 @@ export class JobService {
     }
 
     // Invalidate list cache when any field is updated
-    if (result.updated && job.org_id) {
-      await this.orgRepository.incrementJobsListVersion(job.org_id);
+    if (result.updated && job.orgId) {
+      await this.orgRepository.incrementJobsListVersion(job.orgId);
     }
 
     return { success: true, data: this.formatJobResponse(updatedJob) };
@@ -195,7 +195,7 @@ export class JobService {
     }
 
     // Check if already generated - no regeneration allowed
-    if (job.questions_status === "completed") {
+    if (job.questionsStatus === "completed") {
       return {
         success: false,
         error: {
@@ -207,7 +207,7 @@ export class JobService {
     }
 
     // Check if already in progress
-    if (job.questions_status === "pending" || job.questions_status === "processing") {
+    if (job.questionsStatus === "pending" || job.questionsStatus === "processing") {
       return {
         success: false,
         error: {
@@ -227,8 +227,8 @@ export class JobService {
     });
 
     // Invalidate cache
-    if (job.org_id) {
-      await this.orgRepository.incrementJobsListVersion(job.org_id);
+    if (job.orgId) {
+      await this.orgRepository.incrementJobsListVersion(job.orgId);
     }
 
     console.log(`[Service] Job ${jobId} queued for question generation`);
@@ -269,7 +269,7 @@ export class JobService {
     }
 
     // Check if already generated - no regeneration allowed
-    if (job.pipeline_status === "completed") {
+    if (job.pipelineStatus === "completed") {
       return {
         success: false,
         error: {
@@ -281,7 +281,7 @@ export class JobService {
     }
 
     // Check if already in progress
-    if (job.pipeline_status === "pending" || job.pipeline_status === "processing") {
+    if (job.pipelineStatus === "pending" || job.pipelineStatus === "processing") {
       return {
         success: false,
         error: {
@@ -302,8 +302,8 @@ export class JobService {
     });
 
     // Invalidate cache
-    if (job.org_id) {
-      await this.orgRepository.incrementJobsListVersion(job.org_id);
+    if (job.orgId) {
+      await this.orgRepository.incrementJobsListVersion(job.orgId);
     }
 
     console.log(`[Service] Job ${jobId} queued for pipeline generation`);
@@ -343,7 +343,7 @@ export class JobService {
       };
     }
 
-    if (job.pipeline_status !== "completed") {
+    if (job.pipelineStatus !== "completed") {
       return {
         success: false,
         error: {
@@ -368,8 +368,8 @@ export class JobService {
     await this.repository.updatePipelineConfig(jobId, updatedConfig);
 
     // Invalidate cache
-    if (job.org_id) {
-      await this.orgRepository.incrementJobsListVersion(job.org_id);
+    if (job.orgId) {
+      await this.orgRepository.incrementJobsListVersion(job.orgId);
     }
 
     // Fetch updated job
@@ -418,7 +418,7 @@ export class JobService {
       };
     }
 
-    if (job.pipeline_status !== "completed" || !job.pipeline_recommendation) {
+    if (job.pipelineStatus !== "completed" || !job.pipelineRecommendation) {
       return {
         success: false,
         error: {
@@ -430,7 +430,7 @@ export class JobService {
 
     // Parse existing recommendation
     const recommendation = PipelineRecommendationSchema.parse(
-      JSON.parse(job.pipeline_recommendation)
+      JSON.parse(job.pipelineRecommendation)
     );
 
     // Regenerate initial config from recommendation (no LLM call)
@@ -440,8 +440,8 @@ export class JobService {
     await this.repository.updatePipelineConfig(jobId, resetConfig);
 
     // Invalidate cache
-    if (job.org_id) {
-      await this.orgRepository.incrementJobsListVersion(job.org_id);
+    if (job.orgId) {
+      await this.orgRepository.incrementJobsListVersion(job.orgId);
     }
 
     // Fetch updated job
@@ -489,7 +489,7 @@ export class JobService {
       };
     }
 
-    if (job.questions_status !== "completed") {
+    if (job.questionsStatus !== "completed") {
       return {
         success: false,
         error: {
@@ -499,7 +499,7 @@ export class JobService {
       };
     }
 
-    if (job.pipeline_status !== "completed") {
+    if (job.pipelineStatus !== "completed") {
       return {
         success: false,
         error: {
@@ -524,7 +524,7 @@ export class JobService {
     }
 
     // Generate unique slug
-    const slug = await generateUniqueSlug(this.repository, job.company_name, job.title);
+    const slug = await generateUniqueSlug(this.repository, job.companyName, job.title);
 
     // Publish the job
     await this.repository.publish(jobId, slug);
@@ -538,8 +538,8 @@ export class JobService {
     });
 
     // Invalidate cache
-    if (job.org_id) {
-      await this.orgRepository.incrementJobsListVersion(job.org_id);
+    if (job.orgId) {
+      await this.orgRepository.incrementJobsListVersion(job.orgId);
     }
 
     // Fetch updated job
@@ -593,8 +593,8 @@ export class JobService {
     });
 
     // Invalidate cache
-    if (job.org_id) {
-      await this.orgRepository.incrementJobsListVersion(job.org_id);
+    if (job.orgId) {
+      await this.orgRepository.incrementJobsListVersion(job.orgId);
     }
 
     // Fetch updated job
@@ -649,8 +649,8 @@ export class JobService {
     });
 
     // Invalidate cache
-    if (job.org_id) {
-      await this.orgRepository.incrementJobsListVersion(job.org_id);
+    if (job.orgId) {
+      await this.orgRepository.incrementJobsListVersion(job.orgId);
     }
 
     // Fetch updated job
@@ -705,8 +705,8 @@ export class JobService {
     });
 
     // Invalidate cache
-    if (job.org_id) {
-      await this.orgRepository.incrementJobsListVersion(job.org_id);
+    if (job.orgId) {
+      await this.orgRepository.incrementJobsListVersion(job.orgId);
     }
 
     // Fetch updated job
@@ -757,8 +757,8 @@ export class JobService {
     }
 
     // Invalidate cache
-    if (job.org_id) {
-      await this.orgRepository.incrementJobsListVersion(job.org_id);
+    if (job.orgId) {
+      await this.orgRepository.incrementJobsListVersion(job.orgId);
     }
 
     console.log(`[Service] Job ${jobId} deleted`);
@@ -819,16 +819,16 @@ export class JobService {
 
     return {
       title: job.title,
-      companyName: job.company_name,
+      companyName: job.companyName,
       department: job.department,
       location: job.location,
       // Job type fields
-      workType: job.work_type,
-      employmentType: job.employment_type,
+      workType: job.workType,
+      employmentType: job.employmentType,
       // Salary fields
-      salaryMin: job.salary_min,
-      salaryMax: job.salary_max,
-      salaryCurrency: job.salary_currency,
+      salaryMin: job.salaryMin,
+      salaryMax: job.salaryMax,
+      salaryCurrency: job.salaryCurrency,
       // Content - pre-rendered HTML for SSR
       descriptionHtml,
       questions: questions.map((q) => ({
@@ -853,23 +853,23 @@ export class JobService {
         return {
           id: job.id,
           status: "draft",
-          questionsStatus: job.questions_status,
-          pipelineStatus: job.pipeline_status ?? "none",
+          questionsStatus: job.questionsStatus,
+          pipelineStatus: job.pipelineStatus ?? "none",
           title: job.title,
           // Parse description JSON for Tiptap editor
           description: JSON.parse(job.description) as TiptapDoc,
-          companyName: job.company_name,
+          companyName: job.companyName,
           department: job.department,
           location: job.location,
           // Job type fields
-          workType: job.work_type,
-          employmentType: job.employment_type,
+          workType: job.workType,
+          employmentType: job.employmentType,
           // Salary fields
-          salaryMin: job.salary_min,
-          salaryMax: job.salary_max,
-          salaryCurrency: job.salary_currency,
+          salaryMin: job.salaryMin,
+          salaryMax: job.salaryMax,
+          salaryCurrency: job.salaryCurrency,
           // Questions (if generated)
-          jobContext: job.job_context ? this.parseJson(job.job_context, JobContextSchema) : null,
+          jobContext: job.jobContext ? this.parseJson(job.jobContext, JobContextSchema) : null,
           archetypes: job.archetypes
             ? this.parseJsonArray(job.archetypes, ResolvedArchetypeSchema)
             : null,
@@ -877,28 +877,28 @@ export class JobService {
             ? this.parseJsonArray(job.questions, RenderedQuestionSchema)
             : null,
           // Pipeline (if generated)
-          pipelineRecommendation: job.pipeline_recommendation
-            ? this.parseJson(job.pipeline_recommendation, PipelineRecommendationSchema)
+          pipelineRecommendation: job.pipelineRecommendation
+            ? this.parseJson(job.pipelineRecommendation, PipelineRecommendationSchema)
             : null,
           pipeline: job.pipeline ? this.parseJson(job.pipeline, PipelineConfigSchema) : null,
           // Error (if failed)
-          errorMessage: job.error_message,
-          errorCode: job.error_code,
+          errorMessage: job.errorMessage,
+          errorCode: job.errorCode,
           // Pipeline error (if failed)
-          pipelineError: job.pipeline_error,
-          pipelineErrorCode: job.pipeline_error_code,
+          pipelineError: job.pipelineError,
+          pipelineErrorCode: job.pipelineErrorCode,
           // Regeneration info (questions)
-          regenerationCount: job.regeneration_count,
-          lastRegenerationAt: job.last_regeneration_at,
+          regenerationCount: job.regenerationCount,
+          lastRegenerationAt: job.lastRegenerationAt,
           // Regeneration info (pipeline)
-          pipelineRegenerationCount: job.pipeline_regeneration_count ?? 0,
-          pipelineLastRegenerationAt: job.pipeline_last_regeneration_at,
+          pipelineRegenerationCount: job.pipelineRegenerationCount ?? 0,
+          pipelineLastRegenerationAt: job.pipelineLastRegenerationAt,
           // Timestamps
-          createdAt: job.created_at,
-          updatedAt: job.updated_at,
-          processingStartedAt: job.processing_started_at,
-          completedAt: job.completed_at,
-          pipelineGeneratedAt: job.pipeline_generated_at,
+          createdAt: job.createdAt,
+          updatedAt: job.updatedAt,
+          processingStartedAt: job.processingStartedAt,
+          completedAt: job.completedAt,
+          pipelineGeneratedAt: job.pipelineGeneratedAt,
         };
 
       case "published":
@@ -910,34 +910,34 @@ export class JobService {
           title: job.title,
           // Render description to HTML (read-only)
           descriptionHtml: renderToHtml(JSON.parse(job.description) as TiptapDoc),
-          companyName: job.company_name,
+          companyName: job.companyName,
           department: job.department,
           location: job.location,
-          publicSlug: job.public_slug!,
+          publicSlug: job.publicSlug!,
           // Job type fields
-          workType: job.work_type,
-          employmentType: job.employment_type,
+          workType: job.workType,
+          employmentType: job.employmentType,
           // Salary fields
-          salaryMin: job.salary_min,
-          salaryMax: job.salary_max,
-          salaryCurrency: job.salary_currency,
+          salaryMin: job.salaryMin,
+          salaryMax: job.salaryMax,
+          salaryCurrency: job.salaryCurrency,
           // Questions (always present)
-          jobContext: this.parseJson(job.job_context!, JobContextSchema),
+          jobContext: this.parseJson(job.jobContext!, JobContextSchema),
           archetypes: this.parseJsonArray(job.archetypes!, ResolvedArchetypeSchema),
           questions: this.parseJsonArray(job.questions!, RenderedQuestionSchema),
-          processingDurationMs: job.processing_duration_ms!,
+          processingDurationMs: job.processingDurationMs!,
           // Pipeline (always present)
           pipelineRecommendation: this.parseJson(
-            job.pipeline_recommendation!,
+            job.pipelineRecommendation!,
             PipelineRecommendationSchema
           ),
           pipeline: this.parseJson(job.pipeline!, PipelineConfigSchema),
           // Timestamps
-          createdAt: job.created_at,
-          updatedAt: job.updated_at,
-          publishedAt: job.published_at!,
-          completedAt: job.completed_at!,
-          pipelineGeneratedAt: job.pipeline_generated_at!,
+          createdAt: job.createdAt,
+          updatedAt: job.updatedAt,
+          publishedAt: job.publishedAt!,
+          completedAt: job.completedAt!,
+          pipelineGeneratedAt: job.pipelineGeneratedAt!,
         };
 
       case "paused":
@@ -949,34 +949,34 @@ export class JobService {
           title: job.title,
           // Render description to HTML (read-only)
           descriptionHtml: renderToHtml(JSON.parse(job.description) as TiptapDoc),
-          companyName: job.company_name,
+          companyName: job.companyName,
           department: job.department,
           location: job.location,
-          publicSlug: job.public_slug!,
+          publicSlug: job.publicSlug!,
           // Job type fields
-          workType: job.work_type,
-          employmentType: job.employment_type,
+          workType: job.workType,
+          employmentType: job.employmentType,
           // Salary fields
-          salaryMin: job.salary_min,
-          salaryMax: job.salary_max,
-          salaryCurrency: job.salary_currency,
+          salaryMin: job.salaryMin,
+          salaryMax: job.salaryMax,
+          salaryCurrency: job.salaryCurrency,
           // Questions
-          jobContext: this.parseJson(job.job_context!, JobContextSchema),
+          jobContext: this.parseJson(job.jobContext!, JobContextSchema),
           archetypes: this.parseJsonArray(job.archetypes!, ResolvedArchetypeSchema),
           questions: this.parseJsonArray(job.questions!, RenderedQuestionSchema),
-          processingDurationMs: job.processing_duration_ms!,
+          processingDurationMs: job.processingDurationMs!,
           // Pipeline
           pipelineRecommendation: this.parseJson(
-            job.pipeline_recommendation!,
+            job.pipelineRecommendation!,
             PipelineRecommendationSchema
           ),
           pipeline: this.parseJson(job.pipeline!, PipelineConfigSchema),
           // Timestamps
-          createdAt: job.created_at,
-          updatedAt: job.updated_at,
-          publishedAt: job.published_at!,
-          completedAt: job.completed_at!,
-          pipelineGeneratedAt: job.pipeline_generated_at!,
+          createdAt: job.createdAt,
+          updatedAt: job.updatedAt,
+          publishedAt: job.publishedAt!,
+          completedAt: job.completedAt!,
+          pipelineGeneratedAt: job.pipelineGeneratedAt!,
         };
 
       case "closed":
@@ -988,35 +988,35 @@ export class JobService {
           title: job.title,
           // Render description to HTML (read-only)
           descriptionHtml: renderToHtml(JSON.parse(job.description) as TiptapDoc),
-          companyName: job.company_name,
+          companyName: job.companyName,
           department: job.department,
           location: job.location,
-          publicSlug: job.public_slug,
+          publicSlug: job.publicSlug,
           // Job type fields
-          workType: job.work_type,
-          employmentType: job.employment_type,
+          workType: job.workType,
+          employmentType: job.employmentType,
           // Salary fields
-          salaryMin: job.salary_min,
-          salaryMax: job.salary_max,
-          salaryCurrency: job.salary_currency,
+          salaryMin: job.salaryMin,
+          salaryMax: job.salaryMax,
+          salaryCurrency: job.salaryCurrency,
           // Questions
-          jobContext: this.parseJson(job.job_context!, JobContextSchema),
+          jobContext: this.parseJson(job.jobContext!, JobContextSchema),
           archetypes: this.parseJsonArray(job.archetypes!, ResolvedArchetypeSchema),
           questions: this.parseJsonArray(job.questions!, RenderedQuestionSchema),
-          processingDurationMs: job.processing_duration_ms!,
+          processingDurationMs: job.processingDurationMs!,
           // Pipeline
           pipelineRecommendation: this.parseJson(
-            job.pipeline_recommendation!,
+            job.pipelineRecommendation!,
             PipelineRecommendationSchema
           ),
           pipeline: this.parseJson(job.pipeline!, PipelineConfigSchema),
           // Timestamps
-          createdAt: job.created_at,
-          updatedAt: job.updated_at,
-          publishedAt: job.published_at,
-          closedAt: job.closed_at!,
-          completedAt: job.completed_at!,
-          pipelineGeneratedAt: job.pipeline_generated_at!,
+          createdAt: job.createdAt,
+          updatedAt: job.updatedAt,
+          publishedAt: job.publishedAt,
+          closedAt: job.closedAt!,
+          completedAt: job.completedAt!,
+          pipelineGeneratedAt: job.pipelineGeneratedAt!,
         };
     }
   }

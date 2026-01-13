@@ -54,15 +54,15 @@ export class JobProcessor {
     }
 
     // Skip if questions already processed (terminal state for question generation)
-    if (job.questions_status === "completed" || job.questions_status === "failed") {
-      console.log(`[Processor] Job ${jobId} questions already ${job.questions_status}, skipping`);
+    if (job.questionsStatus === "completed" || job.questionsStatus === "failed") {
+      console.log(`[Processor] Job ${jobId} questions already ${job.questionsStatus}, skipping`);
       return;
     }
 
     // Only process jobs that are pending question generation
-    if (job.questions_status !== "pending") {
+    if (job.questionsStatus !== "pending") {
       console.log(
-        `[Processor] Job ${jobId} questions_status is ${job.questions_status}, not pending - skipping`
+        `[Processor] Job ${jobId} questions_status is ${job.questionsStatus}, not pending - skipping`
       );
       return;
     }
@@ -74,8 +74,8 @@ export class JobProcessor {
       // Run the full LLM pipeline (use plain text for LLM)
       const result = await generateQuestionsForJob(this.llmClient, {
         title: job.title,
-        description: job.description_text!,
-        ...(job.company_name && { companyName: job.company_name }),
+        description: job.descriptionText!,
+        ...(job.companyName && { companyName: job.companyName }),
         ...(job.department && { department: job.department }),
         ...(job.location && { location: job.location }),
       });
@@ -100,8 +100,8 @@ export class JobProcessor {
       });
 
       // Invalidate job list cache for this org
-      if (job.org_id) {
-        await this.orgRepository.incrementJobsListVersion(job.org_id);
+      if (job.orgId) {
+        await this.orgRepository.incrementJobsListVersion(job.orgId);
       }
 
       console.log(`[Processor] Job ${jobId} questions completed in ${processingDurationMs}ms`);
@@ -131,8 +131,8 @@ export class JobProcessor {
               code,
             });
 
-            if (job.org_id) {
-              await this.orgRepository.incrementJobsListVersion(job.org_id);
+            if (job.orgId) {
+              await this.orgRepository.incrementJobsListVersion(job.orgId);
             }
 
             console.log(`[Processor] Job ${jobId} marked as failed after reset failure`);
@@ -155,8 +155,8 @@ export class JobProcessor {
       });
 
       // Invalidate job list cache for this org
-      if (job.org_id) {
-        await this.orgRepository.incrementJobsListVersion(job.org_id);
+      if (job.orgId) {
+        await this.orgRepository.incrementJobsListVersion(job.orgId);
       }
 
       console.log(`[Processor] Job ${jobId} failed permanently (${code}): ${message}`);
@@ -183,15 +183,15 @@ export class JobProcessor {
     }
 
     // Skip if pipeline already processed (terminal state for pipeline generation)
-    if (job.pipeline_status === "completed" || job.pipeline_status === "failed") {
-      console.log(`[Processor] Job ${jobId} pipeline already ${job.pipeline_status}, skipping`);
+    if (job.pipelineStatus === "completed" || job.pipelineStatus === "failed") {
+      console.log(`[Processor] Job ${jobId} pipeline already ${job.pipelineStatus}, skipping`);
       return;
     }
 
     // Only process jobs that are pending pipeline generation
-    if (job.pipeline_status !== "pending") {
+    if (job.pipelineStatus !== "pending") {
       console.log(
-        `[Processor] Job ${jobId} pipeline_status is ${job.pipeline_status}, not pending - skipping`
+        `[Processor] Job ${jobId} pipeline_status is ${job.pipelineStatus}, not pending - skipping`
       );
       return;
     }
@@ -203,8 +203,8 @@ export class JobProcessor {
       // Run the pipeline advisor LLM (use plain text for LLM)
       const result = await generatePipelineRecommendation(this.llmClient, {
         title: job.title,
-        description: job.description_text!,
-        ...(job.company_name && { companyName: job.company_name }),
+        description: job.descriptionText!,
+        ...(job.companyName && { companyName: job.companyName }),
       });
 
       const processingDurationMs = Date.now() - startTime;
@@ -217,8 +217,8 @@ export class JobProcessor {
       });
 
       // Invalidate job list cache for this org
-      if (job.org_id) {
-        await this.orgRepository.incrementJobsListVersion(job.org_id);
+      if (job.orgId) {
+        await this.orgRepository.incrementJobsListVersion(job.orgId);
       }
 
       console.log(`[Processor] Job ${jobId} pipeline completed in ${processingDurationMs}ms`);
@@ -248,8 +248,8 @@ export class JobProcessor {
               code,
             });
 
-            if (job.org_id) {
-              await this.orgRepository.incrementJobsListVersion(job.org_id);
+            if (job.orgId) {
+              await this.orgRepository.incrementJobsListVersion(job.orgId);
             }
 
             console.log(`[Processor] Job ${jobId} pipeline marked as failed after reset failure`);
@@ -272,8 +272,8 @@ export class JobProcessor {
       });
 
       // Invalidate job list cache for this org
-      if (job.org_id) {
-        await this.orgRepository.incrementJobsListVersion(job.org_id);
+      if (job.orgId) {
+        await this.orgRepository.incrementJobsListVersion(job.orgId);
       }
 
       console.log(`[Processor] Job ${jobId} pipeline failed permanently (${code}): ${message}`);

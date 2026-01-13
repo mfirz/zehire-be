@@ -41,10 +41,10 @@ export async function getPipeline(
   }
 
   // Check if pipeline has been generated
-  if (job.pipeline_status === "none" || job.pipeline_status === "pending") {
+  if (job.pipelineStatus === "none" || job.pipelineStatus === "pending") {
     return c.json(
       {
-        pipelineStatus: job.pipeline_status,
+        pipelineStatus: job.pipelineStatus,
         recommendation: null,
         config: null,
       },
@@ -52,7 +52,7 @@ export async function getPipeline(
     );
   }
 
-  if (job.pipeline_status === "processing") {
+  if (job.pipelineStatus === "processing") {
     return c.json(
       {
         pipelineStatus: "processing",
@@ -63,32 +63,32 @@ export async function getPipeline(
     );
   }
 
-  if (job.pipeline_status === "failed") {
+  if (job.pipelineStatus === "failed") {
     return c.json(
       {
         pipelineStatus: "failed",
         recommendation: null,
         config: null,
-        error: job.pipeline_error,
-        errorCode: job.pipeline_error_code,
+        error: job.pipelineError,
+        errorCode: job.pipelineErrorCode,
       },
       200
     );
   }
 
   // Pipeline is completed - parse and return data
-  const recommendation = job.pipeline_recommendation
-    ? PipelineRecommendationSchema.parse(JSON.parse(job.pipeline_recommendation))
+  const recommendation = job.pipelineRecommendation
+    ? PipelineRecommendationSchema.parse(JSON.parse(job.pipelineRecommendation))
     : null;
 
   const config = job.pipeline ? PipelineConfigSchema.parse(JSON.parse(job.pipeline)) : null;
 
   return c.json(
     {
-      pipelineStatus: job.pipeline_status,
+      pipelineStatus: job.pipelineStatus,
       recommendation,
       config,
-      generatedAt: job.pipeline_generated_at,
+      generatedAt: job.pipelineGeneratedAt,
     },
     200
   );

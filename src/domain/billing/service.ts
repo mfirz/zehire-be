@@ -12,7 +12,7 @@
  */
 
 import { BillingEventRepository, OrgRepository } from "../jobs/repository";
-import type { BillingEvent } from "../jobs/repository";
+import type { BillingEventRecord } from "../jobs/repository";
 import {
   calculateBillingUsage,
   createBillingPeriod,
@@ -253,8 +253,8 @@ export class BillingService {
   /**
    * Group billing events by job ID.
    */
-  private groupEventsByJob(events: BillingEvent[]): Map<string, BillingEvent[]> {
-    const eventsByJob = new Map<string, BillingEvent[]>();
+  private groupEventsByJob(events: BillingEventRecord[]): Map<string, BillingEventRecord[]> {
+    const eventsByJob = new Map<string, BillingEventRecord[]>();
 
     for (const event of events) {
       const jobEvents = eventsByJob.get(event.jobId) ?? [];
@@ -262,7 +262,7 @@ export class BillingService {
       eventsByJob.set(event.jobId, jobEvents);
     }
 
-    // Sort each job's events by occurred_at
+    // Sort each job's events by occurredAt
     for (const [, jobEvents] of eventsByJob) {
       jobEvents.sort(
         (a, b) =>

@@ -171,80 +171,81 @@ export type ResolvedArchetypeOutput = z.infer<typeof ResolvedArchetypeSchema>;
 
 /**
  * Schema for a job row from the database.
+ * Uses camelCase to match Drizzle ORM output.
  */
 export const JobRowSchema = z.object({
   id: z.string(),
-  org_id: z.string().nullable(),
+  orgId: z.string().nullable(),
 
   // Visibility/billing lifecycle status
   status: z.enum(JOB_STATUSES),
 
   // Question generation status
-  questions_status: z.enum(QUESTIONS_STATUSES),
+  questionsStatus: z.enum(QUESTIONS_STATUSES),
 
   // Pipeline generation status
-  pipeline_status: z.enum(PIPELINE_STATUSES).nullable().default("none"),
+  pipelineStatus: z.enum(PIPELINE_STATUSES).nullable().default("none"),
 
   // Job content
   title: z.string(),
   description: z.string(), // Tiptap JSON stored as string
-  description_text: z.string().nullable(), // Plain text extracted for LLM
-  company_name: z.string().nullable(),
+  descriptionText: z.string().nullable(), // Plain text extracted for LLM
+  companyName: z.string().nullable(),
   department: z.string().nullable(),
   location: z.string().nullable(),
 
   // Job type fields
-  work_type: z.enum(WORK_TYPES),
-  employment_type: z.enum(EMPLOYMENT_TYPES),
+  workType: z.enum(WORK_TYPES),
+  employmentType: z.enum(EMPLOYMENT_TYPES),
 
   // Salary fields
-  salary_min: z.number().nullable(),
-  salary_max: z.number().nullable(),
-  salary_currency: z.enum(SALARY_CURRENCIES).nullable(),
+  salaryMin: z.number().nullable(),
+  salaryMax: z.number().nullable(),
+  salaryCurrency: z.enum(SALARY_CURRENCIES).nullable(),
 
   // Public access
-  public_slug: z.string().nullable(),
+  publicSlug: z.string().nullable(),
 
   // Question generation results (JSON strings)
-  job_context: z.string().nullable(),
+  jobContext: z.string().nullable(),
   archetypes: z.string().nullable(),
   questions: z.string().nullable(),
 
   // Pipeline generation results (JSON strings)
-  pipeline_recommendation: z.string().nullable(),
+  pipelineRecommendation: z.string().nullable(),
   pipeline: z.string().nullable(),
 
   // Error details (for failed question generation)
-  error_message: z.string().nullable(),
-  error_code: z.enum(JOB_ERROR_CODES).nullable(),
+  errorMessage: z.string().nullable(),
+  errorCode: z.enum(JOB_ERROR_CODES).nullable(),
 
   // Pipeline error details
-  pipeline_error: z.string().nullable(),
-  pipeline_error_code: z.enum(JOB_ERROR_CODES).nullable(),
+  pipelineError: z.string().nullable(),
+  pipelineErrorCode: z.enum(JOB_ERROR_CODES).nullable(),
 
   // Regeneration rate limiting (questions)
-  regeneration_count: z.number(),
-  last_regeneration_at: z.string().nullable(),
+  regenerationCount: z.number(),
+  lastRegenerationAt: z.string().nullable(),
 
   // Regeneration rate limiting (pipeline)
-  pipeline_regeneration_count: z.number().nullable().default(0),
-  pipeline_last_regeneration_at: z.string().nullable(),
+  pipelineRegenerationCount: z.number().nullable().default(0),
+  pipelineLastRegenerationAt: z.string().nullable(),
 
   // Processing timestamps (questions)
-  processing_started_at: z.string().nullable(),
-  processing_duration_ms: z.number().nullable(),
+  processingStartedAt: z.string().nullable(),
+  processingDurationMs: z.number().nullable(),
 
   // Processing timestamps (pipeline)
-  pipeline_processing_started_at: z.string().nullable(),
-  pipeline_processing_duration_ms: z.number().nullable(),
-  pipeline_generated_at: z.string().nullable(),
+  pipelineProcessingStartedAt: z.string().nullable(),
+  pipelineProcessingDurationMs: z.number().nullable(),
+  pipelineGeneratedAt: z.string().nullable(),
 
   // Lifecycle timestamps
-  created_at: z.string(),
-  updated_at: z.string(),
-  published_at: z.string().nullable(),
-  closed_at: z.string().nullable(),
-  completed_at: z.string().nullable(), // When questions completed
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  publishedAt: z.string().nullable(),
+  closedAt: z.string().nullable(),
+  completedAt: z.string().nullable(), // When questions completed
 });
 
 export type JobRow = z.infer<typeof JobRowSchema>;

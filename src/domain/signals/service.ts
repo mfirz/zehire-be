@@ -66,13 +66,13 @@ export class SignalExtractionService {
       throw new Error(`Job not found: ${application.jobId}`);
     }
 
-    if (!job.questions || !job.job_context) {
+    if (!job.questions || !job.jobContext) {
       throw new Error(`Job ${application.jobId} missing questions or context`);
     }
 
     // Parse questions and job context from JSON
     const questions = JSON.parse(job.questions) as RenderedQuestionOutput[];
-    const jobContext = JSON.parse(job.job_context) as JobContext;
+    const jobContext = JSON.parse(job.jobContext) as JobContext;
 
     // 3. Get all answers for the application
     const answers = await this.applicationRepository.getAnswers(applicationId);
@@ -184,11 +184,11 @@ export class SignalExtractionService {
 
       // Get the job to access primary signals
       const job = await this.jobRepository.findById(application.jobId);
-      if (!job?.job_context) {
+      if (!job?.jobContext) {
         throw new Error(`Job ${application.jobId} missing job context`);
       }
 
-      const jobContext = JSON.parse(job.job_context) as JobContext;
+      const jobContext = JSON.parse(job.jobContext) as JobContext;
 
       // Extract signals from all answers
       const results = await this.extractSignalsForApplication(client, applicationId, options);
