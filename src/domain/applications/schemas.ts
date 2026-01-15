@@ -85,6 +85,12 @@ export const PublicApplySchema = z.object({
   /** Candidate's full name */
   name: z.string().min(1, "Name is required").max(200),
 
+  /** Preferred name for personalization (e.g., "Hi {preferredName}!") */
+  preferredName: z.string().max(100).optional(),
+
+  /** Phone number (may be required by job configuration) */
+  phone: z.string().max(30).optional(),
+
   /** Answers to ALL questions (required) */
   answers: z.array(AnswerInputSchema).min(1, "All questions must be answered"),
 
@@ -113,6 +119,12 @@ export const SaveDraftSchema = z.object({
 
   /** Candidate's full name */
   name: z.string().min(1, "Name is required").max(200),
+
+  /** Preferred name for personalization */
+  preferredName: z.string().max(100).optional(),
+
+  /** Phone number */
+  phone: z.string().max(30).optional(),
 
   /** Partial answers (may be incomplete) */
   answers: z.array(DraftAnswerSchema),
@@ -211,9 +223,13 @@ export const ApplicationSummarySchema = z.object({
   id: z.string(),
   candidateEmail: z.string(),
   candidateName: z.string().nullable(),
+  preferredName: z.string().nullable(),
+  phone: z.string().nullable(),
+  detectedCountry: z.string().nullable(),
   status: z.string(),
   signalsStatus: z.string(),
   decisionPosture: z.string().nullable(),
+  hasCv: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -228,6 +244,13 @@ export const ApplicationDetailSchema = z.object({
   jobId: z.string(),
   candidateEmail: z.string(),
   candidateName: z.string().nullable(),
+  preferredName: z.string().nullable(),
+  phone: z.string().nullable(),
+  detectedCountry: z.string().nullable(),
+  detectedTimezone: z.string().nullable(),
+  cvPath: z.string().nullable(),
+  cvFilename: z.string().nullable(),
+  cvUploadedAt: z.string().nullable(),
   status: z.string(),
   signalsStatus: z.string(),
   decisionPosture: z.string().nullable(),

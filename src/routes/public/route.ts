@@ -5,7 +5,7 @@
  *
  * Used for:
  * - Candidate-facing job pages
- * - Application submissions (future)
+ * - Application submissions (with optional CV via multipart)
  */
 
 import { Hono } from "hono";
@@ -14,7 +14,7 @@ import publicJobs from "./jobs/route";
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
 
-// Public jobs
+// Public jobs (includes apply endpoints)
 publicRoutes.route("/jobs", publicJobs);
 
 export default publicRoutes;

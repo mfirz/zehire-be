@@ -21,6 +21,17 @@ database_name = "zehire-db-dev"
 database_id = "local"  # Placeholder for local development
 
 # =============================================================================
+# R2 STORAGE BINDINGS
+# =============================================================================
+# R2 bucket for CV/resume file storage.
+# Free tier: 10GB storage, 10M reads, 1M writes per month
+# Local: auto-emulated by wrangler in .wrangler/state/v3/r2/
+
+[[r2_buckets]]
+binding = "CV_BUCKET"
+bucket_name = "zehire-cvs-dev"
+
+# =============================================================================
 # WORKERS AI BINDING
 # =============================================================================
 # Workers AI provides free LLM inference on Cloudflare's edge.
@@ -72,6 +83,11 @@ APP_BASE_URL = "https://staging.zehire.com"
 AUTH_TOKEN_TTL_MINUTES = "15"
 AUTH_SESSION_TTL_MINUTES = "1440"  # 24 hours
 
+# Staging R2 bucket
+[[env.staging.r2_buckets]]
+binding = "CV_BUCKET"
+bucket_name = "zehire-cvs-staging"
+
 # Staging queue bindings
 [[env.staging.queues.producers]]
 binding = "JOB_QUEUE"
@@ -104,6 +120,11 @@ LLM_PROVIDER = "workers-ai"  # "workers-ai" (free) or "anthropic" (paid)
 APP_BASE_URL = "https://app.zehire.com"
 AUTH_TOKEN_TTL_MINUTES = "15"
 AUTH_SESSION_TTL_MINUTES = "1440"  # 24 hours
+
+# Production R2 bucket
+[[env.production.r2_buckets]]
+binding = "CV_BUCKET"
+bucket_name = "zehire-cvs-production"
 
 # Production queue bindings
 [[env.production.queues.producers]]

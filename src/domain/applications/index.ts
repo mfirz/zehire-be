@@ -7,6 +7,16 @@
 // Repository
 export { ApplicationRepository } from "./repository";
 
+// CV Service
+export {
+  CvService,
+  ALLOWED_CV_TYPES,
+  CV_TYPE_NAMES,
+  MAX_CV_SIZE,
+  type CvUploadResult,
+  type CvValidationError,
+} from "./cv.service";
+
 // Schemas
 export {
   // Constants

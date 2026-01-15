@@ -4,18 +4,20 @@
  * Public endpoints for candidate job applications.
  *
  * Endpoints:
- * - POST /:slug/apply - Submit complete application
+ * - POST /:slug/apply - Submit complete application (multipart, with optional CV)
  * - POST /:slug/apply/draft - Save progress (Save & Continue)
  * - GET /:slug/apply/draft/:draftId - Resume saved progress
  *
  * Design: All Required + Smart Design
  * - All 3 questions must be answered for submission
  * - Drafts can have partial answers and expire after 7 days
+ * - CV can be included in the same request (multipart/form-data)
  */
 
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 
+import { CvService } from "../../../domain/applications/cv.service";
 import { ApplicationRepository } from "../../../domain/applications/repository";
 import {
   DRAFT_EXPIRY_DAYS,
@@ -33,12 +35,69 @@ import type { Env } from "../../../types/bindings";
 const applyRoutes = new Hono<{ Bindings: Env }>();
 
 // =============================================================================
-// POST /:slug/apply - Submit complete application
+// POST /:slug/apply - Submit complete application (with optional CV)
 // =============================================================================
+// Requires multipart/form-data:
+// - 'data' field: JSON string with application data
+// - 'cv' field: optional CV file (PDF, DOC, DOCX)
 
-applyRoutes.post("/apply", zValidator("json", PublicApplySchema), async (c) => {
+applyRoutes.post("/apply", async (c) => {
   const slug = c.req.param("slug")!;
-  const input = c.req.valid("json");
+  const contentType = c.req.header("content-type") || "";
+
+  // Require multipart/form-data
+  if (!contentType.includes("multipart/form-data")) {
+    return c.json(
+      {
+        error: "Content-Type must be multipart/form-data",
+        hint: "Send 'data' field with JSON string and optional 'cv' file",
+      },
+      415
+    );
+  }
+
+  // Parse multipart form data
+  const formData = await c.req.formData();
+  const dataField = formData.get("data");
+
+  if (!dataField || typeof dataField !== "string") {
+    return c.json({ error: "Missing 'data' field in form data" }, 400);
+  }
+
+  let input: {
+    email: string;
+    name: string;
+    preferredName?: string;
+    phone?: string;
+    answers: Array<{ archetypeId: string; answerText: string }>;
+    draftId?: string;
+  };
+
+  try {
+    input = JSON.parse(dataField);
+  } catch {
+    return c.json({ error: "Invalid JSON in 'data' field" }, 400);
+  }
+
+  // Get optional CV file
+  let cvFile: File | null = null;
+  const file = formData.get("cv");
+  if (file && typeof file === "object" && "stream" in file) {
+    cvFile = file as File;
+  }
+
+  // Validate input with Zod
+  const parseResult = PublicApplySchema.safeParse(input);
+  if (!parseResult.success) {
+    return c.json(
+      {
+        error: "Validation failed",
+        details: parseResult.error.flatten().fieldErrors,
+      },
+      400
+    );
+  }
+  const validatedInput = parseResult.data;
 
   const jobRepository = new JobRepository(c.env.DB);
   const applicationRepository = new ApplicationRepository(c.env.DB);
@@ -60,7 +119,7 @@ applyRoutes.post("/apply", zValidator("json", PublicApplySchema), async (c) => {
   }
 
   // 3. Check for existing application (prevent duplicates)
-  const existing = await applicationRepository.findExistingApplication(job.id, input.email);
+  const existing = await applicationRepository.findExistingApplication(job.id, validatedInput.email);
 
   if (existing) {
     return c.json(
@@ -72,16 +131,33 @@ applyRoutes.post("/apply", zValidator("json", PublicApplySchema), async (c) => {
     );
   }
 
-  // 4. Parse questions from job (trusted data from database)
+  // 4. Validate CV if provided
+  if (cvFile) {
+    const cvService = new CvService(c.env.CV_BUCKET, applicationRepository);
+    const cvError = cvService.validateFile(cvFile);
+    if (cvError) {
+      return c.json(
+        {
+          error: {
+            code: cvError.code,
+            message: cvError.message,
+          },
+        },
+        400
+      );
+    }
+  }
+
+  // 5. Parse questions from job (trusted data from database)
   const questions = JSON.parse(job.questions) as RenderedQuestionOutput[];
   const questionData = questions.map((q) => ({
     archetypeId: q.archetypeId,
     questionText: q.questionText,
   }));
 
-  // 5. Validate all questions have answers
+  // 6. Validate all questions have answers
   const questionArchetypeIds = new Set(questions.map((q) => q.archetypeId));
-  const answerArchetypeIds = new Set(input.answers.map((a) => a.archetypeId));
+  const answerArchetypeIds = new Set(validatedInput.answers.map((a) => a.archetypeId));
 
   // Check for missing answers
   const missingAnswers: string[] = [];
@@ -109,26 +185,40 @@ applyRoutes.post("/apply", zValidator("json", PublicApplySchema), async (c) => {
     }
   }
 
-  // 6. Create application with answers
+  // 7. Capture geo data from Cloudflare
+  const cf = c.req.raw.cf as { country?: string; timezone?: string } | undefined;
+  const geoData: { country?: string; timezone?: string } = {};
+  if (cf?.country) geoData.country = cf.country;
+  if (cf?.timezone) geoData.timezone = cf.timezone;
+
+  // 8. Create application with answers
   const { applicationId } = await applicationRepository.createApplication(
     job.id,
-    input,
-    questionData
+    validatedInput,
+    questionData,
+    geoData
   );
 
-  // 7. Delete draft if exists (user might have saved progress)
-  if (input.draftId) {
-    await applicationRepository.deleteDraft(input.draftId);
+  // 9. Upload CV if provided
+  let cvInfo: { filename: string; size: number } | null = null;
+  if (cvFile) {
+    const cvService = new CvService(c.env.CV_BUCKET, applicationRepository);
+    const result = await cvService.upload(applicationId, cvFile);
+    cvInfo = { filename: result.filename, size: result.size };
+  }
+
+  // 10. Delete draft if exists (user might have saved progress)
+  if (validatedInput.draftId) {
+    await applicationRepository.deleteDraft(validatedInput.draftId);
   } else {
     // Also try to delete by email (in case draftId wasn't passed)
-    const existingDraft = await applicationRepository.getDraftByEmail(job.id, input.email);
+    const existingDraft = await applicationRepository.getDraftByEmail(job.id, validatedInput.email);
     if (existingDraft) {
       await applicationRepository.deleteDraft(existingDraft.id);
     }
   }
 
-  // 8. Queue signal extraction job
-  // Note: Phase 1 will implement the evaluate_application queue handler
+  // 11. Queue signal extraction job
   await c.env.JOB_QUEUE.send({
     type: "evaluate_application" as const,
     applicationId,
@@ -136,12 +226,13 @@ applyRoutes.post("/apply", zValidator("json", PublicApplySchema), async (c) => {
     createdAt: new Date().toISOString(),
   });
 
-  // 9. Return success
+  // 12. Return success
   return c.json(
     {
       success: true,
       applicationId,
       message: "Your application has been submitted successfully",
+      cv: cvInfo,
     },
     201
   );
@@ -276,6 +367,8 @@ applyRoutes.get("/apply/draft/:draftId", async (c) => {
     draftId: draft.id,
     candidateEmail: draft.candidateEmail,
     candidateName: draft.candidateName,
+    preferredName: draft.preferredName,
+    phone: draft.phone,
     answers: savedAnswers,
     expiresAt: draft.expiresAt,
     progress: {

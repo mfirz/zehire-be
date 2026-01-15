@@ -2,7 +2,7 @@ import { defineConfig } from "drizzle-kit";
 
 export default defineConfig({
   schema: "./src/db/schema",
-  out: "./drizzle",
+  out: "./migrations", // Output to migrations folder for wrangler d1
   dialect: "sqlite",
   dbCredentials: {
     // Local D1 database file (created by wrangler dev)

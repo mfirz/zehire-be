@@ -36,8 +36,23 @@ export const applications = sqliteTable(
     jobId: text("job_id")
       .notNull()
       .references(() => jobs.id, { onDelete: "cascade" }),
+
+    // Candidate contact info
     candidateEmail: text("candidate_email").notNull(),
     candidateName: text("candidate_name").notNull(),
+    preferredName: text("preferred_name"), // For personalization: "Hi {preferredName}!"
+    phone: text("phone"),
+
+    // Auto-detected from Cloudflare request
+    detectedCountry: text("detected_country"), // ISO 3166-1 alpha-2: "US", "ID", "DE"
+    detectedTimezone: text("detected_timezone"), // IANA timezone: "Asia/Jakarta"
+
+    // CV/Resume storage (R2)
+    cvPath: text("cv_path"), // R2 key: "cvs/{appId}/{filename}"
+    cvFilename: text("cv_filename"), // Original filename: "resume.pdf"
+    cvUploadedAt: text("cv_uploaded_at"), // ISO timestamp
+
+    // Application status
     status: text("status", { enum: applicationStatuses }).notNull().default("pending"),
     signalsStatus: text("signals_status", { enum: signalsStatuses }).notNull().default("pending"),
     signalEvaluations: text("signal_evaluations"), // JSON: SignalStateResult
@@ -98,8 +113,14 @@ export const applicationDrafts = sqliteTable(
     jobId: text("job_id")
       .notNull()
       .references(() => jobs.id, { onDelete: "cascade" }),
+
+    // Candidate contact info
     candidateEmail: text("candidate_email").notNull(),
     candidateName: text("candidate_name").notNull(),
+    preferredName: text("preferred_name"),
+    phone: text("phone"),
+
+    // Draft data
     answers: text("answers").notNull().default("[]"), // JSON array
     resumeTokenHash: text("resume_token_hash").notNull(),
     expiresAt: text("expires_at").notNull(),

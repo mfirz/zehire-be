@@ -6,6 +6,8 @@
  * Endpoints:
  * - GET /:applicationId - Get full application details
  * - PATCH /:applicationId - Update application status
+ * - GET /:applicationId/posture - Get decision posture
+ * - GET /:applicationId/cv - Download CV file
  *
  * All endpoints require authentication and verify job ownership.
  */
@@ -13,7 +15,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 
-import { ApplicationRepository } from "../../../domain/applications/repository";
+import { ApplicationRepository, CvService } from "../../../domain/applications";
 import { UpdateApplicationSchema } from "../../../domain/applications/schemas";
 import { JobRepository } from "../../../domain/jobs/repository";
 import { jwtAuth } from "../../../middleware/auth";
@@ -55,7 +57,14 @@ applicationsRoute.get("/:applicationId", async (c) => {
     return c.json({ error: "Application not found" }, 404);
   }
 
-  return c.json(application);
+  // Transform response for frontend
+  return c.json({
+    ...application,
+    // Replace internal cvPath with public-facing cvUrl
+    cvPath: undefined,
+    hasCv: !!application.cvPath,
+    cvUrl: application.cvPath ? `/v1/applications/${applicationId}/cv` : null,
+  });
 });
 
 /**
@@ -200,6 +209,61 @@ applicationsRoute.get("/:applicationId/posture", async (c) => {
       reason: conflict.reason,
     })),
     suggestedActions: postureResult.suggestedActions,
+  });
+});
+
+// =============================================================================
+// CV ENDPOINTS
+// =============================================================================
+
+/**
+ * GET /v1/applications/:applicationId/cv
+ *
+ * Download the CV for an application.
+ * Streams the file directly from R2.
+ */
+applicationsRoute.get("/:applicationId/cv", async (c) => {
+  const applicationId = c.req.param("applicationId")!;
+  const user = c.get("user");
+  const orgId = user.orgId;
+
+  const applicationRepository = new ApplicationRepository(c.env.DB);
+  const jobRepository = new JobRepository(c.env.DB);
+
+  // Get application
+  const application = await applicationRepository.findById(applicationId);
+
+  if (!application) {
+    return c.json({ error: "Application not found" }, 404);
+  }
+
+  // Verify user's org owns the job
+  const job = await jobRepository.findByIdAndOrg(application.jobId, orgId);
+
+  if (!job) {
+    return c.json({ error: "Application not found" }, 404);
+  }
+
+  // Check if CV exists
+  if (!application.cvPath) {
+    return c.json({ error: "No CV uploaded for this application" }, 404);
+  }
+
+  // Get CV from R2
+  const cvService = new CvService(c.env.CV_BUCKET, applicationRepository);
+  const cvObject = await cvService.get(application.cvPath);
+
+  if (!cvObject) {
+    return c.json({ error: "CV file not found" }, 404);
+  }
+
+  // Stream the file
+  return new Response(cvObject.body, {
+    headers: {
+      "Content-Type": cvObject.httpMetadata?.contentType || "application/pdf",
+      "Content-Disposition": `attachment; filename="${application.cvFilename || "cv.pdf"}"`,
+      "Content-Length": cvObject.size.toString(),
+    },
   });
 });
 

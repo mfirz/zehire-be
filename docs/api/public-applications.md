@@ -13,12 +13,13 @@ Zehire uses an **"All Required + Smart Design"** approach:
 - **Save & Continue** feature allows candidates to save progress
 - Drafts expire after **7 days**
 - **Duplicate prevention** - one application per email per job
+- **CV upload** is included in the submission (single-step)
 
 ## Endpoints
 
 | Method | Path                                    | Description                    |
 | ------ | --------------------------------------- | ------------------------------ |
-| POST   | `/public/jobs/:slug/apply`              | Submit complete application    |
+| POST   | `/public/jobs/:slug/apply`              | Submit application (with optional CV) |
 | POST   | `/public/jobs/:slug/apply/draft`        | Save progress (Save & Continue)|
 | GET    | `/public/jobs/:slug/apply/draft/:id`    | Resume saved progress          |
 
@@ -28,36 +29,43 @@ Zehire uses an **"All Required + Smart Design"** approach:
 
 Submit a complete job application. All questions must be answered.
 
-### Request
+**Requires `multipart/form-data` content type.**
 
-```json
-{
-  "email": "candidate@example.com",
-  "name": "Jane Doe",
-  "answers": [
-    {
-      "archetypeId": "situational_uncertainty_story",
-      "answerText": "When I was leading the migration project at my previous company..."
-    },
-    {
-      "archetypeId": "ownership_of_outcome",
-      "answerText": "I take full responsibility for the outcomes of my projects..."
-    },
-    {
-      "archetypeId": "failure_and_recovery",
-      "answerText": "During the Q3 release, we encountered a critical bug..."
-    }
-  ],
-  "draftId": "abc123xyz"
-}
+### Request Format
+
+```
+POST /public/jobs/senior-engineer-abc123/apply
+Content-Type: multipart/form-data
+
+--boundary
+Content-Disposition: form-data; name="data"
+
+{"email":"candidate@example.com","name":"Jane Doe","answers":[...]}
+--boundary
+Content-Disposition: form-data; name="cv"; filename="resume.pdf"
+Content-Type: application/pdf
+
+<binary file data>
+--boundary--
 ```
 
-| Field      | Type     | Required | Description                                      |
-| ---------- | -------- | -------- | ------------------------------------------------ |
-| `email`    | string   | Yes      | Valid email address                              |
-| `name`     | string   | Yes      | Candidate's full name (1-200 chars)              |
-| `answers`  | array    | Yes      | Array of answers to ALL questions                |
-| `draftId`  | string   | No       | Draft ID if resuming from saved progress         |
+### Form Fields
+
+| Field  | Type   | Required | Description                                |
+| ------ | ------ | -------- | ------------------------------------------ |
+| `data` | string | Yes      | JSON string with application data          |
+| `cv`   | File   | No       | CV file (PDF, DOC, DOCX, max 5MB)          |
+
+### Data Field (JSON)
+
+| Field          | Type     | Required | Description                                      |
+| -------------- | -------- | -------- | ------------------------------------------------ |
+| `email`        | string   | Yes      | Valid email address                              |
+| `name`         | string   | Yes      | Candidate's full name (1-200 chars)              |
+| `preferredName`| string   | No       | Preferred/nickname (optional)                    |
+| `phone`        | string   | No       | Phone number (may be required per job config)    |
+| `answers`      | array    | Yes      | Array of answers to ALL questions                |
+| `draftId`      | string   | No       | Draft ID if resuming from saved progress         |
 
 ### Answer Object
 
@@ -65,6 +73,14 @@ Submit a complete job application. All questions must be answered.
 | ------------- | ------ | -------- | ------------------------------------------ |
 | `archetypeId` | string | Yes      | The archetype ID of the question           |
 | `answerText`  | string | Yes      | Answer text (minimum 50 characters)        |
+
+### CV File Requirements
+
+| Requirement     | Value                                      |
+| --------------- | ------------------------------------------ |
+| Allowed types   | PDF, DOC, DOCX                             |
+| Max size        | 5MB                                        |
+| Field name      | `cv` (multipart form)                      |
 
 ### Response
 
@@ -74,19 +90,38 @@ Submit a complete job application. All questions must be answered.
 {
   "success": true,
   "applicationId": "app_xyz789",
-  "message": "Your application has been submitted successfully"
+  "message": "Your application has been submitted successfully",
+  "cv": {
+    "filename": "resume.pdf",
+    "size": 245760
+  }
 }
 ```
+
+The `cv` field is only present if a CV was uploaded.
+
+### Auto-Detected Fields
+
+The following fields are automatically captured via Cloudflare:
+- `detectedCountry` - Country code (e.g., "US", "GB")
+- `detectedTimezone` - Timezone (e.g., "America/New_York")
+
+These are visible to recruiters in the application detail.
 
 ### Errors
 
 | Status | Code                  | Description                              |
 | ------ | --------------------- | ---------------------------------------- |
+| 400    | Missing data field    | Form data 'data' field is missing        |
+| 400    | Invalid JSON          | JSON in 'data' field could not be parsed |
 | 400    | Missing answers       | Not all questions were answered          |
 | 400    | Answer too short      | Answer is less than 50 characters        |
 | 400    | Job not published     | Job is not accepting applications        |
+| 400    | Invalid CV type       | CV file type not allowed                 |
+| 400    | CV too large          | CV exceeds 5MB                           |
 | 404    | Job not found         | No job with this slug exists             |
 | 409    | Already applied       | Email has already applied to this job    |
+| 415    | Wrong content type    | Content-Type must be multipart/form-data |
 
 **Example Error (Missing Answers)**
 
@@ -98,12 +133,23 @@ Submit a complete job application. All questions must be answered.
 }
 ```
 
-**Example Error (Already Applied)**
+**Example Error (Invalid CV)**
 
 ```json
 {
-  "error": "You have already applied to this job",
-  "applicationId": "existing_app_id"
+  "error": {
+    "code": "INVALID_TYPE",
+    "message": "Invalid file type. Allowed: PDF, DOC, DOCX"
+  }
+}
+```
+
+**Example Error (Wrong Content Type)**
+
+```json
+{
+  "error": "Content-Type must be multipart/form-data",
+  "hint": "Send 'data' field with JSON string and optional 'cv' file"
 }
 ```
 
@@ -119,6 +165,8 @@ Save application progress for later completion. Answers can be partial or empty.
 {
   "email": "candidate@example.com",
   "name": "Jane Doe",
+  "preferredName": "Jane",
+  "phone": "+1-555-123-4567",
   "answers": [
     {
       "archetypeId": "situational_uncertainty_story",
@@ -136,11 +184,13 @@ Save application progress for later completion. Answers can be partial or empty.
 }
 ```
 
-| Field     | Type   | Required | Description                            |
-| --------- | ------ | -------- | -------------------------------------- |
-| `email`   | string | Yes      | Valid email address                    |
-| `name`    | string | Yes      | Candidate's full name (1-200 chars)    |
-| `answers` | array  | Yes      | Array of answers (can be incomplete)   |
+| Field          | Type   | Required | Description                            |
+| -------------- | ------ | -------- | -------------------------------------- |
+| `email`        | string | Yes      | Valid email address                    |
+| `name`         | string | Yes      | Candidate's full name (1-200 chars)    |
+| `preferredName`| string | No       | Preferred/nickname (optional)          |
+| `phone`        | string | No       | Phone number (optional)                |
+| `answers`      | array  | Yes      | Array of answers (can be incomplete)   |
 
 ### Response
 
@@ -202,6 +252,8 @@ GET /public/jobs/senior-engineer-abc123/apply/draft/draft_xyz789?token=secure_to
   "draftId": "draft_xyz789",
   "candidateEmail": "candidate@example.com",
   "candidateName": "Jane Doe",
+  "preferredName": "Jane",
+  "phone": "+1-555-123-4567",
   "answers": [
     {
       "archetypeId": "situational_uncertainty_story",
@@ -244,18 +296,38 @@ GET /public/jobs/senior-engineer-abc123/apply/draft/draft_xyz789?token=secure_to
 
 ---
 
-## Workflow Example
+## Workflow Examples
 
-### Standard Application Flow
+### Standard Application Flow (with CV)
 
 ```
 1. Candidate visits job page
    GET /public/jobs/senior-engineer-abc123
 
-2. Candidate answers all questions and submits
+2. Candidate fills form and submits with CV
    POST /public/jobs/senior-engineer-abc123/apply
+   Content-Type: multipart/form-data
+   - data: JSON with answers
+   - cv: resume.pdf
 
-3. Application is queued for signal extraction
+3. Application created with CV attached
+   → Signal extraction queued
+```
+
+### Standard Application Flow (without CV)
+
+```
+1. Candidate visits job page
+   GET /public/jobs/senior-engineer-abc123
+
+2. Candidate fills form and submits
+   POST /public/jobs/senior-engineer-abc123/apply
+   Content-Type: multipart/form-data
+   - data: JSON with answers
+   - (no cv field)
+
+3. Application created
+   → Signal extraction queued
 ```
 
 ### Save & Continue Flow
@@ -273,9 +345,9 @@ GET /public/jobs/senior-engineer-abc123/apply/draft/draft_xyz789?token=secure_to
    POST /public/jobs/senior-engineer-abc123/apply/draft
    → Updates draft, returns new token
 
-4. Candidate submits final application
-   POST /public/jobs/senior-engineer-abc123/apply
-   → Draft is deleted, application created
+4. Candidate submits final application with CV
+   POST /public/jobs/senior-engineer-abc123/apply (multipart)
+   → Draft is deleted, application created with CV
 ```
 
 ---
@@ -300,3 +372,4 @@ This process happens in the background and does not block the submission respons
 | Drafts       | 7 days from creation/last update         |
 | Applications | Indefinite (as long as job exists)       |
 | Answers      | Tied to application lifecycle            |
+| CV files     | Tied to application lifecycle            |

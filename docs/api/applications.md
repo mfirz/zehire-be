@@ -14,6 +14,7 @@ Recruiter-facing endpoints for managing job applications.
 | GET    | `/v1/applications/:applicationId`         | Get full application details   |
 | PATCH  | `/v1/applications/:applicationId`         | Update application status      |
 | GET    | `/v1/applications/:applicationId/posture` | Get decision posture           |
+| GET    | `/v1/applications/:applicationId/cv`      | Download CV file               |
 
 ---
 
@@ -77,9 +78,13 @@ List all applications for a job with optional filtering.
       "id": "abc123",
       "candidateEmail": "jane@example.com",
       "candidateName": "Jane Doe",
+      "preferredName": "Jane",
+      "phone": "+1-555-123-4567",
+      "detectedCountry": "US",
       "status": "pending",
       "signalsStatus": "completed",
       "decisionPosture": "LOW_REGRET_RISK",
+      "hasCv": true,
       "createdAt": "2024-01-15T10:00:00Z",
       "updatedAt": "2024-01-15T10:05:00Z"
     }
@@ -92,6 +97,21 @@ List all applications for a job with optional filtering.
   }
 }
 ```
+
+| Field             | Type        | Description                           |
+| ----------------- | ----------- | ------------------------------------- |
+| `id`              | string      | Application ID                        |
+| `candidateEmail`  | string      | Candidate's email                     |
+| `candidateName`   | string/null | Candidate's full name                 |
+| `preferredName`   | string/null | Candidate's preferred name            |
+| `phone`           | string/null | Candidate's phone number              |
+| `detectedCountry` | string/null | Auto-detected country (via Cloudflare)|
+| `status`          | string      | Application status                    |
+| `signalsStatus`   | string      | Signal extraction status              |
+| `decisionPosture` | string/null | Computed decision posture             |
+| `hasCv`           | boolean     | Whether a CV was uploaded             |
+| `createdAt`       | string      | Application submission timestamp      |
+| `updatedAt`       | string      | Last update timestamp                 |
 
 ### Errors
 
@@ -119,15 +139,54 @@ Get full application details including answers and extracted signals.
   "jobId": "job456",
   "candidateEmail": "jane@example.com",
   "candidateName": "Jane Doe",
+  "preferredName": "Jane",
+  "phone": "+1-555-123-4567",
+  "detectedCountry": "US",
+  "detectedTimezone": "America/New_York",
+  "hasCv": true,
+  "cvUrl": "/v1/applications/abc123/cv",
+  "cvFilename": "resume.pdf",
+  "cvUploadedAt": "2024-01-15T10:00:00Z",
   "status": "pending",
   "signalsStatus": "completed",
   "decisionPosture": "LOW_REGRET_RISK",
   "signalEvaluations": {
     "posture": "LOW_REGRET_RISK",
-    "criticalSignals": [...],
-    "positiveSignals": [...],
-    "concernSignals": [...],
-    "conflicts": []
+    "primaryReason": "Critical signals are clearly demonstrated",
+    "reasons": [
+      {
+        "code": "SIGNALS_SATISFIED",
+        "message": "Critical signals are clearly demonstrated",
+        "severity": "info"
+      }
+    ],
+    "signalState": {
+      "aggregated": {
+        "present": ["decision_under_uncertainty", "accountability"],
+        "partial": ["tradeoff_awareness"],
+        "missing": [],
+        "notAsked": ["technical_depth", "system_thinking"],
+        "details": {
+          "decision_under_uncertainty": {
+            "bestConfidence": "clear",
+            "evaluationCount": 1,
+            "evidence": ["Candidate describes making decision with incomplete data..."]
+          }
+        }
+      },
+      "criticalAnalysis": {
+        "criticalSignals": ["technical_depth", "system_thinking"],
+        "satisfied": [],
+        "gaps": [
+          { "signalId": "technical_depth", "status": "unclear", "wasAsked": false }
+        ],
+        "hasCriticalGap": false
+      },
+      "conflicts": [],
+      "computedAt": "2024-01-15T10:05:00Z"
+    },
+    "suggestedActions": [],
+    "computedAt": "2024-01-15T10:05:00Z"
   },
   "signalsErrorMessage": null,
   "signalsErrorCode": null,
@@ -140,15 +199,14 @@ Get full application details including answers and extracted signals.
       "archetypeId": "situational_uncertainty_story",
       "questionText": "Tell us about a time when you had to make a decision with incomplete information...",
       "answerText": "When I was working at Company X...",
-      "extractedSignals": {
-        "signals": [
-          {
-            "id": "TAKES_OWNERSHIP",
-            "confidence": 0.85,
-            "evidence": "Candidate explicitly states they took responsibility..."
-          }
-        ]
-      },
+      "extractedSignals": [
+        {
+          "signalId": "decision_under_uncertainty",
+          "confidence": "clear",
+          "evidence": "Candidate describes making decision with incomplete data...",
+          "reasoning": "The candidate demonstrates clear decision-making under uncertainty..."
+        }
+      ],
       "extractionStatus": "completed",
       "answeredAt": "2024-01-15T10:00:00Z",
       "extractedAt": "2024-01-15T10:05:00Z"
@@ -164,17 +222,52 @@ Get full application details including answers and extracted signals.
 | `id`               | string      | Application ID                            |
 | `jobId`            | string      | Associated job ID                         |
 | `candidateEmail`   | string      | Candidate's email                         |
-| `candidateName`    | string      | Candidate's name                          |
+| `candidateName`    | string      | Candidate's full name                     |
+| `preferredName`    | string/null | Candidate's preferred name (optional)     |
+| `phone`            | string/null | Candidate's phone number (optional)       |
+| `detectedCountry`  | string/null | Auto-detected country code (via Cloudflare) |
+| `detectedTimezone` | string/null | Auto-detected timezone (via Cloudflare)   |
+| `hasCv`            | boolean     | Whether a CV has been uploaded            |
+| `cvUrl`            | string/null | URL to download CV (if uploaded)          |
+| `cvFilename`       | string/null | Original CV filename                      |
+| `cvUploadedAt`     | string/null | When the CV was uploaded                  |
 | `status`           | string      | Application status                        |
 | `signalsStatus`    | string      | Signal extraction status                  |
 | `decisionPosture`  | string/null | Computed decision posture                 |
-| `signalEvaluations`| object/null | Full signal evaluation (when completed)   |
+| `signalEvaluations`| object/null | Full signal evaluation (see structure below) |
 | `signalsErrorMessage`| string/null | Error message if extraction failed      |
 | `signalsErrorCode` | string/null | Error code if extraction failed           |
 | `createdAt`        | string      | Application submission timestamp          |
 | `updatedAt`        | string      | Last update timestamp                     |
 | `signalsComputedAt`| string/null | When signals were computed                |
 | `answers`          | array       | Array of answers with signals             |
+
+### Signal Evaluations Structure
+
+The `signalEvaluations` object contains the full posture computation result:
+
+| Field             | Type   | Description                                      |
+| ----------------- | ------ | ------------------------------------------------ |
+| `posture`         | string | Decision posture: `LOW_REGRET_RISK`, `SOME_UNCERTAINTY`, `HIGH_UNCERTAINTY` |
+| `primaryReason`   | string | Human-readable summary of the posture            |
+| `reasons`         | array  | Array of reason objects with `code`, `message`, `severity` |
+| `signalState`     | object | Aggregated signal analysis (see below)           |
+| `suggestedActions`| array  | Recommended follow-up actions for hiring manager |
+| `computedAt`      | string | ISO timestamp when posture was computed          |
+
+**Signal State Structure:**
+
+| Field             | Type   | Description                                      |
+| ----------------- | ------ | ------------------------------------------------ |
+| `aggregated.present` | array | Signal IDs clearly demonstrated                |
+| `aggregated.partial` | array | Signal IDs partially demonstrated              |
+| `aggregated.missing` | array | Signal IDs not demonstrated                    |
+| `aggregated.notAsked`| array | Signal IDs not covered by questions            |
+| `aggregated.details` | object | Per-signal details with confidence and evidence |
+| `criticalAnalysis.criticalSignals` | array | Critical signals for this role      |
+| `criticalAnalysis.gaps` | array | Critical signals with gaps                    |
+| `criticalAnalysis.hasCriticalGap` | boolean | Whether there are critical gaps      |
+| `conflicts`       | array  | Detected contradictions between signals          |
 
 ### Answer Fields
 
@@ -184,10 +277,19 @@ Get full application details including answers and extracted signals.
 | `archetypeId`    | string      | Question archetype identifier        |
 | `questionText`   | string      | The question that was asked          |
 | `answerText`     | string      | Candidate's answer                   |
-| `extractedSignals`| object/null| Extracted signals (when completed)   |
+| `extractedSignals`| array/null | Array of extracted signals           |
 | `extractionStatus`| string     | Extraction status for this answer    |
 | `answeredAt`     | string      | When answer was submitted            |
 | `extractedAt`    | string/null | When signals were extracted          |
+
+### Extracted Signal Fields
+
+| Field        | Type   | Description                                    |
+| ------------ | ------ | ---------------------------------------------- |
+| `signalId`   | string | Signal identifier (e.g., `decision_under_uncertainty`) |
+| `confidence` | string | Confidence level: `clear`, `partial`, `absent`, or `unclear` |
+| `evidence`   | string | Quote from answer supporting this signal       |
+| `reasoning`  | string | Explanation of why signal was detected         |
 
 ### Errors
 
@@ -221,7 +323,7 @@ Update application status to move candidate through the hiring pipeline.
 
 ### Response (200 OK)
 
-Returns the updated application:
+Returns the updated application (raw database record):
 
 ```json
 {
@@ -229,9 +331,16 @@ Returns the updated application:
   "jobId": "job456",
   "candidateEmail": "jane@example.com",
   "candidateName": "Jane Doe",
+  "preferredName": "Jane",
+  "phone": "+1-555-123-4567",
+  "detectedCountry": "US",
+  "detectedTimezone": "America/New_York",
+  "cvPath": "cvs/abc123/resume.pdf",
+  "cvFilename": "resume.pdf",
+  "cvUploadedAt": "2024-01-15T10:00:00Z",
   "status": "screening",
   "signalsStatus": "completed",
-  "signalEvaluations": "...",
+  "signalEvaluations": "{...}",
   "decisionPosture": "LOW_REGRET_RISK",
   "signalsErrorMessage": null,
   "signalsErrorCode": null,
@@ -240,6 +349,31 @@ Returns the updated application:
   "signalsComputedAt": "2024-01-15T10:05:00Z"
 }
 ```
+
+**Note:** Unlike `GET /v1/applications/:applicationId`, this response returns the raw database record. The `signalEvaluations` field is a JSON string (not parsed object) and `cvPath` is included (not transformed to `cvUrl`).
+
+| Field              | Type        | Description                               |
+| ------------------ | ----------- | ----------------------------------------- |
+| `id`               | string      | Application ID                            |
+| `jobId`            | string      | Associated job ID                         |
+| `candidateEmail`   | string      | Candidate's email                         |
+| `candidateName`    | string      | Candidate's full name                     |
+| `preferredName`    | string/null | Candidate's preferred name                |
+| `phone`            | string/null | Candidate's phone number                  |
+| `detectedCountry`  | string/null | Auto-detected country code                |
+| `detectedTimezone` | string/null | Auto-detected timezone                    |
+| `cvPath`           | string/null | Internal CV storage path                  |
+| `cvFilename`       | string/null | Original CV filename                      |
+| `cvUploadedAt`     | string/null | When the CV was uploaded                  |
+| `status`           | string      | Application status (updated)              |
+| `signalsStatus`    | string      | Signal extraction status                  |
+| `signalEvaluations`| string/null | Signal evaluations as JSON string         |
+| `decisionPosture`  | string/null | Computed decision posture                 |
+| `signalsErrorMessage`| string/null | Error message if extraction failed      |
+| `signalsErrorCode` | string/null | Error code if extraction failed           |
+| `createdAt`        | string      | Application submission timestamp          |
+| `updatedAt`        | string      | Last update timestamp                     |
+| `signalsComputedAt`| string/null | When signals were computed                |
 
 ### Errors
 
@@ -281,15 +415,15 @@ When signals have been computed:
     }
   ],
   "signals": {
-    "present": ["TAKES_OWNERSHIP", "LEARNS_FROM_FAILURE"],
-    "partial": ["HANDLES_AMBIGUITY"],
-    "missing": ["COMMUNICATES_PROACTIVELY"],
-    "criticalGaps": ["COMMUNICATES_PROACTIVELY"]
+    "present": ["accountability", "learning_from_failure"],
+    "partial": ["tradeoff_awareness"],
+    "missing": ["communication_clarity"],
+    "criticalGaps": ["communication_clarity"]
   },
   "conflicts": [],
   "suggestedActions": [
-    "Probe these areas in interview: Proactive Communication",
-    "Ask for specific examples about: Handles Ambiguity"
+    "Probe these areas in interview: Communication Clarity",
+    "Ask for specific examples about: Tradeoff Awareness"
   ]
 }
 ```
@@ -349,6 +483,21 @@ When signal extraction failed:
 | `SOME_UNCERTAINTY` | Some gaps or concerns, worth probing in interview    |
 | `HIGH_UNCERTAINTY` | Major concerns, significant gaps or contradictions   |
 
+### Valid Signal IDs
+
+| Signal ID                    | Label                      |
+| ---------------------------- | -------------------------- |
+| `decision_under_uncertainty` | Decision Under Uncertainty |
+| `tradeoff_awareness`         | Tradeoff Awareness         |
+| `risk_reasoning`             | Risk Reasoning             |
+| `ethical_awareness`          | Ethical Awareness          |
+| `technical_depth`            | Technical Depth            |
+| `system_thinking`            | System Thinking            |
+| `communication_clarity`      | Communication Clarity      |
+| `stakeholder_management`     | Stakeholder Management     |
+| `accountability`             | Accountability             |
+| `learning_from_failure`      | Learning From Failure      |
+
 ### Reason Severities
 
 | Severity   | Description                          |
@@ -363,6 +512,35 @@ When signal extraction failed:
 | ------ | --------------------- |
 | 404    | Application not found |
 | 404    | Posture not computed  |
+
+---
+
+## GET /v1/applications/:applicationId/cv
+
+Download the CV file for an application.
+
+### Path Parameters
+
+| Parameter       | Type   | Description        |
+| --------------- | ------ | ------------------ |
+| `applicationId` | string | The application ID |
+
+### Response (200 OK)
+
+Returns the CV file as a binary stream.
+
+**Headers:**
+- `Content-Type`: File MIME type (e.g., `application/pdf`)
+- `Content-Disposition`: `attachment; filename="original-filename.pdf"`
+- `Content-Length`: File size in bytes
+
+### Errors
+
+| Status | Message                         |
+| ------ | ------------------------------- |
+| 404    | Application not found           |
+| 404    | No CV uploaded for this application |
+| 404    | CV file not found               |
 
 ---
 

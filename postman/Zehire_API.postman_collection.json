@@ -600,7 +600,7 @@
               "host": ["{{base_url}}"],
               "path": ["v1", "applications", "{{application_id}}"]
             },
-            "description": "Get full application details including answers and extracted signals.\n\n**Returns:**\n- Candidate info (email, name)\n- Application status\n- Signal extraction status and results\n- Decision posture\n- All answers with extracted signals per answer\n\n**Note:** signalEvaluations and extractedSignals will be null until signal extraction completes."
+            "description": "Get full application details including answers and extracted signals.\n\n**Returns:**\n- Candidate info (email, name, preferredName, phone)\n- Auto-detected location (detectedCountry, detectedTimezone)\n- CV status (hasCv, cvUrl)\n- Application status\n- Signal extraction status and results\n- Decision posture\n- All answers with extracted signals per answer\n\n**Note:** signalEvaluations and extractedSignals will be null until signal extraction completes."
           },
           "response": []
         },
@@ -640,6 +640,20 @@
             "description": "Get the decision posture for an application.\n\n**Returns when signals are computed:**\n- `posture`: LOW_REGRET_RISK, SOME_UNCERTAINTY, or HIGH_UNCERTAINTY\n- `primaryReason`: Human-readable explanation\n- `reasons`: Array of all contributing reasons with severity\n- `signals`: Object with present/partial/missing/criticalGaps arrays\n- `conflicts`: Any detected contradictions\n- `suggestedActions`: Recommended next steps for hiring manager\n\n**Returns 202 when:**\n- Signals not yet started\n- Signals currently processing\n\n**Returns 500 when:**\n- Signal extraction failed"
           },
           "response": []
+        },
+        {
+          "name": "Download CV",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/applications/{{application_id}}/cv",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "applications", "{{application_id}}", "cv"]
+            },
+            "description": "Download the CV file for an application.\n\n**Returns:**\n- Binary file stream\n- Content-Type header (e.g., application/pdf)\n- Content-Disposition header with filename\n\n**Errors:**\n- 404: Application not found\n- 404: No CV uploaded for this application\n- 404: CV file not found"
+          },
+          "response": []
         }
       ]
     },
@@ -661,52 +675,6 @@
               "path": ["public", "jobs", "{{public_slug}}"]
             },
             "description": "Get public job details by slug for candidates.\n\n**No authentication required.**\n\nOnly returns published jobs.\n\n**Returns:**\n- title, companyName, department, location\n- workType, employmentType\n- salaryMin, salaryMax, salaryCurrency\n- descriptionHtml (pre-rendered HTML)\n- questions array with: archetypeId, text, minWords"
-          },
-          "response": []
-        },
-        {
-          "name": "Submit Application",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "// Test response",
-                  "pm.test('Status code is 201', function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "",
-                  "pm.test('Response contains applicationId', function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.success).to.equal(true);",
-                  "    pm.expect(jsonData).to.have.property('applicationId');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"candidate@example.com\",\n  \"name\": \"Jane Doe\",\n  \"answers\": [\n    {\n      \"archetypeId\": \"situational_uncertainty_story\",\n      \"answerText\": \"When I was leading the migration project at my previous company, we faced a critical decision about our database architecture with incomplete performance data. I gathered the team, outlined the known risks and unknowns, and we decided to run a parallel proof-of-concept for 2 weeks before committing. This approach let us validate assumptions without betting the entire project on uncertain outcomes.\"\n    },\n    {\n      \"archetypeId\": \"ownership_of_outcome\",\n      \"answerText\": \"I take full responsibility for the outcomes of my projects. In my last role, when our release caused a production incident, I immediately took ownership - communicated status to stakeholders, led the incident response, and afterward conducted a thorough retrospective. I documented what went wrong and implemented guardrails to prevent similar issues.\"\n    },\n    {\n      \"archetypeId\": \"failure_and_recovery\",\n      \"answerText\": \"During the Q3 release, we encountered a critical bug that slipped through our testing. Rather than blame anyone, I analyzed our process and discovered gaps in our integration tests. I proposed and implemented a new testing strategy, added monitoring alerts, and created runbooks. The next quarter we had zero production incidents of that type.\"\n    }\n  ]\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/public/jobs/{{public_slug}}/apply",
-              "host": ["{{base_url}}"],
-              "path": ["public", "jobs", "{{public_slug}}", "apply"]
-            },
-            "description": "Submit a complete job application.\n\n**No authentication required.**\n\n**All questions must be answered** (minimum 50 characters each).\n\n**Request body:**\n- `email`: Candidate's email (must be valid)\n- `name`: Candidate's full name\n- `answers`: Array of all question answers\n  - `archetypeId`: Question identifier (from job questions)\n  - `answerText`: Answer text (min 50 chars)\n\n**Note:** Get question archetypeIds from GET /public/jobs/:slug response.\n\n**Duplicate Prevention:** Returns 409 if email has already applied to this job."
           },
           "response": []
         },
@@ -759,7 +727,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"candidate@example.com\",\n  \"name\": \"Jane Doe\",\n  \"answers\": [\n    {\n      \"archetypeId\": \"situational_uncertainty_story\",\n      \"answerText\": \"When I was leading the migration project...\"\n    },\n    {\n      \"archetypeId\": \"ownership_of_outcome\",\n      \"answerText\": \"\"\n    },\n    {\n      \"archetypeId\": \"failure_and_recovery\",\n      \"answerText\": \"\"\n    }\n  ]\n}"
+              "raw": "{\n  \"email\": \"candidate@example.com\",\n  \"name\": \"Jane Doe\",\n  \"preferredName\": \"Jane\",\n  \"phone\": \"+1-555-123-4567\",\n  \"answers\": [\n    {\n      \"archetypeId\": \"situational_uncertainty_story\",\n      \"answerText\": \"When I was leading the migration project...\"\n    },\n    {\n      \"archetypeId\": \"ownership_of_outcome\",\n      \"answerText\": \"\"\n    },\n    {\n      \"archetypeId\": \"failure_and_recovery\",\n      \"answerText\": \"\"\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{base_url}}/public/jobs/{{public_slug}}/apply/draft",
@@ -791,6 +759,60 @@
               ]
             },
             "description": "Resume a previously saved application draft.\n\n**No authentication required.**\n\n**Query Parameters:**\n- `token`: Resume token (required) - received from save draft response\n\nAlternatively, send token in `X-Resume-Token` header.\n\n**Returns:**\n- `candidateEmail`: Saved email\n- `candidateName`: Saved name\n- `answers`: Array of saved answers\n- `expiresAt`: When draft expires\n- `progress`: Completion status\n\n**Note:** Returns 404 if draft has expired (after 7 days)."
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Application",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Test response",
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response contains applicationId', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.equal(true);",
+                  "    pm.expect(jsonData).to.have.property('applicationId');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"email\": \"candidate@example.com\",\n  \"name\": \"Jane Doe\",\n  \"preferredName\": \"Jane\",\n  \"phone\": \"+1-555-123-4567\",\n  \"answers\": [\n    {\n      \"archetypeId\": \"situational_uncertainty_story\",\n      \"answerText\": \"When I was leading the migration project at my previous company, we faced a critical decision about our database architecture with incomplete performance data. I gathered the team, outlined the known risks and unknowns, and we decided to run a parallel proof-of-concept for 2 weeks before committing.\"\n    },\n    {\n      \"archetypeId\": \"ownership_of_outcome\",\n      \"answerText\": \"I take full responsibility for the outcomes of my projects. In my last role, when our release caused a production incident, I immediately took ownership - communicated status to stakeholders, led the incident response, and afterward conducted a thorough retrospective.\"\n    },\n    {\n      \"archetypeId\": \"failure_and_recovery\",\n      \"answerText\": \"During the Q3 release, we encountered a critical bug that slipped through our testing. Rather than blame anyone, I analyzed our process and discovered gaps in our integration tests. I proposed and implemented a new testing strategy.\"\n    }\n  ]\n}",
+                  "type": "text",
+                  "description": "JSON application data"
+                },
+                {
+                  "key": "cv",
+                  "type": "file",
+                  "src": "",
+                  "description": "CV file (PDF, DOC, or DOCX, max 5MB) - Optional"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/public/jobs/{{public_slug}}/apply",
+              "host": ["{{base_url}}"],
+              "path": ["public", "jobs", "{{public_slug}}", "apply"]
+            },
+            "description": "Submit a complete job application.\n\n**No authentication required.**\n\n**Requires `multipart/form-data` content type.**\n\n**All questions must be answered** (minimum 50 characters each).\n\n**Form fields:**\n- `data`: JSON string with application data\n  - `email`: Candidate's email (must be valid)\n  - `name`: Candidate's full name\n  - `preferredName`: Optional preferred name/nickname\n  - `phone`: Optional phone number (may be required per job config)\n  - `answers`: Array of all question answers\n    - `archetypeId`: Question identifier (from job questions)\n    - `answerText`: Answer text (min 50 chars)\n- `cv`: Optional CV file (PDF, DOC, or DOCX, max 5MB)\n\n**Note:** Get question archetypeIds from GET /public/jobs/:slug response.\n\n**Response includes `cv` field if file was uploaded:**\n```json\n{\n  \"success\": true,\n  \"applicationId\": \"app_xyz789\",\n  \"message\": \"Your application has been submitted successfully\",\n  \"cv\": {\n    \"filename\": \"resume.pdf\",\n    \"size\": 245760\n  }\n}\n```\n\n**Auto-detected fields:** Country and timezone are automatically detected via Cloudflare.\n\n**Duplicate Prevention:** Returns 409 if email has already applied to this job."
           },
           "response": []
         }

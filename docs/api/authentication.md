@@ -122,9 +122,10 @@ Email is sent asynchronously. Response is immediate regardless of whether email 
 
 #### Errors
 
-| Status | Code            | Description          |
-| ------ | --------------- | -------------------- |
-| 400    | `INVALID_EMAIL` | Email format invalid |
+| Status | Code                   | Description                     |
+| ------ | ---------------------- | ------------------------------- |
+| 400    | `INVALID_EMAIL`        | Email format invalid            |
+| 404    | `EMAIL_NOT_REGISTERED` | Email is not registered in system |
 
 ---
 
@@ -145,7 +146,7 @@ curl "https://api.zehire.com/auth/callback?token=abc123..."
 ```json
 {
   "user": {
-    "userId": "user_abc123",
+    "id": "user_abc123",
     "email": "user@example.com",
     "role": "recruiter"
   }
@@ -165,7 +166,7 @@ Note: `SameSite=Lax` allows magic link navigation from email clients while still
 | Status | Code                 | Description                |
 | ------ | -------------------- | -------------------------- |
 | 400    | `INVALID_TOKEN`      | Token is malformed         |
-| 400    | `TOKEN_EXPIRED`      | Token has expired (15 min) |
+| 410    | `TOKEN_EXPIRED`      | Token has expired (15 min) |
 | 400    | `TOKEN_ALREADY_USED` | Token was already used     |
 
 ---
@@ -248,14 +249,15 @@ All authentication errors follow a consistent format:
 
 ### Error Codes
 
-| HTTP | Code                 | Description                            |
-| ---- | -------------------- | -------------------------------------- |
-| 400  | `INVALID_EMAIL`      | Email format is invalid                |
-| 400  | `INVALID_TOKEN`      | Magic link token is malformed          |
-| 400  | `TOKEN_EXPIRED`      | Magic link expired (15 min TTL)        |
-| 400  | `TOKEN_ALREADY_USED` | Magic link was already used            |
-| 401  | `UNAUTHORIZED`       | Missing, invalid, or expired JWT       |
-| 403  | `FORBIDDEN`          | Valid JWT but insufficient permissions |
+| HTTP | Code                   | Description                            |
+| ---- | ---------------------- | -------------------------------------- |
+| 400  | `INVALID_EMAIL`        | Email format is invalid                |
+| 400  | `INVALID_TOKEN`        | Magic link token is malformed          |
+| 404  | `EMAIL_NOT_REGISTERED` | Email is not registered in system      |
+| 410  | `TOKEN_EXPIRED`        | Magic link expired (15 min TTL)        |
+| 400  | `TOKEN_ALREADY_USED`   | Magic link was already used            |
+| 401  | `UNAUTHORIZED`         | Missing, invalid, or expired JWT       |
+| 403  | `FORBIDDEN`            | Valid JWT but insufficient permissions |
 
 ## Protected vs Public Endpoints
 

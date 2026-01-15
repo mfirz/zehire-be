@@ -129,6 +129,7 @@ All errors follow a consistent format:
 | GET    | `/v1/applications/:id`          | Required | Get application details        |
 | GET    | `/v1/applications/:id/posture`  | Required | Get application posture        |
 | PATCH  | `/v1/applications/:id`          | Required | Update application status      |
+| GET    | `/v1/applications/:id/cv`       | Required | Download CV file               |
 | GET    | `/v1/assessment-providers`      | Required | List assessment providers      |
 | GET    | `/v1/capacity`                  | Required | Get organization capacity      |
 | GET    | `/v1/billing`                   | Required | Current month usage summary    |
@@ -138,12 +139,12 @@ All errors follow a consistent format:
 
 ### Public (No Auth)
 
-| Method | Path                                    | Description                     |
-| ------ | --------------------------------------- | ------------------------------- |
-| GET    | `/public/jobs/:slug`                    | Get job details by slug         |
-| POST   | `/public/jobs/:slug/apply`              | Submit job application          |
-| POST   | `/public/jobs/:slug/apply/draft`        | Save application progress       |
-| GET    | `/public/jobs/:slug/apply/draft/:id`    | Resume saved application        |
+| Method | Path                                    | Description                           |
+| ------ | --------------------------------------- | ------------------------------------- |
+| GET    | `/public/jobs/:slug`                    | Get job details by slug               |
+| POST   | `/public/jobs/:slug/apply`              | Submit application (with optional CV) |
+| POST   | `/public/jobs/:slug/apply/draft`        | Save application progress             |
+| GET    | `/public/jobs/:slug/apply/draft/:id`    | Resume saved application              |
 
 See [Public Applications API](./public-applications.md) for candidate-facing application endpoints.
 

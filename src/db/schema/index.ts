@@ -36,6 +36,7 @@ export {
   type WorkType,
   type EmploymentType,
   type SalaryCurrency,
+  type ApplicationConfig,
 } from "./jobs";
 
 // Billing

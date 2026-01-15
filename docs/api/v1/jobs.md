@@ -376,12 +376,17 @@ Draft jobs return `description` as a Tiptap JSON object for the editor.
   },
   "errorMessage": null,
   "errorCode": null,
+  "pipelineError": null,
+  "pipelineErrorCode": null,
   "regenerationCount": 1,
   "lastRegenerationAt": "2026-01-07T10:35:00Z",
+  "pipelineRegenerationCount": 1,
+  "pipelineLastRegenerationAt": "2026-01-07T10:36:00Z",
   "createdAt": "2026-01-07T10:30:00Z",
   "updatedAt": "2026-01-07T10:35:00Z",
   "processingStartedAt": "2026-01-07T10:31:00Z",
-  "completedAt": "2026-01-07T10:32:00Z"
+  "completedAt": "2026-01-07T10:32:00Z",
+  "pipelineGeneratedAt": "2026-01-07T10:36:00Z"
 }
 ```
 
@@ -415,13 +420,14 @@ Published, paused, and closed jobs return `descriptionHtml` as pre-rendered HTML
   "createdAt": "2026-01-07T10:30:00Z",
   "updatedAt": "2026-01-07T12:00:00Z",
   "publishedAt": "2026-01-07T12:00:00Z",
-  "completedAt": "2026-01-07T10:32:00Z"
+  "completedAt": "2026-01-07T10:32:00Z",
+  "pipelineGeneratedAt": "2026-01-07T10:36:00Z"
 }
 ```
 
 #### Paused / Closed
 
-Same as published, with `descriptionHtml` instead of `description`. Closed jobs include `closedAt`.
+Same as published, with `descriptionHtml` instead of `description`. Closed jobs also include `closedAt`.
 
 ---
 
@@ -627,10 +633,53 @@ Get the pipeline recommendation and configuration for a job.
 
 ### Response
 
-#### 200 OK
+Response varies by `pipelineStatus`:
+
+#### 200 OK - Pipeline Not Started
+
+When `pipelineStatus` is `none` or `pending`:
 
 ```json
 {
+  "pipelineStatus": "none",
+  "recommendation": null,
+  "config": null
+}
+```
+
+#### 200 OK - Pipeline Processing
+
+When `pipelineStatus` is `processing`:
+
+```json
+{
+  "pipelineStatus": "processing",
+  "recommendation": null,
+  "config": null
+}
+```
+
+#### 200 OK - Pipeline Failed
+
+When `pipelineStatus` is `failed`:
+
+```json
+{
+  "pipelineStatus": "failed",
+  "recommendation": null,
+  "config": null,
+  "error": "Pipeline generation failed due to...",
+  "errorCode": "PIPELINE_GENERATION_FAILED"
+}
+```
+
+#### 200 OK - Pipeline Completed
+
+When `pipelineStatus` is `completed`:
+
+```json
+{
+  "pipelineStatus": "completed",
   "recommendation": {
     "assessment": {
       "recommended": true,
@@ -684,9 +733,19 @@ Get the pipeline recommendation and configuration for a job.
         "focus": "Leadership and collaboration"
       }
     ]
-  }
+  },
+  "generatedAt": "2026-01-07T10:35:00Z"
 }
 ```
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `pipelineStatus` | enum | `none`, `pending`, `processing`, `completed`, or `failed` |
+| `recommendation` | object/null | AI-generated pipeline recommendation (null if not completed) |
+| `config` | object/null | Editable pipeline configuration (null if not completed) |
+| `generatedAt` | string/null | ISO 8601 timestamp when pipeline was generated |
+| `error` | string | Error message (only present when failed) |
+| `errorCode` | string | Error code (only present when failed) |
 
 #### 404 Not Found
 
@@ -737,7 +796,7 @@ All fields are optional. Only provided fields are updated.
 
 #### 200 OK
 
-Returns the updated pipeline (same format as GET /v1/jobs/:id/pipeline).
+Returns the updated job (same format as GET /v1/jobs/:id for draft status).
 
 #### 400 Bad Request
 
@@ -755,8 +814,8 @@ Or if pipeline hasn't been generated yet:
 ```json
 {
   "error": {
-    "code": "PIPELINE_NOT_GENERATED",
-    "message": "Pipeline must be generated before it can be updated"
+    "code": "PIPELINE_NOT_READY",
+    "message": "Pipeline must be generated before editing"
   }
 }
 ```
@@ -974,41 +1033,36 @@ List available assessment providers for pipeline configuration.
       "id": "hackerrank",
       "name": "HackerRank",
       "type": "external",
-      "description": "Technical assessments and coding challenges",
-      "capabilities": ["coding", "algorithms", "system_design"],
-      "integrationRequired": true
+      "description": "Technical assessments for developers with coding challenges and system design problems",
+      "bestFor": ["engineering", "data", "devops"]
     },
     {
       "id": "codility",
       "name": "Codility",
       "type": "external",
-      "description": "Code quality and algorithmic assessments",
-      "capabilities": ["coding", "algorithms", "code_quality"],
-      "integrationRequired": true
+      "description": "Coding tests and technical interviews with automated evaluation",
+      "bestFor": ["engineering", "backend", "frontend"]
     },
     {
       "id": "testgorilla",
       "name": "TestGorilla",
       "type": "external",
-      "description": "Comprehensive pre-employment testing",
-      "capabilities": ["personality", "cognitive", "skills"],
-      "integrationRequired": true
+      "description": "Pre-employment testing for any role including cognitive and personality assessments",
+      "bestFor": ["any", "sales", "marketing", "operations"]
     },
     {
       "id": "takehome",
       "name": "Take-Home Project",
       "type": "internal",
-      "description": "Custom take-home assignment managed by recruiter",
-      "capabilities": ["coding", "system_design", "documentation"],
-      "integrationRequired": false
+      "description": "Custom take-home assignment relevant to the role",
+      "bestFor": ["engineering", "design", "product", "content"]
     },
     {
       "id": "none",
       "name": "No Assessment",
       "type": "internal",
-      "description": "Skip technical assessment step",
-      "capabilities": [],
-      "integrationRequired": false
+      "description": "Skip technical assessment, proceed directly to interviews",
+      "bestFor": ["executive", "entry-level", "leadership"]
     }
   ]
 }
@@ -1018,10 +1072,9 @@ List available assessment providers for pipeline configuration.
 | ----- | ---- | ----------- |
 | `id` | string | Unique provider identifier (used in pipeline config) |
 | `name` | string | Human-readable provider name |
-| `type` | string | `external` (third-party integration) or `internal` (Zehire-managed) |
+| `type` | string | `external` (third-party integration) or `internal` (custom) |
 | `description` | string | Provider description |
-| `capabilities` | array | Assessment types the provider supports |
-| `integrationRequired` | boolean | Whether external integration setup is required |
+| `bestFor` | array | Role categories this provider is best suited for |
 
 ---
 

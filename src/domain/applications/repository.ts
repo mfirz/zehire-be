@@ -88,7 +88,8 @@ export class ApplicationRepository {
   async createApplication(
     jobId: string,
     input: PublicApplyInput,
-    questions: Array<{ archetypeId: string; questionText: string }>
+    questions: Array<{ archetypeId: string; questionText: string }>,
+    geoData?: { country?: string; timezone?: string }
   ): Promise<{ applicationId: string; answerIds: string[] }> {
     const applicationId = alphanumericId();
     const now = new Date().toISOString();
@@ -110,6 +111,10 @@ export class ApplicationRepository {
       jobId,
       candidateEmail: input.email,
       candidateName: input.name,
+      preferredName: input.preferredName,
+      phone: input.phone,
+      detectedCountry: geoData?.country,
+      detectedTimezone: geoData?.timezone,
       status: "pending",
       signalsStatus: "pending",
       createdAt: now,
@@ -164,6 +169,44 @@ export class ApplicationRepository {
       .get();
 
     return result ?? null;
+  }
+
+  // ===========================================================================
+  // CV MANAGEMENT
+  // ===========================================================================
+
+  /**
+   * Update CV information for an application.
+   */
+  async updateCv(applicationId: string, cvPath: string, cvFilename: string): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .update(applications)
+      .set({
+        cvPath,
+        cvFilename,
+        cvUploadedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(applications.id, applicationId));
+  }
+
+  /**
+   * Remove CV from an application.
+   */
+  async removeCv(applicationId: string): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .update(applications)
+      .set({
+        cvPath: null,
+        cvFilename: null,
+        cvUploadedAt: null,
+        updatedAt: now,
+      })
+      .where(eq(applications.id, applicationId));
   }
 
   /**
@@ -249,6 +292,8 @@ export class ApplicationRepository {
         .update(applicationDrafts)
         .set({
           candidateName: input.name,
+          preferredName: input.preferredName,
+          phone: input.phone,
           answers: JSON.stringify(input.answers),
           resumeTokenHash,
           expiresAt: expiresAt.toISOString(),
@@ -271,6 +316,8 @@ export class ApplicationRepository {
       jobId,
       candidateEmail: input.email,
       candidateName: input.name,
+      preferredName: input.preferredName,
+      phone: input.phone,
       answers: JSON.stringify(input.answers),
       resumeTokenHash,
       expiresAt: expiresAt.toISOString(),
@@ -410,9 +457,13 @@ export class ApplicationRepository {
         id: applications.id,
         candidateEmail: applications.candidateEmail,
         candidateName: applications.candidateName,
+        preferredName: applications.preferredName,
+        phone: applications.phone,
+        detectedCountry: applications.detectedCountry,
         status: applications.status,
         signalsStatus: applications.signalsStatus,
         decisionPosture: applications.decisionPosture,
+        hasCv: applications.cvPath,
         createdAt: applications.createdAt,
         updatedAt: applications.updatedAt,
       })
@@ -426,9 +477,13 @@ export class ApplicationRepository {
       id: row.id,
       candidateEmail: row.candidateEmail,
       candidateName: row.candidateName,
+      preferredName: row.preferredName,
+      phone: row.phone,
+      detectedCountry: row.detectedCountry,
       status: row.status,
       signalsStatus: row.signalsStatus,
       decisionPosture: row.decisionPosture,
+      hasCv: !!row.hasCv,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     }));
@@ -450,6 +505,13 @@ export class ApplicationRepository {
       jobId: application.jobId,
       candidateEmail: application.candidateEmail,
       candidateName: application.candidateName,
+      preferredName: application.preferredName,
+      phone: application.phone,
+      detectedCountry: application.detectedCountry,
+      detectedTimezone: application.detectedTimezone,
+      cvPath: application.cvPath,
+      cvFilename: application.cvFilename,
+      cvUploadedAt: application.cvUploadedAt,
       status: application.status,
       signalsStatus: application.signalsStatus,
       decisionPosture: application.decisionPosture,

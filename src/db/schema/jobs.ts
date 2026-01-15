@@ -38,6 +38,19 @@ export const jobErrorCodes = [
 ] as const;
 export type JobErrorCode = (typeof jobErrorCodes)[number];
 
+/**
+ * Application form configuration.
+ * Stored as JSON in jobs.application_config.
+ */
+export interface ApplicationConfig {
+  /** Whether phone number is required (default: false) */
+  requirePhone?: boolean;
+  /** Whether to show CV upload option (default: true) */
+  allowCv?: boolean;
+  /** Whether CV upload is required (default: false) */
+  requireCv?: boolean;
+}
+
 export const jobs = sqliteTable(
   "jobs",
   {
@@ -95,6 +108,9 @@ export const jobs = sqliteTable(
 
     // Public access
     publicSlug: text("public_slug"),
+
+    // Application form configuration (JSON)
+    applicationConfig: text("application_config", { mode: "json" }).$type<ApplicationConfig>(),
 
     // Timestamps
     createdAt: text("created_at").notNull(),
