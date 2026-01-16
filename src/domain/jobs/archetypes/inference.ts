@@ -152,11 +152,11 @@ Return only the JSON object, no explanation.`;
 export function parseJobContextResponse(response: string): JobContext {
   // Extract JSON from response (handle markdown code blocks)
   let jsonStr = response.trim();
-  if (jsonStr.startsWith("```")) {
-    jsonStr = jsonStr
-      .replace(/```json?\n?/g, "")
-      .replace(/```$/g, "")
-      .trim();
+
+  // Use capture group approach - more robust than replace
+  const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonMatch?.[1]) {
+    jsonStr = jsonMatch[1].trim();
   }
 
   let parsed: unknown;
@@ -293,7 +293,7 @@ export async function inferJobContext(
     system: JOB_CONTEXT_SYSTEM_PROMPT,
     user: userPrompt,
     temperature: 0, // Deterministic for consistency
-    maxTokens: 1024,
+    maxTokens: 2048, // Increased for Groq/Llama which may need more tokens
   });
 
   return parseJobContextResponse(response);

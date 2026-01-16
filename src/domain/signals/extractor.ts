@@ -309,7 +309,7 @@ export async function extractSignalsFromAnswer(
         system: SIGNAL_EXTRACTION_SYSTEM_PROMPT,
         user: prompt,
         temperature: 0, // Consistency over creativity
-        maxTokens: 1024,
+        maxTokens: 2048, // Increased for Groq/Llama which may need more tokens
       });
 
       result = parseExtractionResponse(response, input.targetSignals);

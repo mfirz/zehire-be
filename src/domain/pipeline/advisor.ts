@@ -133,11 +133,11 @@ Return only the JSON object, no explanation.`;
 export function parsePipelineResponse(response: string): PipelineRecommendation {
   // Extract JSON from response (handle markdown code blocks)
   let jsonStr = response.trim();
-  if (jsonStr.startsWith("```")) {
-    jsonStr = jsonStr
-      .replace(/```json?\n?/g, "")
-      .replace(/```$/g, "")
-      .trim();
+
+  // Use capture group approach - more robust than replace
+  const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonMatch?.[1]) {
+    jsonStr = jsonMatch[1].trim();
   }
 
   let parsed: unknown;

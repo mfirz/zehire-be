@@ -74,6 +74,13 @@ export interface Env {
   ANTHROPIC_API_KEY?: string;
 
   /**
+   * Groq API key for LLM inference.
+   * Set via: wrangler secret put GROQ_API_KEY
+   * Optional - only required when using Groq provider.
+   */
+  GROQ_API_KEY?: string;
+
+  /**
    * API key for client authentication.
    * Set via: wrangler secret put API_KEY
    */
@@ -98,8 +105,16 @@ export interface Env {
    * LLM provider to use for inference.
    * - "workers-ai": Free Cloudflare Workers AI (Llama 3.1 8B)
    * - "anthropic": Paid Anthropic Claude (requires ANTHROPIC_API_KEY)
+   * - "groq": Fast & cheap Groq Llama (requires GROQ_API_KEY)
    */
-  LLM_PROVIDER?: "workers-ai" | "anthropic";
+  LLM_PROVIDER?: LLMProvider;
+
+  /**
+   * Groq model to use (only when LLM_PROVIDER is "groq").
+   * - "llama-3.3-70b": Best quality (default)
+   * - "llama-3.1-8b": Fastest and cheapest
+   */
+  GROQ_MODEL?: "llama-3.3-70b" | "llama-3.1-8b";
 
   // ==========================================================================
   // AUTH CONFIGURATION
@@ -296,7 +311,7 @@ export type JobErrorCode = (typeof JOB_ERROR_CODES)[number];
 // LLM PROVIDER TYPES
 // =============================================================================
 
-export const LLM_PROVIDERS = ["workers-ai", "anthropic"] as const;
+export const LLM_PROVIDERS = ["workers-ai", "anthropic", "groq"] as const;
 
 export type LLMProvider = (typeof LLM_PROVIDERS)[number];
 

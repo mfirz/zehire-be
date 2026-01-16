@@ -7,10 +7,12 @@
 import type { LLMClient } from "../../domain/jobs/archetypes/inference";
 import type { Env, LLMProvider } from "../../types/bindings";
 import { createAnthropicClient } from "./anthropic";
+import { createGroqClient } from "./groq";
 import { createWorkersAIClient } from "./workers-ai";
 
 // Re-export individual clients
 export { createAnthropicClient, type AnthropicClientOptions } from "./anthropic";
+export { createGroqClient, GROQ_MODELS, type GroqClientOptions, type GroqModel } from "./groq";
 export {
   createWorkersAIClient,
   WORKERS_AI_MODELS,
@@ -40,6 +42,7 @@ export interface CreateLLMClientOptions {
  * This factory automatically selects the appropriate provider:
  * - "workers-ai": Free Cloudflare Workers AI (default)
  * - "anthropic": Paid Anthropic Claude API
+ * - "groq": Fast & cheap Groq with Llama models
  *
  * @example
  * ```typescript
@@ -61,6 +64,19 @@ export function createLLMClient(options: CreateLLMClientOptions): LLMClient {
       }
       return createAnthropicClient({
         apiKey: env.ANTHROPIC_API_KEY,
+      });
+    }
+
+    case "groq": {
+      if (!env.GROQ_API_KEY) {
+        throw new Error(
+          "GROQ_API_KEY is required when using groq provider. " +
+            "Set it via: wrangler secret put GROQ_API_KEY"
+        );
+      }
+      return createGroqClient({
+        apiKey: env.GROQ_API_KEY,
+        model: env.GROQ_MODEL ?? "llama-3.3-70b",
       });
     }
 
@@ -88,5 +104,7 @@ export function getProviderDisplayName(provider: LLMProvider): string {
       return "Cloudflare Workers AI (Llama 3.1 8B)";
     case "anthropic":
       return "Anthropic Claude";
+    case "groq":
+      return "Groq (Llama 3.3 70B)";
   }
 }
