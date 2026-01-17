@@ -207,13 +207,33 @@ export type {
 // =============================================================================
 
 /**
- * Schema for updating application status.
+ * Triage status enum.
+ */
+export const TRIAGE_STATUSES = ["SHORTLIST", "MAYBE", "WEAK"] as const;
+
+export type TriageStatus = (typeof TRIAGE_STATUSES)[number];
+
+/**
+ * Schema for updating application status or triage.
  */
 export const UpdateApplicationSchema = z.object({
-  status: z.enum(APPLICATION_STATUSES),
-});
+  status: z.enum(APPLICATION_STATUSES).optional(),
+  triageStatus: z.enum(TRIAGE_STATUSES).optional(),
+}).refine(
+  (data) => data.status !== undefined || data.triageStatus !== undefined,
+  { message: "Either status or triageStatus must be provided" }
+);
 
 export type UpdateApplicationInput = z.infer<typeof UpdateApplicationSchema>;
+
+/**
+ * Schema for creating application notes.
+ */
+export const CreateNoteSchema = z.object({
+  content: z.string().min(1, "Content is required").max(5000, "Content too long"),
+});
+
+export type CreateNoteInput = z.infer<typeof CreateNoteSchema>;
 
 /**
  * Application summary for list view.
@@ -229,6 +249,7 @@ export const ApplicationSummarySchema = z.object({
   status: z.string(),
   signalsStatus: z.string(),
   decisionPosture: z.string().nullable(),
+  triageStatus: z.string().nullable(),
   hasCv: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -254,6 +275,8 @@ export const ApplicationDetailSchema = z.object({
   status: z.string(),
   signalsStatus: z.string(),
   decisionPosture: z.string().nullable(),
+  triageStatus: z.string().nullable(),
+  source: z.string().nullable(),
   signalEvaluations: z.unknown().nullable(), // Parsed JSON
   signalsErrorMessage: z.string().nullable(),
   signalsErrorCode: z.string().nullable(),
@@ -277,15 +300,58 @@ export const ApplicationDetailSchema = z.object({
 export type ApplicationDetail = z.infer<typeof ApplicationDetailSchema>;
 
 /**
+ * Navigation context for application detail.
+ */
+export const NavigationContextSchema = z.object({
+  prevId: z.string().nullable(),
+  nextId: z.string().nullable(),
+  currentIndex: z.number(),
+  totalCount: z.number(),
+});
+
+export type NavigationContext = z.infer<typeof NavigationContextSchema>;
+
+/**
+ * Application note for display.
+ */
+export const ApplicationNoteSchema = z.object({
+  id: z.string(),
+  authorId: z.string(),
+  authorName: z.string(),
+  content: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type ApplicationNoteOutput = z.infer<typeof ApplicationNoteSchema>;
+
+/**
+ * Application event for timeline.
+ */
+export const ApplicationEventSchema = z.object({
+  id: z.string(),
+  eventType: z.string(),
+  actorId: z.string().nullable(),
+  actorName: z.string().nullable(),
+  oldValue: z.string().nullable(),
+  newValue: z.string().nullable(),
+  metadata: z.unknown().nullable(),
+  createdAt: z.string(),
+});
+
+export type ApplicationEventOutput = z.infer<typeof ApplicationEventSchema>;
+
+/**
  * Query parameters for listing applications.
  */
 export const ListApplicationsQuerySchema = z.object({
   status: z.enum(APPLICATION_STATUSES).optional(),
   signalsStatus: z.enum(SIGNALS_STATUSES).optional(),
   posture: z.enum(["LOW_REGRET_RISK", "SOME_UNCERTAINTY", "HIGH_UNCERTAINTY"]).optional(),
+  triageStatus: z.enum(TRIAGE_STATUSES).optional(),
   limit: z.coerce.number().min(1).max(100).default(50),
   offset: z.coerce.number().min(0).default(0),
-  sort: z.enum(["createdAt", "updatedAt", "candidateName"]).default("createdAt"),
+  sort: z.enum(["createdAt", "updatedAt", "candidateName", "posture"]).default("createdAt"),
   order: z.enum(["asc", "desc"]).default("desc"),
 });
 

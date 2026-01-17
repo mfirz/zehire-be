@@ -6,6 +6,7 @@
 
 import { sqliteTable, text, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { jobs } from "./jobs";
+import { users } from "./users";
 
 // Enums
 export const applicationStatuses = [
@@ -24,6 +25,9 @@ export type SignalsStatus = (typeof signalsStatuses)[number];
 
 export const extractionStatuses = ["pending", "processing", "completed", "failed"] as const;
 export type ExtractionStatus = (typeof extractionStatuses)[number];
+
+export const triageStatuses = ["SHORTLIST", "MAYBE", "WEAK"] as const;
+export type TriageStatus = (typeof triageStatuses)[number];
 
 /**
  * Applications
@@ -59,6 +63,13 @@ export const applications = sqliteTable(
     decisionPosture: text("decision_posture"), // JSON: PostureResult
     signalsErrorMessage: text("signals_error_message"),
     signalsErrorCode: text("signals_error_code"),
+
+    // Triage status for quick decisions
+    triageStatus: text("triage_status", { enum: triageStatuses }),
+
+    // Source tracking (organic, referral, etc.)
+    source: text("source").default("organic"),
+
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
     signalsComputedAt: text("signals_computed_at"),
@@ -67,6 +78,7 @@ export const applications = sqliteTable(
     index("idx_applications_job_id").on(table.jobId),
     index("idx_applications_status").on(table.status),
     index("idx_applications_signals_status").on(table.signalsStatus),
+    index("idx_applications_triage_status").on(table.triageStatus),
     index("idx_applications_candidate_email").on(table.candidateEmail),
     uniqueIndex("idx_applications_unique_candidate").on(table.jobId, table.candidateEmail),
   ]
@@ -135,6 +147,70 @@ export const applicationDrafts = sqliteTable(
   ]
 );
 
+/**
+ * Application Notes
+ * Recruiter notes for collaboration on applications.
+ */
+export const applicationNotes = sqliteTable(
+  "application_notes",
+  {
+    id: text("id").primaryKey(),
+    applicationId: text("application_id")
+      .notNull()
+      .references(() => applications.id, { onDelete: "cascade" }),
+    authorId: text("author_id")
+      .notNull()
+      .references(() => users.id),
+    authorName: text("author_name").notNull(),
+    content: text("content").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("idx_application_notes_application_id").on(table.applicationId),
+  ]
+);
+
+/**
+ * Event types for timeline.
+ */
+export const eventTypes = [
+  "status_change",
+  "triage_change",
+  "note_added",
+  "note_deleted",
+  "signals_started",
+  "signals_completed",
+  "signals_failed",
+  "cv_uploaded",
+] as const;
+export type EventType = (typeof eventTypes)[number];
+
+/**
+ * Application Events
+ * Activity timeline for audit trail.
+ */
+export const applicationEvents = sqliteTable(
+  "application_events",
+  {
+    id: text("id").primaryKey(),
+    applicationId: text("application_id")
+      .notNull()
+      .references(() => applications.id, { onDelete: "cascade" }),
+    eventType: text("event_type", { enum: eventTypes }).notNull(),
+    actorId: text("actor_id").references(() => users.id),
+    actorName: text("actor_name"),
+    oldValue: text("old_value"),
+    newValue: text("new_value"),
+    metadata: text("metadata"), // JSON for additional data
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_application_events_application_id").on(table.applicationId),
+    index("idx_application_events_created_at").on(table.createdAt),
+  ]
+);
+
 // Inferred types
 export type Application = typeof applications.$inferSelect;
 export type NewApplication = typeof applications.$inferInsert;
@@ -142,3 +218,7 @@ export type Answer = typeof answers.$inferSelect;
 export type NewAnswer = typeof answers.$inferInsert;
 export type ApplicationDraft = typeof applicationDrafts.$inferSelect;
 export type NewApplicationDraft = typeof applicationDrafts.$inferInsert;
+export type ApplicationNote = typeof applicationNotes.$inferSelect;
+export type NewApplicationNote = typeof applicationNotes.$inferInsert;
+export type ApplicationEvent = typeof applicationEvents.$inferSelect;
+export type NewApplicationEvent = typeof applicationEvents.$inferInsert;

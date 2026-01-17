@@ -45,6 +45,11 @@
       "key": "application_id",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "note_id",
+      "value": "",
+      "type": "string"
     }
   ],
   "auth": {
@@ -504,7 +509,7 @@
     },
     {
       "name": "Applications",
-      "description": "Application management endpoints for recruiters.\n\nAll endpoints require JWT authentication.\n\n**Application Status Flow:**\n```\npending → screening → assessment → interview → offer\n                                              ↓\n                                          rejected\n```\n\n**Decision Postures:**\n- LOW_REGRET_RISK: Strong signals, confident hire\n- SOME_UNCERTAINTY: Mixed signals, proceed with caution\n- HIGH_UNCERTAINTY: Weak signals, higher risk",
+      "description": "Application management endpoints for recruiters.\n\nAll endpoints require JWT authentication.\n\n**Application Status Flow:**\n```\npending → screening → assessment → interview → offer\n                                              ↓\n                                          rejected\n```\n\n**Triage Actions:**\n- SHORTLIST: Strong candidate, prioritize\n- MAYBE: Uncertain, needs more review\n- WEAK: Weak signals, deprioritize\n\n**Decision Postures:**\n- LOW_REGRET_RISK: Strong signals, confident hire\n- SOME_UNCERTAINTY: Mixed signals, proceed with caution\n- HIGH_UNCERTAINTY: Weak signals, higher risk",
       "item": [
         {
           "name": "List Applications for Job",
@@ -573,9 +578,15 @@
                   "disabled": true
                 },
                 {
+                  "key": "triageStatus",
+                  "value": "SHORTLIST",
+                  "description": "Filter: SHORTLIST, MAYBE, WEAK (triage status)",
+                  "disabled": true
+                },
+                {
                   "key": "sort",
                   "value": "createdAt",
-                  "description": "Sort field: createdAt, updatedAt, candidateName",
+                  "description": "Sort field: createdAt, updatedAt, candidateName, posture",
                   "disabled": true
                 },
                 {
@@ -600,7 +611,7 @@
               "host": ["{{base_url}}"],
               "path": ["v1", "applications", "{{application_id}}"]
             },
-            "description": "Get full application details including answers and extracted signals.\n\n**Returns:**\n- Candidate info (email, name, preferredName, phone)\n- Auto-detected location (detectedCountry, detectedTimezone)\n- CV status (hasCv, cvUrl)\n- Application status\n- Signal extraction status and results\n- Decision posture\n- All answers with extracted signals per answer\n\n**Note:** signalEvaluations and extractedSignals will be null until signal extraction completes."
+            "description": "Get full application details including answers, extracted signals, and navigation context.\n\n**Returns:**\n- Candidate info (email, name, preferredName, phone)\n- Auto-detected location (detectedCountry, detectedTimezone)\n- CV status (hasCv, cvUrl)\n- Application status and triage status\n- Signal extraction status and results\n- Decision posture\n- All answers with extracted signals per answer\n- Navigation context (prevId, nextId, currentIndex, totalCount)\n\n**Note:** signalEvaluations and extractedSignals will be null until signal extraction completes.\n\n**Navigation:** Sorted by posture (LOW_REGRET_RISK first) for quick review."
           },
           "response": []
         },
@@ -616,14 +627,37 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"status\": \"screening\"\n}"
+              "raw": "{\n  \"status\": \"screening\",\n  \"triageStatus\": \"SHORTLIST\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/v1/applications/{{application_id}}",
               "host": ["{{base_url}}"],
               "path": ["v1", "applications", "{{application_id}}"]
             },
-            "description": "Update application status to move candidate through the hiring pipeline.\n\n**Valid status values:**\n- `pending` - Just submitted\n- `screening` - Under initial review\n- `assessment` - In assessment phase\n- `interview` - Interview scheduled/in progress\n- `offer` - Offer extended\n- `rejected` - Rejected by recruiter\n- `withdrawn` - Withdrawn by candidate\n\n**Typical flow:**\npending → screening → assessment → interview → offer"
+            "description": "Update application status and/or triage status.\n\n**Status values:**\n- `pending` - Just submitted\n- `screening` - Under initial review\n- `assessment` - In assessment phase\n- `interview` - Interview scheduled/in progress\n- `offer` - Offer extended\n- `rejected` - Rejected by recruiter\n- `withdrawn` - Withdrawn by candidate\n\n**Triage values:**\n- `SHORTLIST` - Strong candidate, prioritize\n- `MAYBE` - Uncertain, review later\n- `WEAK` - Weak signals, deprioritize\n\nAt least one of `status` or `triageStatus` is required."
+          },
+          "response": []
+        },
+        {
+          "name": "Set Triage Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"triageStatus\": \"SHORTLIST\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/applications/{{application_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "applications", "{{application_id}}"]
+            },
+            "description": "Quick triage action without changing pipeline status.\n\n**Triage values:**\n- `SHORTLIST` - Strong candidate, prioritize\n- `MAYBE` - Uncertain, review later\n- `WEAK` - Weak signals, deprioritize"
           },
           "response": []
         },
@@ -652,6 +686,71 @@
               "path": ["v1", "applications", "{{application_id}}", "cv"]
             },
             "description": "Download the CV file for an application.\n\n**Returns:**\n- Binary file stream\n- Content-Type header (e.g., application/pdf)\n- Content-Disposition header with filename\n\n**Errors:**\n- 404: Application not found\n- 404: No CV uploaded for this application\n- 404: CV file not found"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Notes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/applications/{{application_id}}/notes",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "applications", "{{application_id}}", "notes"]
+            },
+            "description": "Get all notes for an application.\n\nNotes are ordered by creation date (newest first).\n\n**Returns:**\n- Array of notes with author info and content"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Note",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Strong candidate with relevant experience. Follow up on system design skills in interview.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/applications/{{application_id}}/notes",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "applications", "{{application_id}}", "notes"]
+            },
+            "description": "Add a note to an application.\n\n**Request body:**\n- `content`: Note text (1-5000 characters)\n\n**Note:** Notes are automatically associated with the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Note",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/applications/{{application_id}}/notes/{{note_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "applications", "{{application_id}}", "notes", "{{note_id}}"]
+            },
+            "description": "Delete a note.\n\n**Authorization:** Only the author can delete their own notes.\n\n**Returns:** 204 No Content on success."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Timeline",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/applications/{{application_id}}/timeline",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "applications", "{{application_id}}", "timeline"]
+            },
+            "description": "Get activity timeline for an application.\n\n**Event types:**\n- `status_change`: Pipeline status changed\n- `triage_change`: Triage status changed\n- `note_added`: Note was added\n- `note_deleted`: Note was deleted\n- `signals_started`: Signal extraction started\n- `signals_completed`: Signal extraction completed\n- `signals_failed`: Signal extraction failed\n- `cv_uploaded`: CV was uploaded\n\nEvents are ordered by creation date (newest first)."
           },
           "response": []
         }

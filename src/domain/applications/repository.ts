@@ -16,19 +16,27 @@ import { customAlphabet } from "nanoid";
 import {
   answers,
   applicationDrafts,
+  applicationEvents,
+  applicationNotes,
   applications,
   createDb,
   type Answer,
   type Application,
   type ApplicationDraft,
+  type ApplicationNote,
   type Database,
+  type EventType,
   type ExtractionStatus,
   type SignalsStatus,
+  type TriageStatus,
 } from "../../db";
 import type {
   ApplicationDetail,
+  ApplicationEventOutput,
+  ApplicationNoteOutput,
   ApplicationSummary,
   ListApplicationsQuery,
+  NavigationContext,
   PublicApplyInput,
   SaveDraftInput,
 } from "./schemas";
@@ -433,6 +441,10 @@ export class ApplicationRepository {
       conditions.push(eq(applications.decisionPosture, query.posture));
     }
 
+    if (query.triageStatus) {
+      conditions.push(eq(applications.triageStatus, query.triageStatus));
+    }
+
     const whereClause = and(...conditions);
 
     // Get total count
@@ -444,34 +456,78 @@ export class ApplicationRepository {
 
     const total = countResult?.count ?? 0;
 
-    // Map sort column
-    const sortColumn = {
+    // Map sort column - posture uses custom ordering
+    const sortColumnMap = {
       createdAt: applications.createdAt,
       updatedAt: applications.updatedAt,
       candidateName: applications.candidateName,
-    }[query.sort];
+      posture: applications.createdAt, // Placeholder, actual ordering done via raw SQL
+    } as const;
+    const sortColumn = sortColumnMap[query.sort];
 
     // Get paginated results
-    const results = await this.db
-      .select({
-        id: applications.id,
-        candidateEmail: applications.candidateEmail,
-        candidateName: applications.candidateName,
-        preferredName: applications.preferredName,
-        phone: applications.phone,
-        detectedCountry: applications.detectedCountry,
-        status: applications.status,
-        signalsStatus: applications.signalsStatus,
-        decisionPosture: applications.decisionPosture,
-        hasCv: applications.cvPath,
-        createdAt: applications.createdAt,
-        updatedAt: applications.updatedAt,
-      })
-      .from(applications)
-      .where(whereClause)
-      .orderBy(query.order === "desc" ? desc(sortColumn) : sortColumn)
-      .limit(query.limit)
-      .offset(query.offset);
+    let results;
+    if (query.sort === "posture") {
+      // Custom posture ordering: LOW_REGRET_RISK first, then SOME_UNCERTAINTY, then HIGH_UNCERTAINTY
+      // NULL values (not computed yet) go last
+      const postureOrder = query.order === "desc"
+        ? sql`CASE
+            WHEN ${applications.decisionPosture} = 'HIGH_UNCERTAINTY' THEN 1
+            WHEN ${applications.decisionPosture} = 'SOME_UNCERTAINTY' THEN 2
+            WHEN ${applications.decisionPosture} = 'LOW_REGRET_RISK' THEN 3
+            ELSE 0
+          END DESC`
+        : sql`CASE
+            WHEN ${applications.decisionPosture} = 'LOW_REGRET_RISK' THEN 1
+            WHEN ${applications.decisionPosture} = 'SOME_UNCERTAINTY' THEN 2
+            WHEN ${applications.decisionPosture} = 'HIGH_UNCERTAINTY' THEN 3
+            ELSE 4
+          END ASC`;
+
+      results = await this.db
+        .select({
+          id: applications.id,
+          candidateEmail: applications.candidateEmail,
+          candidateName: applications.candidateName,
+          preferredName: applications.preferredName,
+          phone: applications.phone,
+          detectedCountry: applications.detectedCountry,
+          status: applications.status,
+          signalsStatus: applications.signalsStatus,
+          decisionPosture: applications.decisionPosture,
+          triageStatus: applications.triageStatus,
+          hasCv: applications.cvPath,
+          createdAt: applications.createdAt,
+          updatedAt: applications.updatedAt,
+        })
+        .from(applications)
+        .where(whereClause)
+        .orderBy(postureOrder)
+        .limit(query.limit)
+        .offset(query.offset);
+    } else {
+      results = await this.db
+        .select({
+          id: applications.id,
+          candidateEmail: applications.candidateEmail,
+          candidateName: applications.candidateName,
+          preferredName: applications.preferredName,
+          phone: applications.phone,
+          detectedCountry: applications.detectedCountry,
+          status: applications.status,
+          signalsStatus: applications.signalsStatus,
+          decisionPosture: applications.decisionPosture,
+          triageStatus: applications.triageStatus,
+          hasCv: applications.cvPath,
+          createdAt: applications.createdAt,
+          updatedAt: applications.updatedAt,
+        })
+        .from(applications)
+        .where(whereClause)
+        .orderBy(query.order === "desc" ? desc(sortColumn) : sortColumn)
+        .limit(query.limit)
+        .offset(query.offset);
+    }
 
     const applicationsList: ApplicationSummary[] = results.map((row) => ({
       id: row.id,
@@ -483,6 +539,7 @@ export class ApplicationRepository {
       status: row.status,
       signalsStatus: row.signalsStatus,
       decisionPosture: row.decisionPosture,
+      triageStatus: row.triageStatus,
       hasCv: !!row.hasCv,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -515,6 +572,8 @@ export class ApplicationRepository {
       status: application.status,
       signalsStatus: application.signalsStatus,
       decisionPosture: application.decisionPosture,
+      triageStatus: application.triageStatus,
+      source: application.source,
       signalEvaluations: application.signalEvaluations
         ? JSON.parse(application.signalEvaluations)
         : null,
@@ -537,18 +596,25 @@ export class ApplicationRepository {
   }
 
   /**
-   * Update application status.
+   * Update application status and/or triage status.
    */
-  async updateStatus(id: string, status: string): Promise<Application | null> {
+  async updateStatus(
+    id: string,
+    updates: { status?: string; triageStatus?: TriageStatus }
+  ): Promise<Application | null> {
     const now = new Date().toISOString();
 
-    await this.db
-      .update(applications)
-      .set({
-        status: status as Application["status"],
-        updatedAt: now,
-      })
-      .where(eq(applications.id, id));
+    const setFields: Record<string, unknown> = { updatedAt: now };
+
+    if (updates.status !== undefined) {
+      setFields.status = updates.status as Application["status"];
+    }
+
+    if (updates.triageStatus !== undefined) {
+      setFields.triageStatus = updates.triageStatus;
+    }
+
+    await this.db.update(applications).set(setFields).where(eq(applications.id, id));
 
     return this.findById(id);
   }
@@ -741,5 +807,197 @@ export class ApplicationRepository {
 
     if (!result?.signalEvaluations) return null;
     return JSON.parse(result.signalEvaluations) as T;
+  }
+
+  // ===========================================================================
+  // NAVIGATION CONTEXT
+  // ===========================================================================
+
+  /**
+   * Get navigation context for an application.
+   * Returns prev/next IDs and position info.
+   * Sorted by posture (LOW_REGRET_RISK first).
+   */
+  async getNavigationContext(
+    applicationId: string,
+    jobId: string
+  ): Promise<NavigationContext | null> {
+    // Get all application IDs for the job, sorted by posture
+    const allApplications = await this.db
+      .select({ id: applications.id, decisionPosture: applications.decisionPosture })
+      .from(applications)
+      .where(eq(applications.jobId, jobId))
+      .orderBy(
+        sql`CASE
+          WHEN ${applications.decisionPosture} = 'LOW_REGRET_RISK' THEN 1
+          WHEN ${applications.decisionPosture} = 'SOME_UNCERTAINTY' THEN 2
+          WHEN ${applications.decisionPosture} = 'HIGH_UNCERTAINTY' THEN 3
+          ELSE 4
+        END ASC`
+      );
+
+    const currentIndex = allApplications.findIndex((a) => a.id === applicationId);
+    if (currentIndex === -1) return null;
+
+    const totalCount = allApplications.length;
+    const prevId = currentIndex > 0 ? allApplications[currentIndex - 1]!.id : null;
+    const nextId = currentIndex < totalCount - 1 ? allApplications[currentIndex + 1]!.id : null;
+
+    return {
+      prevId,
+      nextId,
+      currentIndex,
+      totalCount,
+    };
+  }
+
+  // ===========================================================================
+  // NOTES (Recruiter Collaboration)
+  // ===========================================================================
+
+  /**
+   * Create a note for an application.
+   */
+  async createNote(
+    applicationId: string,
+    authorId: string,
+    authorName: string,
+    content: string
+  ): Promise<ApplicationNoteOutput> {
+    const id = alphanumericId();
+    const now = new Date().toISOString();
+
+    await this.db.insert(applicationNotes).values({
+      id,
+      applicationId,
+      authorId,
+      authorName,
+      content,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      id,
+      authorId,
+      authorName,
+      content,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  /**
+   * Get all notes for an application.
+   */
+  async getNotes(applicationId: string): Promise<ApplicationNoteOutput[]> {
+    const results = await this.db
+      .select({
+        id: applicationNotes.id,
+        authorId: applicationNotes.authorId,
+        authorName: applicationNotes.authorName,
+        content: applicationNotes.content,
+        createdAt: applicationNotes.createdAt,
+        updatedAt: applicationNotes.updatedAt,
+      })
+      .from(applicationNotes)
+      .where(eq(applicationNotes.applicationId, applicationId))
+      .orderBy(desc(applicationNotes.createdAt));
+
+    return results;
+  }
+
+  /**
+   * Delete a note.
+   * Returns true if deleted, false if not found.
+   */
+  async deleteNote(noteId: string, authorId: string): Promise<boolean> {
+    // Only allow author to delete their own notes
+    const note = await this.db
+      .select({ id: applicationNotes.id, applicationId: applicationNotes.applicationId })
+      .from(applicationNotes)
+      .where(and(eq(applicationNotes.id, noteId), eq(applicationNotes.authorId, authorId)))
+      .get();
+
+    if (!note) return false;
+
+    await this.db.delete(applicationNotes).where(eq(applicationNotes.id, noteId));
+
+    return true;
+  }
+
+  /**
+   * Get note by ID with application ID for authorization.
+   */
+  async getNoteWithAppId(noteId: string): Promise<{ note: ApplicationNote; applicationId: string } | null> {
+    const result = await this.db
+      .select()
+      .from(applicationNotes)
+      .where(eq(applicationNotes.id, noteId))
+      .get();
+
+    if (!result) return null;
+
+    return { note: result, applicationId: result.applicationId };
+  }
+
+  // ===========================================================================
+  // EVENTS (Activity Timeline)
+  // ===========================================================================
+
+  /**
+   * Log an event for an application.
+   */
+  async logEvent(
+    applicationId: string,
+    eventType: EventType,
+    options?: {
+      actorId?: string;
+      actorName?: string;
+      oldValue?: string | null;
+      newValue?: string;
+      metadata?: Record<string, unknown>;
+    }
+  ): Promise<void> {
+    const id = alphanumericId();
+    const now = new Date().toISOString();
+
+    await this.db.insert(applicationEvents).values({
+      id,
+      applicationId,
+      eventType,
+      actorId: options?.actorId ?? null,
+      actorName: options?.actorName ?? null,
+      oldValue: options?.oldValue ?? null,
+      newValue: options?.newValue ?? null,
+      metadata: options?.metadata ? JSON.stringify(options.metadata) : null,
+      createdAt: now,
+    });
+  }
+
+  /**
+   * Get timeline events for an application.
+   */
+  async getTimeline(applicationId: string, limit = 50): Promise<ApplicationEventOutput[]> {
+    const results = await this.db
+      .select({
+        id: applicationEvents.id,
+        eventType: applicationEvents.eventType,
+        actorId: applicationEvents.actorId,
+        actorName: applicationEvents.actorName,
+        oldValue: applicationEvents.oldValue,
+        newValue: applicationEvents.newValue,
+        metadata: applicationEvents.metadata,
+        createdAt: applicationEvents.createdAt,
+      })
+      .from(applicationEvents)
+      .where(eq(applicationEvents.applicationId, applicationId))
+      .orderBy(desc(applicationEvents.createdAt))
+      .limit(limit);
+
+    return results.map((e) => ({
+      ...e,
+      metadata: e.metadata ? JSON.parse(e.metadata) : null,
+    }));
   }
 }

@@ -8,13 +8,17 @@ Recruiter-facing endpoints for managing job applications.
 
 ## Endpoints
 
-| Method | Path                                      | Description                    |
-| ------ | ----------------------------------------- | ------------------------------ |
-| GET    | `/v1/jobs/:jobId/applications`            | List applications for a job    |
-| GET    | `/v1/applications/:applicationId`         | Get full application details   |
-| PATCH  | `/v1/applications/:applicationId`         | Update application status      |
-| GET    | `/v1/applications/:applicationId/posture` | Get decision posture           |
-| GET    | `/v1/applications/:applicationId/cv`      | Download CV file               |
+| Method | Path                                              | Description                        |
+| ------ | ------------------------------------------------- | ---------------------------------- |
+| GET    | `/v1/jobs/:jobId/applications`                    | List applications for a job        |
+| GET    | `/v1/applications/:applicationId`                 | Get full application details       |
+| PATCH  | `/v1/applications/:applicationId`                 | Update application status/triage   |
+| GET    | `/v1/applications/:applicationId/posture`         | Get decision posture               |
+| GET    | `/v1/applications/:applicationId/notes`           | Get notes for an application       |
+| POST   | `/v1/applications/:applicationId/notes`           | Add a note                         |
+| DELETE | `/v1/applications/:applicationId/notes/:noteId`   | Delete a note                      |
+| GET    | `/v1/applications/:applicationId/timeline`        | Get activity timeline              |
+| GET    | `/v1/applications/:applicationId/cv`              | Download CV file                   |
 
 ---
 
@@ -30,15 +34,21 @@ List all applications for a job with optional filtering.
 
 ### Query Parameters
 
-| Parameter      | Type   | Default   | Description                               |
-| -------------- | ------ | --------- | ----------------------------------------- |
-| `status`       | string | -         | Filter by application status              |
-| `signalsStatus`| string | -         | Filter by signals processing status       |
-| `posture`      | string | -         | Filter by decision posture                |
-| `limit`        | number | 50        | Max results per page (1-100)              |
-| `offset`       | number | 0         | Pagination offset                         |
-| `sort`         | string | createdAt | Sort field: createdAt, updatedAt, candidateName |
-| `order`        | string | desc      | Sort order: asc, desc                     |
+| Parameter       | Type   | Default   | Description                               |
+| --------------- | ------ | --------- | ----------------------------------------- |
+| `status`        | string | -         | Filter by application status              |
+| `signalsStatus` | string | -         | Filter by signals processing status       |
+| `posture`       | string | -         | Filter by decision posture                |
+| `triageStatus`  | string | -         | Filter by triage status (SHORTLIST, MAYBE, WEAK) |
+| `limit`         | number | 50        | Max results per page (1-100)              |
+| `offset`        | number | 0         | Pagination offset                         |
+| `sort`          | string | createdAt | Sort field: createdAt, updatedAt, candidateName, posture |
+| `order`         | string | desc      | Sort order: asc, desc                     |
+
+**Posture Sort Order:**
+When sorting by `posture`, applications are ordered by decision confidence:
+- `asc`: LOW_REGRET_RISK → SOME_UNCERTAINTY → HIGH_UNCERTAINTY → null
+- `desc`: HIGH_UNCERTAINTY → SOME_UNCERTAINTY → LOW_REGRET_RISK → null
 
 ### Application Status Values
 
@@ -69,6 +79,14 @@ List all applications for a job with optional filtering.
 | `SOME_UNCERTAINTY` | Mixed signals, moderate risk          |
 | `HIGH_UNCERTAINTY` | Weak/concerning signals, higher risk  |
 
+### Triage Status Values
+
+| Status      | Description                              |
+| ----------- | ---------------------------------------- |
+| `SHORTLIST` | Strong candidate, prioritize for next steps |
+| `MAYBE`     | Uncertain, needs more review             |
+| `WEAK`      | Weak signals, deprioritize               |
+
 ### Response (200 OK)
 
 ```json
@@ -84,6 +102,7 @@ List all applications for a job with optional filtering.
       "status": "pending",
       "signalsStatus": "completed",
       "decisionPosture": "LOW_REGRET_RISK",
+      "triageStatus": "SHORTLIST",
       "hasCv": true,
       "createdAt": "2024-01-15T10:00:00Z",
       "updatedAt": "2024-01-15T10:05:00Z"
@@ -109,6 +128,7 @@ List all applications for a job with optional filtering.
 | `status`          | string      | Application status                    |
 | `signalsStatus`   | string      | Signal extraction status              |
 | `decisionPosture` | string/null | Computed decision posture             |
+| `triageStatus`    | string/null | Triage status (SHORTLIST/MAYBE/WEAK)   |
 | `hasCv`           | boolean     | Whether a CV was uploaded             |
 | `createdAt`       | string      | Application submission timestamp      |
 | `updatedAt`       | string      | Last update timestamp                 |
@@ -123,7 +143,7 @@ List all applications for a job with optional filtering.
 
 ## GET /v1/applications/:applicationId
 
-Get full application details including answers and extracted signals.
+Get full application details including answers, extracted signals, and navigation context.
 
 ### Path Parameters
 
@@ -150,6 +170,8 @@ Get full application details including answers and extracted signals.
   "status": "pending",
   "signalsStatus": "completed",
   "decisionPosture": "LOW_REGRET_RISK",
+  "triageStatus": "SHORTLIST",
+  "source": "organic",
   "signalEvaluations": {
     "posture": "LOW_REGRET_RISK",
     "primaryReason": "Critical signals are clearly demonstrated",
@@ -211,7 +233,13 @@ Get full application details including answers and extracted signals.
       "answeredAt": "2024-01-15T10:00:00Z",
       "extractedAt": "2024-01-15T10:05:00Z"
     }
-  ]
+  ],
+  "navigation": {
+    "prevId": "def456",
+    "nextId": "ghi789",
+    "currentIndex": 5,
+    "totalCount": 42
+  }
 }
 ```
 
@@ -234,6 +262,8 @@ Get full application details including answers and extracted signals.
 | `status`           | string      | Application status                        |
 | `signalsStatus`    | string      | Signal extraction status                  |
 | `decisionPosture`  | string/null | Computed decision posture                 |
+| `triageStatus`     | string/null | Triage status (SHORTLIST/MAYBE/WEAK)       |
+| `source`           | string/null | Application source (organic, referral, etc.) |
 | `signalEvaluations`| object/null | Full signal evaluation (see structure below) |
 | `signalsErrorMessage`| string/null | Error message if extraction failed      |
 | `signalsErrorCode` | string/null | Error code if extraction failed           |
@@ -241,6 +271,18 @@ Get full application details including answers and extracted signals.
 | `updatedAt`        | string      | Last update timestamp                     |
 | `signalsComputedAt`| string/null | When signals were computed                |
 | `answers`          | array       | Array of answers with signals             |
+| `navigation`       | object/null | Navigation context for prev/next          |
+
+### Navigation Context
+
+| Field          | Type        | Description                                    |
+| -------------- | ----------- | ---------------------------------------------- |
+| `prevId`       | string/null | Previous application ID (sorted by posture)    |
+| `nextId`       | string/null | Next application ID (sorted by posture)        |
+| `currentIndex` | number      | Current position (0-indexed) in sorted list    |
+| `totalCount`   | number      | Total number of applications for the job       |
+
+**Note:** Navigation is sorted by posture (LOW_REGRET_RISK first).
 
 ### Signal Evaluations Structure
 
@@ -301,7 +343,7 @@ The `signalEvaluations` object contains the full posture computation result:
 
 ## PATCH /v1/applications/:applicationId
 
-Update application status to move candidate through the hiring pipeline.
+Update application status and/or triage status.
 
 ### Path Parameters
 
@@ -313,13 +355,17 @@ Update application status to move candidate through the hiring pipeline.
 
 ```json
 {
-  "status": "screening"
+  "status": "screening",
+  "triageStatus": "SHORTLIST"
 }
 ```
 
-| Field    | Type   | Required | Description                    |
-| -------- | ------ | -------- | ------------------------------ |
-| `status` | string | Yes      | New status (see values above)  |
+| Field         | Type   | Required | Description                              |
+| ------------- | ------ | -------- | ---------------------------------------- |
+| `status`      | string | No*      | New pipeline status (see values above)   |
+| `triageStatus`| string | No*      | Triage status: SHORTLIST, MAYBE, WEAK     |
+
+*At least one of `status` or `triageStatus` must be provided.
 
 ### Response (200 OK)
 
@@ -512,6 +558,201 @@ When signal extraction failed:
 | ------ | --------------------- |
 | 404    | Application not found |
 | 404    | Posture not computed  |
+
+---
+
+## GET /v1/applications/:applicationId/notes
+
+Get all notes for an application.
+
+### Path Parameters
+
+| Parameter       | Type   | Description        |
+| --------------- | ------ | ------------------ |
+| `applicationId` | string | The application ID |
+
+### Response (200 OK)
+
+```json
+{
+  "notes": [
+    {
+      "id": "note123",
+      "authorId": "user456",
+      "authorName": "recruiter@company.com",
+      "content": "Strong candidate with relevant experience. Follow up on system design skills in interview.",
+      "createdAt": "2024-01-15T14:30:00Z",
+      "updatedAt": "2024-01-15T14:30:00Z"
+    }
+  ]
+}
+```
+
+| Field        | Type   | Description                    |
+| ------------ | ------ | ------------------------------ |
+| `id`         | string | Note ID                        |
+| `authorId`   | string | User ID of note author         |
+| `authorName` | string | Name/email of note author      |
+| `content`    | string | Note content                   |
+| `createdAt`  | string | When note was created          |
+| `updatedAt`  | string | When note was last updated     |
+
+### Errors
+
+| Status | Message               |
+| ------ | --------------------- |
+| 404    | Application not found |
+
+---
+
+## POST /v1/applications/:applicationId/notes
+
+Add a note to an application.
+
+### Path Parameters
+
+| Parameter       | Type   | Description        |
+| --------------- | ------ | ------------------ |
+| `applicationId` | string | The application ID |
+
+### Request Body
+
+```json
+{
+  "content": "Strong candidate with relevant experience. Follow up on system design skills in interview."
+}
+```
+
+| Field     | Type   | Required | Description                      |
+| --------- | ------ | -------- | -------------------------------- |
+| `content` | string | Yes      | Note content (1-5000 characters) |
+
+### Response (201 Created)
+
+```json
+{
+  "id": "note123",
+  "authorId": "user456",
+  "authorName": "recruiter@company.com",
+  "content": "Strong candidate with relevant experience.",
+  "createdAt": "2024-01-15T14:30:00Z",
+  "updatedAt": "2024-01-15T14:30:00Z"
+}
+```
+
+### Errors
+
+| Status | Message               |
+| ------ | --------------------- |
+| 400    | Invalid content       |
+| 404    | Application not found |
+
+---
+
+## DELETE /v1/applications/:applicationId/notes/:noteId
+
+Delete a note. Only the author can delete their own notes.
+
+### Path Parameters
+
+| Parameter       | Type   | Description        |
+| --------------- | ------ | ------------------ |
+| `applicationId` | string | The application ID |
+| `noteId`        | string | The note ID        |
+
+### Response (204 No Content)
+
+Empty response on success.
+
+### Errors
+
+| Status | Message                            |
+| ------ | ---------------------------------- |
+| 404    | Application not found              |
+| 404    | Note not found or not the author   |
+
+---
+
+## GET /v1/applications/:applicationId/timeline
+
+Get activity timeline for an application.
+
+### Path Parameters
+
+| Parameter       | Type   | Description        |
+| --------------- | ------ | ------------------ |
+| `applicationId` | string | The application ID |
+
+### Response (200 OK)
+
+```json
+{
+  "events": [
+    {
+      "id": "evt123",
+      "eventType": "status_change",
+      "actorId": "user456",
+      "actorName": "recruiter@company.com",
+      "oldValue": "pending",
+      "newValue": "screening",
+      "metadata": null,
+      "createdAt": "2024-01-15T14:30:00Z"
+    },
+    {
+      "id": "evt122",
+      "eventType": "triage_change",
+      "actorId": "user456",
+      "actorName": "recruiter@company.com",
+      "oldValue": null,
+      "newValue": "SHORTLIST",
+      "metadata": null,
+      "createdAt": "2024-01-15T14:00:00Z"
+    },
+    {
+      "id": "evt121",
+      "eventType": "signals_completed",
+      "actorId": null,
+      "actorName": null,
+      "oldValue": null,
+      "newValue": null,
+      "metadata": { "posture": "LOW_REGRET_RISK" },
+      "createdAt": "2024-01-15T10:05:00Z"
+    }
+  ]
+}
+```
+
+### Event Types
+
+| Type              | Description                         |
+| ----------------- | ----------------------------------- |
+| `status_change`   | Pipeline status changed             |
+| `triage_change`   | Triage status changed               |
+| `note_added`      | Note was added                      |
+| `note_deleted`    | Note was deleted                    |
+| `signals_started` | Signal extraction started           |
+| `signals_completed` | Signal extraction completed       |
+| `signals_failed`  | Signal extraction failed            |
+| `cv_uploaded`     | CV was uploaded                     |
+
+### Event Fields
+
+| Field       | Type        | Description                          |
+| ----------- | ----------- | ------------------------------------ |
+| `id`        | string      | Event ID                             |
+| `eventType` | string      | Type of event (see above)            |
+| `actorId`   | string/null | User who triggered event (null for system) |
+| `actorName` | string/null | Name of user (null for system events) |
+| `oldValue`  | string/null | Previous value (for changes)         |
+| `newValue`  | string/null | New value (for changes)              |
+| `metadata`  | object/null | Additional event data                |
+| `createdAt` | string      | When event occurred                  |
+
+### Errors
+
+| Status | Message               |
+| ------ | --------------------- |
+| 404    | Application not found |
 
 ---
 

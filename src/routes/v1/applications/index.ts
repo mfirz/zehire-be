@@ -16,7 +16,7 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 
 import { ApplicationRepository, CvService } from "../../../domain/applications";
-import { UpdateApplicationSchema } from "../../../domain/applications/schemas";
+import { CreateNoteSchema, UpdateApplicationSchema } from "../../../domain/applications/schemas";
 import { JobRepository } from "../../../domain/jobs/repository";
 import { jwtAuth } from "../../../middleware/auth";
 import type { AuthVariables, Env } from "../../../types/bindings";
@@ -32,7 +32,7 @@ applicationsRoute.use("/*", jwtAuth);
 /**
  * GET /v1/applications/:applicationId
  *
- * Get full application details including answers and signals.
+ * Get full application details including answers, signals, and navigation context.
  * User's org must own the job this application belongs to.
  */
 applicationsRoute.get("/:applicationId", async (c) => {
@@ -57,6 +57,9 @@ applicationsRoute.get("/:applicationId", async (c) => {
     return c.json({ error: "Application not found" }, 404);
   }
 
+  // Get navigation context (prev/next by posture)
+  const navigation = await applicationRepository.getNavigationContext(applicationId, application.jobId);
+
   // Transform response for frontend
   return c.json({
     ...application,
@@ -64,13 +67,15 @@ applicationsRoute.get("/:applicationId", async (c) => {
     cvPath: undefined,
     hasCv: !!application.cvPath,
     cvUrl: application.cvPath ? `/v1/applications/${applicationId}/cv` : null,
+    // Navigation context for prev/next buttons
+    navigation,
   });
 });
 
 /**
  * PATCH /v1/applications/:applicationId
  *
- * Update application status.
+ * Update application status and/or triage status.
  * User's org must own the job this application belongs to.
  */
 applicationsRoute.patch(
@@ -85,25 +90,53 @@ applicationsRoute.patch(
     const applicationRepository = new ApplicationRepository(c.env.DB);
     const jobRepository = new JobRepository(c.env.DB);
 
-    // Get application's job_id
-    const jobId = await applicationRepository.getJobId(applicationId);
+    // Get current application for logging old values
+    const current = await applicationRepository.findById(applicationId);
 
-    if (!jobId) {
+    if (!current) {
       return c.json({ error: "Application not found" }, 404);
     }
 
     // Verify user's org owns the job
-    const job = await jobRepository.findByIdAndOrg(jobId, orgId);
+    const job = await jobRepository.findByIdAndOrg(current.jobId, orgId);
 
     if (!job) {
       return c.json({ error: "Application not found" }, 404);
     }
 
-    // Update status
-    const updated = await applicationRepository.updateStatus(applicationId, input.status);
+    // Build update object, only including defined values
+    const updates: { status?: string; triageStatus?: "SHORTLIST" | "MAYBE" | "WEAK" } = {};
+    if (input.status !== undefined) {
+      updates.status = input.status;
+    }
+    if (input.triageStatus !== undefined) {
+      updates.triageStatus = input.triageStatus;
+    }
+
+    // Update status and/or triage status
+    const updated = await applicationRepository.updateStatus(applicationId, updates);
 
     if (!updated) {
       return c.json({ error: "Failed to update application" }, 500);
+    }
+
+    // Log events for timeline
+    if (input.status && input.status !== current.status) {
+      await applicationRepository.logEvent(applicationId, "status_change", {
+        actorId: user.userId,
+        actorName: user.email,
+        oldValue: current.status,
+        newValue: input.status,
+      });
+    }
+
+    if (input.triageStatus && input.triageStatus !== current.triageStatus) {
+      await applicationRepository.logEvent(applicationId, "triage_change", {
+        actorId: user.userId,
+        actorName: user.email,
+        oldValue: current.triageStatus || null,
+        newValue: input.triageStatus,
+      });
     }
 
     return c.json(updated);
@@ -210,6 +243,180 @@ applicationsRoute.get("/:applicationId/posture", async (c) => {
     })),
     suggestedActions: postureResult.suggestedActions,
   });
+});
+
+// =============================================================================
+// NOTES ENDPOINTS
+// =============================================================================
+
+/**
+ * GET /v1/applications/:applicationId/notes
+ *
+ * Get all notes for an application.
+ */
+applicationsRoute.get("/:applicationId/notes", async (c) => {
+  const applicationId = c.req.param("applicationId")!;
+  const user = c.get("user");
+  const orgId = user.orgId;
+
+  const applicationRepository = new ApplicationRepository(c.env.DB);
+  const jobRepository = new JobRepository(c.env.DB);
+
+  // Get application's job_id
+  const jobId = await applicationRepository.getJobId(applicationId);
+
+  if (!jobId) {
+    return c.json({ error: "Application not found" }, 404);
+  }
+
+  // Verify user's org owns the job
+  const job = await jobRepository.findByIdAndOrg(jobId, orgId);
+
+  if (!job) {
+    return c.json({ error: "Application not found" }, 404);
+  }
+
+  const notes = await applicationRepository.getNotes(applicationId);
+
+  return c.json({ notes });
+});
+
+/**
+ * POST /v1/applications/:applicationId/notes
+ *
+ * Add a note to an application.
+ */
+applicationsRoute.post(
+  "/:applicationId/notes",
+  zValidator("json", CreateNoteSchema),
+  async (c) => {
+    const applicationId = c.req.param("applicationId")!;
+    const user = c.get("user");
+    const orgId = user.orgId;
+    const input = c.req.valid("json");
+
+    const applicationRepository = new ApplicationRepository(c.env.DB);
+    const jobRepository = new JobRepository(c.env.DB);
+
+    // Get application's job_id
+    const jobId = await applicationRepository.getJobId(applicationId);
+
+    if (!jobId) {
+      return c.json({ error: "Application not found" }, 404);
+    }
+
+    // Verify user's org owns the job
+    const job = await jobRepository.findByIdAndOrg(jobId, orgId);
+
+    if (!job) {
+      return c.json({ error: "Application not found" }, 404);
+    }
+
+    // Create note
+    const note = await applicationRepository.createNote(
+      applicationId,
+      user.userId,
+      user.email, // Use email as author name for now
+      input.content
+    );
+
+    // Log event
+    await applicationRepository.logEvent(applicationId, "note_added", {
+      actorId: user.userId,
+      actorName: user.email,
+      metadata: { noteId: note.id },
+    });
+
+    return c.json(note, 201);
+  }
+);
+
+/**
+ * DELETE /v1/applications/:applicationId/notes/:noteId
+ *
+ * Delete a note. Only the author can delete their own notes.
+ */
+applicationsRoute.delete("/:applicationId/notes/:noteId", async (c) => {
+  const applicationId = c.req.param("applicationId")!;
+  const noteId = c.req.param("noteId")!;
+  const user = c.get("user");
+  const orgId = user.orgId;
+
+  const applicationRepository = new ApplicationRepository(c.env.DB);
+  const jobRepository = new JobRepository(c.env.DB);
+
+  // Get note with its application ID
+  const noteData = await applicationRepository.getNoteWithAppId(noteId);
+
+  if (!noteData || noteData.applicationId !== applicationId) {
+    return c.json({ error: "Note not found" }, 404);
+  }
+
+  // Get application's job_id
+  const jobId = await applicationRepository.getJobId(applicationId);
+
+  if (!jobId) {
+    return c.json({ error: "Application not found" }, 404);
+  }
+
+  // Verify user's org owns the job
+  const job = await jobRepository.findByIdAndOrg(jobId, orgId);
+
+  if (!job) {
+    return c.json({ error: "Application not found" }, 404);
+  }
+
+  // Delete note (only author can delete)
+  const deleted = await applicationRepository.deleteNote(noteId, user.userId);
+
+  if (!deleted) {
+    return c.json({ error: "Note not found or you are not the author" }, 404);
+  }
+
+  // Log event
+  await applicationRepository.logEvent(applicationId, "note_deleted", {
+    actorId: user.userId,
+    actorName: user.email,
+    metadata: { noteId },
+  });
+
+  return c.body(null, 204);
+});
+
+// =============================================================================
+// TIMELINE ENDPOINT
+// =============================================================================
+
+/**
+ * GET /v1/applications/:applicationId/timeline
+ *
+ * Get activity timeline for an application.
+ */
+applicationsRoute.get("/:applicationId/timeline", async (c) => {
+  const applicationId = c.req.param("applicationId")!;
+  const user = c.get("user");
+  const orgId = user.orgId;
+
+  const applicationRepository = new ApplicationRepository(c.env.DB);
+  const jobRepository = new JobRepository(c.env.DB);
+
+  // Get application's job_id
+  const jobId = await applicationRepository.getJobId(applicationId);
+
+  if (!jobId) {
+    return c.json({ error: "Application not found" }, 404);
+  }
+
+  // Verify user's org owns the job
+  const job = await jobRepository.findByIdAndOrg(jobId, orgId);
+
+  if (!job) {
+    return c.json({ error: "Application not found" }, 404);
+  }
+
+  const events = await applicationRepository.getTimeline(applicationId);
+
+  return c.json({ events });
 });
 
 // =============================================================================
