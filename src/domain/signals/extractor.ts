@@ -59,7 +59,7 @@ Also assess the overall response quality:
 ## Important Rules
 
 1. **Only evaluate the target signals listed** - Do not invent or infer other signals
-2. **Extract evidence from the actual answer** - Quote or closely paraphrase what the candidate wrote
+2. **Extract evidence VERBATIM from the answer** - You MUST quote the candidate's EXACT words as they appear in the answer. Do NOT add, remove, or modify any words. Do NOT add pronouns like "I" to make it grammatically correct. The evidence text must be a substring that exists exactly in the original answer.
 3. **Do not infer signals that aren't demonstrated** - "I would..." or "I believe..." is weaker than "I did..."
 4. **Calibrate to experience level** - "clear" for entry-level may mean less depth than for senior
 5. **"absent" is information, not judgment** - It means the signal wasn't shown, not that the candidate is bad
@@ -75,7 +75,7 @@ Return valid JSON matching this structure:
     {
       "signalId": "the_signal_id",
       "confidence": "clear" | "partial" | "absent" | "unclear",
-      "evidence": "Brief quote or summary from the answer",
+      "evidence": "EXACT verbatim quote from the answer (must exist as-is in the text)",
       "reasoning": "Why you assigned this confidence level"
     }
   ]
@@ -115,6 +115,87 @@ ${input.answerText}
 Evaluate ONLY the target signals listed above. For each signal, determine the confidence level based on the candidate's answer. Extract specific evidence from the answer to support your evaluation.
 
 Return your evaluation as JSON.`;
+}
+
+// =============================================================================
+// EVIDENCE VALIDATION
+// =============================================================================
+
+/**
+ * Validate and correct evidence text to ensure it exists in the answer.
+ * If evidence doesn't exist verbatim, attempt to find the closest match.
+ *
+ * @param evidence - The evidence text from LLM
+ * @param answerText - The original answer text
+ * @returns Corrected evidence or undefined if no match found
+ */
+export function validateEvidence(evidence: string | undefined, answerText: string): string | undefined {
+  if (!evidence || !answerText) {
+    return undefined;
+  }
+
+  // Normalize whitespace for comparison
+  const normalizedAnswer = answerText.replace(/\s+/g, " ").trim();
+  const normalizedEvidence = evidence.replace(/\s+/g, " ").trim();
+
+  // Check if evidence exists exactly (case-insensitive search, case-preserving result)
+  const lowerAnswer = normalizedAnswer.toLowerCase();
+  const lowerEvidence = normalizedEvidence.toLowerCase();
+
+  if (lowerAnswer.includes(lowerEvidence)) {
+    // Find the actual case-preserved substring
+    const startIdx = lowerAnswer.indexOf(lowerEvidence);
+    return normalizedAnswer.slice(startIdx, startIdx + normalizedEvidence.length);
+  }
+
+  // Try to find a close match by removing common LLM additions like leading "I"
+  // Pattern: LLM adds "I " at the start to make grammatically correct
+  if (normalizedEvidence.toLowerCase().startsWith("i ")) {
+    const withoutI = normalizedEvidence.slice(2);
+    const lowerWithoutI = withoutI.toLowerCase();
+    if (lowerAnswer.includes(lowerWithoutI)) {
+      const startIdx = lowerAnswer.indexOf(lowerWithoutI);
+      return normalizedAnswer.slice(startIdx, startIdx + withoutI.length);
+    }
+  }
+
+  // Try finding the longest common substring if evidence is reasonably long
+  if (normalizedEvidence.length >= 20) {
+    const bestMatch = findLongestCommonSubstring(normalizedAnswer, normalizedEvidence);
+    // Only use if match is at least 60% of original evidence length
+    if (bestMatch && bestMatch.length >= normalizedEvidence.length * 0.6) {
+      return bestMatch;
+    }
+  }
+
+  // Return undefined if no good match found - the evidence is likely paraphrased
+  return undefined;
+}
+
+/**
+ * Find the longest common substring between two strings.
+ */
+function findLongestCommonSubstring(str1: string, str2: string): string {
+  const s1 = str1.toLowerCase();
+  const s2 = str2.toLowerCase();
+
+  // Use a sliding window approach for efficiency
+  let longestMatch = "";
+
+  for (let i = 0; i < s2.length; i++) {
+    for (let j = i + longestMatch.length; j <= s2.length; j++) {
+      const substring = s2.slice(i, j);
+      if (s1.includes(substring)) {
+        // Get the actual case-preserved substring from str1
+        const startIdx = s1.indexOf(substring);
+        longestMatch = str1.slice(startIdx, startIdx + substring.length);
+      } else {
+        break;
+      }
+    }
+  }
+
+  return longestMatch;
 }
 
 // =============================================================================
@@ -329,14 +410,19 @@ export async function extractSignalsFromAnswer(
     throw lastError ?? new Error("Failed to extract signals");
   }
 
-  // Convert to AnswerExtractionResult
+  // Convert to AnswerExtractionResult with evidence validation
   const extractedSignals: ExtractedSignal[] = result.signals.map((s) => {
     const extracted: ExtractedSignal = {
       signalId: s.signalId as SignalId,
       confidence: s.confidence,
     };
     if (s.evidence !== undefined) {
-      extracted.evidence = s.evidence;
+      // Validate and correct evidence to ensure it exists in the answer
+      const validatedEvidence = validateEvidence(s.evidence, input.answerText);
+      if (validatedEvidence) {
+        extracted.evidence = validatedEvidence;
+      }
+      // If validation fails, omit evidence rather than keep incorrect text
     }
     if (s.reasoning !== undefined) {
       extracted.reasoning = s.reasoning;
