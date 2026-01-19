@@ -592,7 +592,7 @@ export class JobService {
       metadata: { previousStatus: "published", newStatus: "paused" },
     });
 
-    // Invalidate cache
+    // Invalidate jobs list cache
     if (job.orgId) {
       await this.orgRepository.incrementJobsListVersion(job.orgId);
     }
@@ -648,7 +648,7 @@ export class JobService {
       metadata: { previousStatus: "paused", newStatus: "published" },
     });
 
-    // Invalidate cache
+    // Invalidate jobs list cache
     if (job.orgId) {
       await this.orgRepository.incrementJobsListVersion(job.orgId);
     }
@@ -704,7 +704,7 @@ export class JobService {
       metadata: { previousStatus: job.status, newStatus: "closed" },
     });
 
-    // Invalidate cache
+    // Invalidate jobs list cache
     if (job.orgId) {
       await this.orgRepository.incrementJobsListVersion(job.orgId);
     }

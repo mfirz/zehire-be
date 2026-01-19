@@ -56,3 +56,16 @@ export const CACHE_TTL = {
  * Internal cache domain for synthetic cache keys.
  */
 export const CACHE_DOMAIN = "cache.zehire.internal";
+
+// =============================================================================
+// CACHE KEY BUILDERS
+// =============================================================================
+
+/**
+ * Build cache key for a public job.
+ * Used for both caching and invalidation.
+ */
+export function buildPublicJobCacheKey(slug: string): Request {
+  return new Request(`https://${CACHE_DOMAIN}/public/jobs/v${CACHE_VERSIONS.publicJob}/${slug}`);
+}
+

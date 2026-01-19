@@ -181,6 +181,23 @@ export class JobRepository {
   }
 
   /**
+   * Quick check if a job slug is published.
+   * Optimized for cache validation - minimal data transfer.
+   *
+   * @param slug - Public slug to check
+   * @returns true if job exists and is published, false otherwise
+   */
+  async isSlugPublished(slug: string): Promise<boolean> {
+    const result = await this.db
+      .select({ id: jobs.id })
+      .from(jobs)
+      .where(and(eq(jobs.publicSlug, slug), eq(jobs.status, "published")))
+      .get();
+
+    return result !== undefined;
+  }
+
+  /**
    * Check if a slug is already in use.
    */
   async slugExists(slug: string): Promise<boolean> {
