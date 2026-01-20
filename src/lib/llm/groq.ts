@@ -144,6 +144,16 @@ export function createGroqClient(options: GroqClientOptions): LLMClient {
 
       const data: GroqResponse = await response.json();
 
+      // Log usage and rate limit info for debugging
+      const rateLimitRemaining = response.headers.get("x-ratelimit-remaining-tokens");
+      const rateLimitReset = response.headers.get("x-ratelimit-reset-tokens");
+      console.log(
+        `[Groq] Model: ${modelId}, ` +
+          `Tokens: ${data.usage?.prompt_tokens}/${data.usage?.completion_tokens} (in/out), ` +
+          `Finish: ${data.choices[0]?.finish_reason}, ` +
+          `Rate limit remaining: ${rateLimitRemaining ?? "unknown"}`
+      );
+
       // Extract text from response
       const choice = data.choices[0];
       const content = choice?.message?.content ?? "";
@@ -152,9 +162,13 @@ export function createGroqClient(options: GroqClientOptions): LLMClient {
         throw new Error("No content in Groq response");
       }
 
-      // Check if response was truncated
+      // Check if response was truncated - this likely means incomplete JSON
       if (choice?.finish_reason === "length") {
-        console.warn(`[Groq] Response truncated at ${data.usage?.completion_tokens} tokens. Consider increasing maxTokens.`);
+        throw new Error(
+          `Groq response truncated at ${data.usage?.completion_tokens} tokens (max: ${maxTokens}). ` +
+            `Finish reason: "length" indicates max_tokens was hit. ` +
+            `Rate limit remaining: ${rateLimitRemaining ?? "unknown"}, reset: ${rateLimitReset ?? "unknown"}`
+        );
       }
 
       return content;

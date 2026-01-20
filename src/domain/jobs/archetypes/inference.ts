@@ -51,9 +51,13 @@ export interface JobPostingInput {
 /**
  * System prompt for job context inference.
  */
-export const JOB_CONTEXT_SYSTEM_PROMPT = `You are a job analysis system for Zehire, a hiring platform. Your task is to analyze job postings and extract structured context that determines which evaluation questions candidates will receive.
+export const JOB_CONTEXT_SYSTEM_PROMPT = `You are a job analysis system. Analyze job postings and output structured JSON.
 
-You must output valid JSON matching the schema exactly. Be conservative and precise — your analysis directly affects candidate experience.
+CRITICAL RULES:
+1. Output ONLY valid JSON - no explanations, no comments, no text before or after
+2. Do not include any reasoning or notes inside the JSON
+3. Each key must appear exactly once
+4. Use only the exact values specified in the schema
 
 Key principles:
 - Infer from explicit statements first, then from implicit signals
@@ -112,17 +116,17 @@ DECISION IMPACT:
 - "human_life": Healthcare, safety-critical systems, emergency services
 - "regulatory": Legal, compliance, audit, government
 
-PRIMARY SIGNALS (choose 3-5 most important for this role):
-- "decision_under_uncertainty": Role requires decisions with incomplete info
-- "tradeoff_awareness": Role requires balancing competing priorities
-- "risk_reasoning": Role involves assessing and managing risk
-- "ethical_awareness": Role involves ethical judgment or sensitive decisions
-- "technical_depth": Role requires deep technical expertise
-- "system_thinking": Role requires understanding complex systems
-- "communication_clarity": Role requires explaining complex ideas
-- "stakeholder_management": Role requires managing relationships
-- "accountability": Role has clear ownership of outcomes
-- "learning_from_failure": Role values growth and adaptation
+PRIMARY SIGNALS (choose 3-5 from this exact list):
+- "decision_under_uncertainty"
+- "tradeoff_awareness"
+- "risk_reasoning"
+- "ethical_awareness"
+- "technical_depth"
+- "system_thinking"
+- "communication_clarity"
+- "stakeholder_management"
+- "accountability"
+- "learning_from_failure"
 
 EXPERIENCE LEVEL:
 - "entry": 0-2 years, junior, associate, intern
@@ -138,7 +142,7 @@ PEOPLE MANAGEMENT: True if role manages direct reports.
 
 REGULATED ENVIRONMENT: True for healthcare, finance, legal, government, or explicit compliance/regulatory mentions.
 
-Return only the JSON object, no explanation.`;
+OUTPUT FORMAT: Return ONLY the raw JSON object. No markdown, no code blocks, no explanations.`;
 }
 
 // =============================================================================
@@ -153,16 +157,30 @@ export function parseJobContextResponse(response: string): JobContext {
   // Extract JSON from response (handle markdown code blocks)
   let jsonStr = response.trim();
 
+  // Log raw response for debugging
+  console.log(`[Inference] Raw response length: ${response.length} chars`);
+  console.log(`[Inference] Raw response: ${response}`);
+
   // Use capture group approach - more robust than replace
+  // First try to match complete code blocks (with closing backticks)
   const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (jsonMatch?.[1]) {
     jsonStr = jsonMatch[1].trim();
+    console.log(`[Inference] Extracted from complete code block`);
+  } else {
+    // Handle truncated responses where closing backticks are missing
+    const openMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*)/);
+    if (openMatch?.[1]) {
+      jsonStr = openMatch[1].trim();
+      console.log(`[Inference] Extracted from unclosed code block`);
+    }
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(jsonStr);
-  } catch {
+  } catch (e) {
+    console.log(`[Inference] JSON parse failed. Extracted JSON (${jsonStr.length} chars): ${jsonStr}`);
     throw new Error(`Invalid JSON in LLM response: ${response.slice(0, 200)}`);
   }
 
@@ -229,19 +247,23 @@ function validateSignalArray(value: unknown): SignalId[] {
     throw new Error("primarySignals must be an array");
   }
 
-  if (value.length < 1 || value.length > 5) {
-    throw new Error("primarySignals must have 1-5 items");
-  }
-
+  // Filter to only valid signals (LLMs sometimes hallucinate invalid ones)
   const signals: SignalId[] = [];
   for (const item of value) {
-    if (typeof item !== "string" || !SIGNAL_IDS.includes(item as SignalId)) {
-      throw new Error(`Invalid signal: "${item}"`);
+    if (typeof item === "string" && SIGNAL_IDS.includes(item as SignalId)) {
+      signals.push(item as SignalId);
+    } else {
+      console.warn(`[Inference] Filtered out invalid signal: "${item}"`);
     }
-    signals.push(item as SignalId);
   }
 
-  return signals;
+  // Ensure we have at least 1 valid signal after filtering
+  if (signals.length < 1) {
+    throw new Error("primarySignals must have at least 1 valid signal after filtering");
+  }
+
+  // Cap at 5 signals
+  return signals.slice(0, 5);
 }
 
 // =============================================================================
