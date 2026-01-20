@@ -4,23 +4,25 @@
  * Orchestrates signal extraction for applications.
  *
  * Handles:
- * - Batch extraction for all answers in an application
+ * - Batch extraction for all answers in an application (archetype + custom evaluative)
  * - Signal aggregation
- * - Decision posture computation (placeholder for Phase 2)
+ * - Decision posture computation
  */
 
-import type { D1Database } from "@cloudflare/workers-types";
+import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 
 import { ApplicationRepository } from "../applications/repository";
+import { CustomQuestionsRepository } from "../custom-questions/repository";
+import { CVService } from "../cv/service";
 import { JobRepository } from "../jobs/repository";
 import type { RenderedQuestionOutput } from "../jobs/schemas";
-import type { JobContext } from "../jobs/archetypes/types";
+import type { JobContext, SignalId } from "../jobs/archetypes/types";
 import type { LLMClient } from "../jobs/archetypes/inference";
 
 import { extractSignalsFromAnswer } from "./extractor";
 import { computeSignalState } from "./aggregator";
 import { computePosture } from "./posture";
-import type { AnswerExtractionResult, PostureResult } from "./types";
+import type { AnswerExtractionResult, CVContradiction, PostureResult } from "./types";
 
 // =============================================================================
 // SERVICE CLASS
@@ -29,10 +31,15 @@ import type { AnswerExtractionResult, PostureResult } from "./types";
 export class SignalExtractionService {
   private applicationRepository: ApplicationRepository;
   private jobRepository: JobRepository;
+  private customQuestionsRepository: CustomQuestionsRepository;
+  private cvService: CVService | null;
 
-  constructor(db: D1Database) {
+  constructor(db: D1Database, cvBucket?: R2Bucket) {
     this.applicationRepository = new ApplicationRepository(db);
     this.jobRepository = new JobRepository(db);
+    this.customQuestionsRepository = new CustomQuestionsRepository(db);
+    // CVService is optional - only created if cvBucket is provided
+    this.cvService = cvBucket ? new CVService(db, cvBucket) : null;
   }
 
   /**
@@ -157,12 +164,116 @@ export class SignalExtractionService {
   }
 
   /**
+   * Extract signals from custom evaluative answers.
+   *
+   * @param client - LLM client for making API calls
+   * @param applicationId - Application to process
+   * @param jobContext - Job context for extraction
+   * @param options - Optional configuration
+   * @returns Array of extraction results for custom evaluative answers
+   */
+  async extractSignalsForCustomAnswers(
+    client: LLMClient,
+    applicationId: string,
+    jobContext: JobContext,
+    options?: {
+      parallel?: boolean;
+      maxRetries?: number;
+    }
+  ): Promise<AnswerExtractionResult[]> {
+    const maxRetries = options?.maxRetries ?? 2;
+
+    // Get custom answers with their questions
+    const customAnswersWithQuestions =
+      await this.customQuestionsRepository.getAnswersWithQuestions(applicationId);
+
+    // Filter to only evaluative questions with pending extraction
+    const evaluativeAnswers = customAnswersWithQuestions.filter(
+      ({ question, answer }) =>
+        question.category === "evaluative" &&
+        answer.extractionStatus === "pending" &&
+        answer.answerText // Has answer text
+    );
+
+    if (evaluativeAnswers.length === 0) {
+      return [];
+    }
+
+    // Extract signals for each evaluative answer
+    const extractionTasks = evaluativeAnswers.map(async ({ question, answer }) => {
+      // Update answer status to processing
+      await this.customQuestionsRepository.updateExtractionStatus(answer.id, "processing");
+
+      try {
+        // Parse target signals from question
+        const targetSignals: SignalId[] = question.targetSignals
+          ? JSON.parse(question.targetSignals)
+          : [];
+
+        if (targetSignals.length === 0) {
+          console.warn(`Custom question ${question.id} has no target signals`);
+          await this.customQuestionsRepository.updateExtractionStatus(answer.id, "completed");
+          return {
+            answerId: answer.id,
+            archetypeId: `custom_${question.id}`,
+            responseQuality: "empty" as const,
+            signals: [],
+            extractedAt: new Date().toISOString(),
+          };
+        }
+
+        // Extract signals
+        const result = await extractSignalsFromAnswer(
+          client,
+          {
+            questionText: question.questionText,
+            archetypeId: `custom_${question.id}`,
+            targetSignals,
+            answerText: answer.answerText ?? "",
+            jobContext: {
+              domain: jobContext.domain,
+              experienceLevel: jobContext.experienceLevel,
+              riskLevel: jobContext.riskLevel,
+            },
+          },
+          answer.id,
+          { maxRetries }
+        );
+
+        // Save extracted signals to custom_answers table
+        await this.customQuestionsRepository.saveExtractedSignals(answer.id, result.signals);
+
+        return result;
+      } catch (error) {
+        console.error(`Failed to extract signals for custom answer ${answer.id}:`, error);
+        await this.customQuestionsRepository.updateExtractionStatus(answer.id, "failed");
+        throw error;
+      }
+    });
+
+    // Execute extractions (parallel or sequential)
+    let results: AnswerExtractionResult[];
+    if (options?.parallel) {
+      results = await Promise.all(extractionTasks);
+    } else {
+      results = [];
+      for (const task of extractionTasks) {
+        const result = await task;
+        results.push(result);
+      }
+    }
+
+    return results;
+  }
+
+  /**
    * Complete signal extraction pipeline for an application.
    *
-   * 1. Extract signals from all answers
-   * 2. Compute signal state (aggregation + critical analysis + conflicts)
-   * 3. Compute decision posture from signal state
-   * 4. Save results to DB
+   * 1. Extract signals from all archetype answers
+   * 2. Extract signals from custom evaluative answers
+   * 3. Compute signal state (aggregation + critical analysis + conflicts)
+   * 4. Compute decision posture from signal state
+   * 5. Save results to DB
    */
   async processApplication(
     client: LLMClient,
@@ -182,7 +293,7 @@ export class SignalExtractionService {
         throw new Error(`Application not found: ${applicationId}`);
       }
 
-      // Get the job to access primary signals
+      // Get the job to access primary signals and questions
       const job = await this.jobRepository.findById(application.jobId);
       if (!job?.jobContext) {
         throw new Error(`Job ${application.jobId} missing job context`);
@@ -190,14 +301,60 @@ export class SignalExtractionService {
 
       const jobContext = JSON.parse(job.jobContext) as JobContext;
 
-      // Extract signals from all answers
-      const results = await this.extractSignalsForApplication(client, applicationId, options);
+      // Extract signals from archetype answers
+      const archetypeResults = await this.extractSignalsForApplication(
+        client,
+        applicationId,
+        options
+      );
 
-      // Compute full signal state (aggregation + critical analysis + conflicts)
+      // Extract signals from custom evaluative answers
+      const customResults = await this.extractSignalsForCustomAnswers(
+        client,
+        applicationId,
+        jobContext,
+        options
+      );
+
+      // Combine all extraction results
+      const allResults = [...archetypeResults, ...customResults];
+
+      // Run CV contradiction detection if CV service is available
+      let cvContradictions: CVContradiction[] = [];
+      if (this.cvService) {
+        // Get all answer texts for contradiction detection
+        const answers = await this.applicationRepository.getAnswers(applicationId);
+        const answerTexts = answers.map((a) => ({
+          questionText: a.questionText,
+          answerText: a.answerText ?? "",
+        }));
+
+        // Get custom evaluative answers as well
+        const customAnswersWithQuestions =
+          await this.customQuestionsRepository.getAnswersWithQuestions(applicationId);
+        const customAnswerTexts = customAnswersWithQuestions
+          .filter(({ question }) => question.category === "evaluative")
+          .map(({ question, answer }) => ({
+            questionText: question.questionText,
+            answerText: answer.answerText ?? "",
+          }));
+
+        const allAnswerTexts = [...answerTexts, ...customAnswerTexts];
+
+        // Detect contradictions
+        cvContradictions = await this.cvService.detectContradictions(
+          client,
+          applicationId,
+          allAnswerTexts
+        );
+      }
+
+      // Compute full signal state (aggregation + critical analysis + conflicts + CV contradictions)
       const signalState = computeSignalState({
         applicationId,
-        extractions: results,
+        extractions: allResults,
         primarySignals: jobContext.primarySignals,
+        cvContradictions,
       });
 
       // Compute decision posture from signal state
@@ -206,7 +363,7 @@ export class SignalExtractionService {
       // Save posture result to DB
       await this.applicationRepository.savePostureResult(applicationId, posture);
 
-      return { results, posture };
+      return { results: allResults, posture };
     } catch (error) {
       // Mark application as failed
       await this.applicationRepository.updateSignalsStatus(applicationId, "failed", {

@@ -75,6 +75,25 @@ export const AnswerInputSchema = z.object({
 export type AnswerInput = z.infer<typeof AnswerInputSchema>;
 
 /**
+ * Schema for a custom question answer.
+ * Value type depends on the question's answer_type.
+ */
+export const CustomAnswerInputSchema = z.object({
+  /** The custom question ID */
+  questionId: z.string().min(1),
+
+  /** The answer value - type depends on question's answer_type */
+  value: z.union([
+    z.string(),        // For free_text, yes_no, single_choice, date, url
+    z.array(z.string()), // For multiple_choice
+    z.number(),        // For number
+    z.null(),          // For optional questions left blank
+  ]),
+});
+
+export type CustomAnswerInput = z.infer<typeof CustomAnswerInputSchema>;
+
+/**
  * Schema for public job application submission.
  * All questions must be answered.
  */
@@ -91,8 +110,11 @@ export const PublicApplySchema = z.object({
   /** Phone number (may be required by job configuration) */
   phone: z.string().max(30).optional(),
 
-  /** Answers to ALL questions (required) */
+  /** Answers to ALL archetype questions (required) */
   answers: z.array(AnswerInputSchema).min(1, "All questions must be answered"),
+
+  /** Answers to custom questions (optional, depends on job configuration) */
+  customAnswers: z.array(CustomAnswerInputSchema).optional(),
 
   /** Optional draft ID (if resuming from saved progress) */
   draftId: z.string().optional(),
@@ -295,6 +317,20 @@ export const ApplicationDetailSchema = z.object({
       extractedAt: z.string().nullable(),
     })
   ),
+  customAnswers: z.array(
+    z.object({
+      id: z.string(),
+      questionId: z.string(),
+      questionText: z.string(),
+      category: z.enum(["evaluative", "screening", "logistical"]),
+      answerType: z.enum(["free_text", "yes_no", "single_choice", "multiple_choice", "number", "date", "url"]),
+      required: z.boolean(),
+      value: z.union([z.string(), z.array(z.string()), z.number(), z.null()]),
+      screeningPassed: z.boolean().nullable(),
+      extractedSignals: z.unknown().nullable(), // Parsed JSON (for evaluative questions)
+      extractionStatus: z.string(),
+    })
+  ).optional(),
 });
 
 export type ApplicationDetail = z.infer<typeof ApplicationDetailSchema>;

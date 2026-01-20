@@ -628,6 +628,7 @@ function testPostureComputation(): void {
       hasCriticalGap: false,
     },
     conflicts: [],
+    cvContradictions: [],
     computedAt: new Date().toISOString(),
   };
 
@@ -667,6 +668,7 @@ function testPostureComputation(): void {
       hasCriticalGap: true,
     },
     conflicts: [],
+    cvContradictions: [],
     computedAt: new Date().toISOString(),
   };
 
@@ -714,6 +716,7 @@ function testPostureComputation(): void {
       hasCriticalGap: true,
     },
     conflicts: [],
+    cvContradictions: [],
     computedAt: new Date().toISOString(),
   };
 
@@ -765,6 +768,7 @@ function testPostureComputation(): void {
         },
       },
     ],
+    cvContradictions: [],
     computedAt: new Date().toISOString(),
   };
 

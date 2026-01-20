@@ -17,6 +17,7 @@ import { Hono } from "hono";
 
 import { ApplicationRepository, CvService } from "../../../domain/applications";
 import { CreateNoteSchema, UpdateApplicationSchema } from "../../../domain/applications/schemas";
+import { CustomQuestionsRepository } from "../../../domain/custom-questions/repository";
 import { JobRepository } from "../../../domain/jobs/repository";
 import { jwtAuth } from "../../../middleware/auth";
 import type { AuthVariables, Env } from "../../../types/bindings";
@@ -42,6 +43,7 @@ applicationsRoute.get("/:applicationId", async (c) => {
 
   const applicationRepository = new ApplicationRepository(c.env.DB);
   const jobRepository = new JobRepository(c.env.DB);
+  const customQuestionsRepository = new CustomQuestionsRepository(c.env.DB);
 
   // Get application
   const application = await applicationRepository.getDetailById(applicationId);
@@ -60,6 +62,43 @@ applicationsRoute.get("/:applicationId", async (c) => {
   // Get navigation context (prev/next by posture)
   const navigation = await applicationRepository.getNavigationContext(applicationId, application.jobId);
 
+  // Get custom answers with their questions
+  const customAnswersWithQuestions = await customQuestionsRepository.getAnswersWithQuestions(applicationId);
+
+  // Transform custom answers for response
+  const customAnswers = customAnswersWithQuestions.map(({ question, answer }) => {
+    // Determine the value based on answer type
+    let value: string | string[] | number | null = null;
+    switch (question.answerType) {
+      case "free_text":
+      case "yes_no":
+      case "single_choice":
+      case "date":
+      case "url":
+        value = answer.answerText;
+        break;
+      case "multiple_choice":
+        value = answer.answerValues ? JSON.parse(answer.answerValues) : null;
+        break;
+      case "number":
+        value = answer.answerNumber;
+        break;
+    }
+
+    return {
+      id: answer.id,
+      questionId: question.id,
+      questionText: question.questionText,
+      category: question.category,
+      answerType: question.answerType,
+      required: question.required,
+      value,
+      screeningPassed: answer.screeningPassed,
+      extractedSignals: answer.extractedSignals ? JSON.parse(answer.extractedSignals) : null,
+      extractionStatus: answer.extractionStatus,
+    };
+  });
+
   // Transform response for frontend
   return c.json({
     ...application,
@@ -67,6 +106,8 @@ applicationsRoute.get("/:applicationId", async (c) => {
     cvPath: undefined,
     hasCv: !!application.cvPath,
     cvUrl: application.cvPath ? `/v1/applications/${applicationId}/cv` : null,
+    // Custom answers with questions
+    customAnswers,
     // Navigation context for prev/next buttons
     navigation,
   });

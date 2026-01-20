@@ -16,6 +16,7 @@
 
 import { renderToHtml, type TiptapDoc } from "../../lib/tiptap";
 import type { Env } from "../../types/bindings";
+import { CustomQuestionsRepository } from "../custom-questions/repository";
 import { generateInitialConfig } from "../pipeline/advisor";
 import { PipelineConfigSchema, PipelineRecommendationSchema } from "../pipeline/types";
 import type { PipelineConfig, PipelineUpdate } from "../pipeline/types";
@@ -67,6 +68,7 @@ export type JobServiceResult<T> =
 
 export class JobService {
   private readonly billingEventRepository: BillingEventRepository;
+  private readonly customQuestionsRepository: CustomQuestionsRepository;
 
   constructor(
     private readonly repository: JobRepository,
@@ -75,6 +77,7 @@ export class JobService {
     db: D1Database
   ) {
     this.billingEventRepository = new BillingEventRepository(db);
+    this.customQuestionsRepository = new CustomQuestionsRepository(db);
   }
 
   // ===========================================================================
@@ -799,7 +802,7 @@ export class JobService {
    * Get a job by public slug for candidates (no auth required).
    *
    * Only returns published jobs.
-   * Returns a limited public view with just questions.
+   * Returns a limited public view with questions, custom questions, and CV requirement.
    *
    * @param slug - Public URL slug
    */
@@ -810,8 +813,26 @@ export class JobService {
       return null;
     }
 
-    // Parse questions
+    // Parse archetype questions
     const questions = this.parseJsonArray(job.questions, RenderedQuestionSchema);
+
+    // Fetch custom questions for this job
+    const customQuestionsRaw = await this.customQuestionsRepository.listByJobId(job.id);
+    const customQuestions = customQuestionsRaw.map((q) => ({
+      id: q.id,
+      category: q.category,
+      answerType: q.answerType,
+      questionText: q.questionText,
+      required: q.required,
+      orderIndex: q.orderIndex,
+      options: q.options ? JSON.parse(q.options) : null,
+      minValue: q.minValue,
+      maxValue: q.maxValue,
+    }));
+
+    // Get CV requirement from application config
+    const applicationConfig = job.applicationConfig;
+    const cvRequired = applicationConfig?.requireCv ?? false;
 
     // Render description to HTML for SSR
     const descriptionDoc = JSON.parse(job.description) as TiptapDoc;
@@ -831,11 +852,16 @@ export class JobService {
       salaryCurrency: job.salaryCurrency,
       // Content - pre-rendered HTML for SSR
       descriptionHtml,
+      // Archetype questions
       questions: questions.map((q) => ({
         archetypeId: q.archetypeId,
         text: q.questionText,
         ...(q.minAnswerWords && { minWords: q.minAnswerWords }),
       })),
+      // Custom questions (Phase 8)
+      customQuestions,
+      // CV requirement (Phase 8)
+      cvRequired,
     };
   }
 

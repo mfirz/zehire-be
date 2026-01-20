@@ -324,8 +324,9 @@ export type LLMProvider = (typeof LLM_PROVIDERS)[number];
  * - questions: Generate interview questions (default)
  * - pipeline: Generate hiring pipeline recommendation
  * - evaluate_application: Extract signals from application answers (Phase 1)
+ * - process_cv: Extract and summarize CV content (Phase 8C)
  */
-export type JobQueueType = "questions" | "pipeline" | "evaluate_application";
+export type JobQueueType = "questions" | "pipeline" | "evaluate_application" | "process_cv";
 
 /**
  * Base message payload for job processing queue.
@@ -362,9 +363,20 @@ export interface ApplicationEvaluationMessage extends JobQueueMessageBase {
 }
 
 /**
+ * Message for CV processing (extraction + summarization).
+ */
+export interface CVProcessingMessage extends JobQueueMessageBase {
+  /** Type discriminator */
+  type: "process_cv";
+
+  /** Application ID to process */
+  applicationId: string;
+}
+
+/**
  * Union type for all queue message types.
  */
-export type JobQueueMessage = JobProcessingMessage | ApplicationEvaluationMessage;
+export type JobQueueMessage = JobProcessingMessage | ApplicationEvaluationMessage | CVProcessingMessage;
 
 // =============================================================================
 // BILLING TYPES

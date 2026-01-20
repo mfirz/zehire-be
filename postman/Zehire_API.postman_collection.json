@@ -50,6 +50,11 @@
       "key": "note_id",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "custom_question_id",
+      "value": "",
+      "type": "string"
     }
   ],
   "auth": {
@@ -504,6 +509,255 @@
               "response": []
             }
           ]
+        },
+        {
+          "name": "Custom Questions",
+          "description": "Custom questions for job applications.\n\n**Question Categories:**\n- `evaluative`: Free-text questions that extract signals (affects posture)\n- `screening`: Pass/fail questions with expected answers\n- `logistical`: Data collection questions (salary expectations, start date, etc.)\n\n**Note:** Custom questions can only be added to draft jobs.",
+          "item": [
+            {
+              "name": "List Custom Questions",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/custom-questions",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "custom-questions"]
+                },
+                "description": "List all custom questions for a job.\n\nReturns questions ordered by `orderIndex`."
+              },
+              "response": []
+            },
+            {
+              "name": "Create Evaluative Question",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    const jsonData = pm.response.json();",
+                      "    if (jsonData.id) {",
+                      "        pm.collectionVariables.set('custom_question_id', jsonData.id);",
+                      "        console.log('Custom question ID saved:', jsonData.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"category\": \"evaluative\",\n  \"answerType\": \"free_text\",\n  \"questionText\": \"Describe a situation where you had to push back on a stakeholder's request. What was the outcome?\",\n  \"required\": true,\n  \"targetSignals\": [\"stakeholder_management\", \"communication_clarity\", \"accountability\"]\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/custom-questions",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "custom-questions"]
+                },
+                "description": "Create an evaluative custom question.\n\n**Evaluative questions:**\n- Must be `free_text` answer type\n- Can map to target signals for extraction\n- Affects Decision Posture\n\n**Target Signals (choose 1-5):**\n- decision_under_uncertainty\n- tradeoff_awareness\n- risk_reasoning\n- ethical_awareness\n- technical_depth\n- system_thinking\n- communication_clarity\n- stakeholder_management\n- accountability\n- learning_from_failure"
+              },
+              "response": []
+            },
+            {
+              "name": "Create Screening Question",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"category\": \"screening\",\n  \"answerType\": \"yes_no\",\n  \"questionText\": \"Do you have authorization to work in the United States?\",\n  \"required\": true,\n  \"expectedAnswer\": \"yes\",\n  \"failAction\": \"flag\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/custom-questions",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "custom-questions"]
+                },
+                "description": "Create a screening question.\n\n**Screening questions:**\n- Answer types: `yes_no` or `single_choice`\n- Must specify `expectedAnswer`\n- Does NOT affect Decision Posture\n\n**Fail Actions:**\n- `flag`: Flag application for review (default)\n- `reject`: Auto-reject application\n- `allow`: Allow with warning"
+              },
+              "response": []
+            },
+            {
+              "name": "Create Screening Question (Choice)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"category\": \"screening\",\n  \"answerType\": \"single_choice\",\n  \"questionText\": \"What is your highest level of education?\",\n  \"required\": true,\n  \"options\": [\"High School\", \"Bachelor's Degree\", \"Master's Degree\", \"PhD\"],\n  \"expectedAnswer\": [\"Bachelor's Degree\", \"Master's Degree\", \"PhD\"],\n  \"failAction\": \"flag\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/custom-questions",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "custom-questions"]
+                },
+                "description": "Create a screening question with choices.\n\n**Expected Answer:**\n- Can be a single string or array of acceptable answers\n- For choice questions, must match one of the options"
+              },
+              "response": []
+            },
+            {
+              "name": "Create Logistical Question",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"category\": \"logistical\",\n  \"answerType\": \"number\",\n  \"questionText\": \"What is your expected annual salary (USD)?\",\n  \"required\": false,\n  \"minValue\": 0,\n  \"maxValue\": 1000000\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/custom-questions",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "custom-questions"]
+                },
+                "description": "Create a logistical question.\n\n**Logistical questions:**\n- Answer types: `single_choice`, `multiple_choice`, `number`, `date`, `url`\n- Does NOT affect Decision Posture\n- Used for planning and coordination\n\n**Number constraints:**\n- `minValue`: Minimum allowed value\n- `maxValue`: Maximum allowed value"
+              },
+              "response": []
+            },
+            {
+              "name": "Create Logistical Question (Multiple Choice)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"category\": \"logistical\",\n  \"answerType\": \"multiple_choice\",\n  \"questionText\": \"Which office locations would work for you?\",\n  \"required\": true,\n  \"options\": [\"New York\", \"San Francisco\", \"Austin\", \"Remote\"]\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/custom-questions",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "custom-questions"]
+                },
+                "description": "Create a multiple choice logistical question.\n\nCandidates can select multiple options."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Custom Question",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/custom-questions/{{custom_question_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "custom-questions", "{{custom_question_id}}"]
+                },
+                "description": "Get a specific custom question by ID."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Custom Question",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"questionText\": \"Updated question text here?\",\n  \"required\": false\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/custom-questions/{{custom_question_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "custom-questions", "{{custom_question_id}}"]
+                },
+                "description": "Update a custom question.\n\n**Note:** Only draft jobs can have questions updated.\n\nAll fields are optional."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Custom Question",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/custom-questions/{{custom_question_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "custom-questions", "{{custom_question_id}}"]
+                },
+                "description": "Delete a custom question.\n\n**Note:** Only draft jobs can have questions deleted.\n\nDeleting a question also deletes all associated answers."
+              },
+              "response": []
+            },
+            {
+              "name": "Reorder Questions",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"questionIds\": [\"question_id_3\", \"question_id_1\", \"question_id_2\"]\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/jobs/{{job_id}}/custom-questions/reorder",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "jobs", "{{job_id}}", "custom-questions", "reorder"]
+                },
+                "description": "Reorder custom questions.\n\nPass an array of question IDs in the desired order.\n\n**Note:** Only draft jobs can have questions reordered."
+              },
+              "response": []
+            },
+            {
+              "name": "Suggest Signals for Question",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"questionText\": \"Describe a time when you had to make a difficult decision with incomplete information.\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/custom-questions/suggest-signals",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "custom-questions", "suggest-signals"]
+                },
+                "description": "Get AI-suggested signals for a question text.\n\n**Use this before creating an evaluative question** to see which signals the question will evaluate.\n\n**Response:**\n```json\n{\n  \"signals\": [\"decision_under_uncertainty\", \"risk_reasoning\"],\n  \"confidence\": \"high\",\n  \"reasoning\": \"This question evaluates...\"\n}\n```\n\n**Confidence levels:**\n- `high`: Clear signal mapping\n- `medium`: Reasonable mapping\n- `low`: Weak or no clear mapping"
+              },
+              "response": []
+            }
+          ]
         }
       ]
     },
@@ -611,7 +865,7 @@
               "host": ["{{base_url}}"],
               "path": ["v1", "applications", "{{application_id}}"]
             },
-            "description": "Get full application details including answers, extracted signals, and navigation context.\n\n**Returns:**\n- Candidate info (email, name, preferredName, phone)\n- Auto-detected location (detectedCountry, detectedTimezone)\n- CV status (hasCv, cvUrl)\n- Application status and triage status\n- Signal extraction status and results\n- Decision posture\n- All answers with extracted signals per answer\n- Navigation context (prevId, nextId, currentIndex, totalCount)\n\n**Note:** signalEvaluations and extractedSignals will be null until signal extraction completes.\n\n**Navigation:** Sorted by posture (LOW_REGRET_RISK first) for quick review."
+            "description": "Get full application details including answers, extracted signals, and navigation context.\n\n**Returns:**\n- Candidate info (email, name, preferredName, phone)\n- Auto-detected location (detectedCountry, detectedTimezone)\n- CV status (hasCv, cvUrl)\n- Application status and triage status\n- Signal extraction status and results\n- Decision posture\n- All archetype answers with extracted signals per answer\n- Custom answers with questions, values, and extracted signals (for evaluative)\n- Navigation context (prevId, nextId, currentIndex, totalCount)\n\n**customAnswers array:** Each entry includes:\n- `id`, `questionId`, `questionText`: Answer and question identifiers\n- `category`: `evaluative`, `screening`, or `logistical`\n- `answerType`: `free_text`, `yes_no`, `single_choice`, `multiple_choice`, `number`, `date`, `url`\n- `value`: Answer value (string, string[], number, or null based on type)\n- `screeningPassed`: Boolean for screening questions (did answer match expected?)\n- `extractedSignals`: Array of signals for evaluative questions (null for others)\n- `extractionStatus`: `completed`, `pending`, `failed`, or `skipped`\n\n**Note:** signalEvaluations and extractedSignals will be null until signal extraction completes.\n\n**Navigation:** Sorted by posture (LOW_REGRET_RISK first) for quick review."
           },
           "response": []
         },
@@ -753,6 +1007,60 @@
             "description": "Get activity timeline for an application.\n\n**Event types:**\n- `status_change`: Pipeline status changed\n- `triage_change`: Triage status changed\n- `note_added`: Note was added\n- `note_deleted`: Note was deleted\n- `signals_started`: Signal extraction started\n- `signals_completed`: Signal extraction completed\n- `signals_failed`: Signal extraction failed\n- `cv_uploaded`: CV was uploaded\n\nEvents are ordered by creation date (newest first)."
           },
           "response": []
+        },
+        {
+          "name": "Get CV Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/applications/{{application_id}}/cv/summary",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "applications", "{{application_id}}", "cv", "summary"]
+            },
+            "description": "Get structured CV summary for an application.\n\n**Returns:**\n- `extractionStatus`: pending, processing, completed, failed, skipped\n- `totalYearsExperience`: Number or null\n- `hasManagementExperience`: Boolean\n- `workExperiences`: Array of work history\n  - id, title, company, startDate, endDate, isCurrent, durationMonths, highlights\n- `education`: Array of education records\n  - id, degree, field, institution, year\n- `skills`: Array of skills\n  - id, name, category (language, framework, tool, soft_skill, other)\n- `gaps`: Array of detected career gaps\n- `contradictions`: Array of CV vs answer contradictions (Phase 8D)\n\n**Note:** CV must be uploaded and processed. Use `/cv/reprocess` to trigger processing."
+          },
+          "response": []
+        },
+        {
+          "name": "Reprocess CV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/applications/{{application_id}}/cv/reprocess",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "applications", "{{application_id}}", "cv", "reprocess"]
+            },
+            "description": "Trigger CV reprocessing for an application.\n\nClears existing CV data and runs the extraction + summarization pipeline again.\n\n**Use cases:**\n- CV processing failed initially\n- LLM model was updated\n- CV summarization format changed\n\n**Note:** This runs synchronously and may take a few seconds."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Candidates",
+      "description": "Cross-application candidate lookup.\n\nEnables recruiters to see all applications from the same email address across different jobs.",
+      "item": [
+        {
+          "name": "Lookup by Email",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/candidates/lookup?email=candidate@example.com",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "candidates", "lookup"],
+              "query": [
+                {
+                  "key": "email",
+                  "value": "candidate@example.com"
+                }
+              ]
+            },
+            "description": "Look up all applications by a candidate email.\n\n**Query parameters:**\n- `email`: Candidate email address (required)\n\n**Returns:**\n- `email`: The queried email\n- `totalApplications`: Number of applications found\n- `applications`: Array of application summaries\n  - id, jobId, jobTitle, appliedAt, status, hasCV\n\n**Note:** Only returns applications for jobs in your organization."
+          },
+          "response": []
         }
       ]
     },
@@ -773,7 +1081,7 @@
               "host": ["{{base_url}}"],
               "path": ["public", "jobs", "{{public_slug}}"]
             },
-            "description": "Get public job details by slug for candidates.\n\n**No authentication required.**\n\nOnly returns published jobs.\n\n**Returns:**\n- title, companyName, department, location\n- workType, employmentType\n- salaryMin, salaryMax, salaryCurrency\n- descriptionHtml (pre-rendered HTML)\n- questions array with: archetypeId, text, minWords"
+            "description": "Get public job details by slug for candidates.\n\n**No authentication required.**\n\nOnly returns published jobs.\n\n**Returns:**\n- title, companyName, department, location\n- workType, employmentType\n- salaryMin, salaryMax, salaryCurrency\n- descriptionHtml (pre-rendered HTML)\n- questions: Array of archetype questions (archetypeId, text, minWords)\n- **customQuestions**: Array of custom questions (Phase 8)\n  - id, category, answerType, questionText, required\n  - options (for choice types), minValue/maxValue (for number)\n- **cvRequired**: Boolean indicating if CV upload is mandatory"
           },
           "response": []
         },
@@ -894,7 +1202,7 @@
               "formdata": [
                 {
                   "key": "data",
-                  "value": "{\n  \"email\": \"candidate@example.com\",\n  \"name\": \"Jane Doe\",\n  \"preferredName\": \"Jane\",\n  \"phone\": \"+1-555-123-4567\",\n  \"answers\": [\n    {\n      \"archetypeId\": \"situational_uncertainty_story\",\n      \"answerText\": \"When I was leading the migration project at my previous company, we faced a critical decision about our database architecture with incomplete performance data. I gathered the team, outlined the known risks and unknowns, and we decided to run a parallel proof-of-concept for 2 weeks before committing.\"\n    },\n    {\n      \"archetypeId\": \"ownership_of_outcome\",\n      \"answerText\": \"I take full responsibility for the outcomes of my projects. In my last role, when our release caused a production incident, I immediately took ownership - communicated status to stakeholders, led the incident response, and afterward conducted a thorough retrospective.\"\n    },\n    {\n      \"archetypeId\": \"failure_and_recovery\",\n      \"answerText\": \"During the Q3 release, we encountered a critical bug that slipped through our testing. Rather than blame anyone, I analyzed our process and discovered gaps in our integration tests. I proposed and implemented a new testing strategy.\"\n    }\n  ]\n}",
+                  "value": "{\n  \"email\": \"candidate@example.com\",\n  \"name\": \"Jane Doe\",\n  \"preferredName\": \"Jane\",\n  \"phone\": \"+1-555-123-4567\",\n  \"answers\": [\n    {\n      \"archetypeId\": \"situational_uncertainty_story\",\n      \"answerText\": \"When I was leading the migration project at my previous company, we faced a critical decision about our database architecture with incomplete performance data. I gathered the team, outlined the known risks and unknowns, and we decided to run a parallel proof-of-concept for 2 weeks before committing.\"\n    },\n    {\n      \"archetypeId\": \"ownership_of_outcome\",\n      \"answerText\": \"I take full responsibility for the outcomes of my projects. In my last role, when our release caused a production incident, I immediately took ownership - communicated status to stakeholders, led the incident response, and afterward conducted a thorough retrospective.\"\n    },\n    {\n      \"archetypeId\": \"failure_and_recovery\",\n      \"answerText\": \"During the Q3 release, we encountered a critical bug that slipped through our testing. Rather than blame anyone, I analyzed our process and discovered gaps in our integration tests. I proposed and implemented a new testing strategy.\"\n    }\n  ],\n  \"customAnswers\": [\n    {\n      \"questionId\": \"evaluative_question_id\",\n      \"value\": \"When I was leading a cross-functional team at my previous company, we faced a critical deadline with incomplete requirements. I organized daily standups with stakeholders to clarify priorities and delivered the project on time with positive feedback.\"\n    },\n    {\n      \"questionId\": \"yes_no_question_id\",\n      \"value\": \"Yes\"\n    },\n    {\n      \"questionId\": \"single_choice_question_id\",\n      \"value\": \"Master's Degree\"\n    },\n    {\n      \"questionId\": \"number_question_id\",\n      \"value\": 120000\n    },\n    {\n      \"questionId\": \"multiple_choice_question_id\",\n      \"value\": [\"San Francisco\", \"Remote\"]\n    }\n  ]\n}",
                   "type": "text",
                   "description": "JSON application data"
                 },
@@ -911,7 +1219,7 @@
               "host": ["{{base_url}}"],
               "path": ["public", "jobs", "{{public_slug}}", "apply"]
             },
-            "description": "Submit a complete job application.\n\n**No authentication required.**\n\n**Requires `multipart/form-data` content type.**\n\n**All questions must be answered** (minimum 50 characters each).\n\n**Form fields:**\n- `data`: JSON string with application data\n  - `email`: Candidate's email (must be valid)\n  - `name`: Candidate's full name\n  - `preferredName`: Optional preferred name/nickname\n  - `phone`: Optional phone number (may be required per job config)\n  - `answers`: Array of all question answers\n    - `archetypeId`: Question identifier (from job questions)\n    - `answerText`: Answer text (min 50 chars)\n- `cv`: Optional CV file (PDF, DOC, or DOCX, max 5MB)\n\n**Note:** Get question archetypeIds from GET /public/jobs/:slug response.\n\n**Response includes `cv` field if file was uploaded:**\n```json\n{\n  \"success\": true,\n  \"applicationId\": \"app_xyz789\",\n  \"message\": \"Your application has been submitted successfully\",\n  \"cv\": {\n    \"filename\": \"resume.pdf\",\n    \"size\": 245760\n  }\n}\n```\n\n**Auto-detected fields:** Country and timezone are automatically detected via Cloudflare.\n\n**Duplicate Prevention:** Returns 409 if email has already applied to this job."
+            "description": "Submit a complete job application.\n\n**No authentication required.**\n\n**Requires `multipart/form-data` content type.**\n\n**All archetype questions must be answered** (minimum 50 characters each).\n\n**Form fields:**\n- `data`: JSON string with application data\n  - `email`: Candidate's email (must be valid)\n  - `name`: Candidate's full name\n  - `preferredName`: Optional preferred name/nickname\n  - `phone`: Optional phone number (may be required per job config)\n  - `answers`: Array of archetype question answers\n    - `archetypeId`: Question identifier (from job questions)\n    - `answerText`: Answer text (min 50 chars)\n  - `customAnswers`: Array of custom question answers (get question IDs from GET /public/jobs/:slug)\n- `cv`: Optional CV file (PDF, DOC, or DOCX, max 5MB). Required if job has cvRequired=true.\n\n**Custom Answer Value Types:**\n| Answer Type | Value Format | Example |\n|-------------|--------------|----------|\n| `free_text` | string | `\"My detailed answer (min 50 chars)...\"` |\n| `yes_no` | string | `\"Yes\"` or `\"No\"` |\n| `single_choice` | string | `\"Master's Degree\"` (must match option) |\n| `multiple_choice` | string[] | `[\"San Francisco\", \"Remote\"]` |\n| `number` | number | `120000` |\n| `date` | string | `\"2024-06-01\"` (ISO format) |\n| `url` | string | `\"https://example.com\"` |\n\n**Example customAnswers:**\n```json\n[\n  { \"questionId\": \"eval_id\", \"value\": \"Long answer text...\" },\n  { \"questionId\": \"yesno_id\", \"value\": \"Yes\" },\n  { \"questionId\": \"choice_id\", \"value\": \"Option A\" },\n  { \"questionId\": \"number_id\", \"value\": 120000 },\n  { \"questionId\": \"multi_id\", \"value\": [\"A\", \"B\"] }\n]\n```\n\n**Screening Questions:**\nIf the job has screening questions and answers don't match expected values:\n- `failAction: 'flag'` → Application submitted with warning\n- `failAction: 'reject'` → Application auto-rejected (returns success: false)\n- `failAction: 'allow'` → Application submitted normally\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"applicationId\": \"app_xyz789\",\n  \"message\": \"Your application has been submitted successfully\",\n  \"cv\": { \"filename\": \"resume.pdf\", \"size\": 245760 },\n  \"screeningWarning\": true // Only if screening flagged\n}\n```\n\n**Auto-detected fields:** Country and timezone are automatically detected via Cloudflare.\n\n**Duplicate Prevention:** Returns 409 if email has already applied to this job."
           },
           "response": []
         }

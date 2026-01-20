@@ -63,6 +63,16 @@ const HIGH_UNCERTAINTY_RULES: PostureRule[] = [
     severity: "critical",
   },
   {
+    code: "MULTIPLE_CV_CONTRADICTIONS",
+    check: (state) => {
+      // 2+ warning-level CV contradictions is critical
+      const warningCount = state.cvContradictions.filter((c) => c.severity === "warning").length;
+      return warningCount >= 2;
+    },
+    message: "Multiple contradictions between answer claims and CV",
+    severity: "critical",
+  },
+  {
     code: "ALL_SIGNALS_UNCLEAR",
     check: (state) => {
       const { present, partial } = state.aggregated;
@@ -90,6 +100,16 @@ const SOME_UNCERTAINTY_RULES: PostureRule[] = [
     severity: "warning",
   },
   {
+    code: "CV_CONTRADICTION",
+    check: (state) => {
+      // Single warning-level CV contradiction
+      const warningCount = state.cvContradictions.filter((c) => c.severity === "warning").length;
+      return warningCount === 1;
+    },
+    message: "CV content doesn't support some answer claims",
+    severity: "warning",
+  },
+  {
     code: "MOSTLY_PARTIAL",
     check: (state) => {
       const { present, partial } = state.aggregated;
@@ -105,6 +125,17 @@ const SOME_UNCERTAINTY_RULES: PostureRule[] = [
       return gaps.some((g) => g.status === "partial");
     },
     message: "Some critical signals lack depth or specificity",
+    severity: "info",
+  },
+  {
+    code: "CV_CONTRADICTION_MINOR",
+    check: (state) => {
+      // Only info-level CV contradictions (no warnings)
+      const warningCount = state.cvContradictions.filter((c) => c.severity === "warning").length;
+      const infoCount = state.cvContradictions.filter((c) => c.severity === "info").length;
+      return warningCount === 0 && infoCount > 0;
+    },
+    message: "Minor inconsistency between CV and answer",
     severity: "info",
   },
 ];
@@ -221,6 +252,24 @@ function generateSuggestedActions(
 
   if (reasonCodes.has("SIGNAL_CONFLICT") || reasonCodes.has("MULTIPLE_CONFLICTS")) {
     actions.push("Review conflicting responses and explore in interview");
+  }
+
+  if (
+    reasonCodes.has("CV_CONTRADICTION") ||
+    reasonCodes.has("MULTIPLE_CV_CONTRADICTIONS") ||
+    reasonCodes.has("CV_CONTRADICTION_MINOR")
+  ) {
+    // Add specific claims to verify
+    const contradictions = signalState.cvContradictions;
+    if (contradictions.length > 0) {
+      const claims = contradictions
+        .slice(0, 3) // Limit to first 3
+        .map((c) => c.claim)
+        .join("; ");
+      actions.push(`Verify in interview: ${claims}`);
+    } else {
+      actions.push("Verify CV details against answer claims in interview");
+    }
   }
 
   if (reasonCodes.has("MOSTLY_PARTIAL")) {

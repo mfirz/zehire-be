@@ -28,7 +28,9 @@
     "@tiptap/static-renderer": "^3.15.3",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.6.14",
+    "mammoth": "^1.11.0",
     "nanoid": "^5.0.9",
+    "unpdf": "^1.4.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -42,7 +44,7 @@
     "prettier": "^3.4.2",
     "prettier-plugin-organize-imports": "^4.1.0",
     "typescript": "^5.7.2",
-    "wrangler": "^4.54.0"
+    "wrangler": "^4.59.2"
   },
   "engines": {
     "node": ">=18.0.0"

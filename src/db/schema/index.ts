@@ -84,3 +84,32 @@ export {
   type NewApplicationEvent,
   type EventType,
 } from "./applications";
+
+// Custom Questions & CV (Phase 8)
+export {
+  customQuestions,
+  customAnswers,
+  cvWorkExperiences,
+  cvEducation,
+  cvSkills,
+  questionCategories,
+  answerTypes,
+  failActions,
+  cvExtractionStatuses,
+  skillCategories,
+  type CustomQuestion,
+  type NewCustomQuestion,
+  type CustomAnswer,
+  type NewCustomAnswer,
+  type CVWorkExperience,
+  type NewCVWorkExperience,
+  type CVEducationRecord,
+  type NewCVEducationRecord,
+  type CVSkill,
+  type NewCVSkill,
+  type QuestionCategory,
+  type AnswerType,
+  type FailAction,
+  type CVExtractionStatus,
+  type SkillCategory,
+} from "./custom-questions";

@@ -180,6 +180,24 @@ export interface CriticalSignalAnalysis {
 }
 
 // =============================================================================
+// CV CONTRADICTIONS
+// =============================================================================
+
+/**
+ * A contradiction between a candidate's answer and their CV.
+ */
+export interface CVContradiction {
+  /** What the candidate claimed in their answer */
+  claim: string;
+
+  /** What the CV shows (or doesn't show) */
+  cvEvidence: string;
+
+  /** Severity: warning (material) or info (minor) */
+  severity: "warning" | "info";
+}
+
+// =============================================================================
 // COMPLETE SIGNAL STATE
 // =============================================================================
 
@@ -191,6 +209,8 @@ export interface SignalStateResult {
   aggregated: AggregatedSignalState;
   criticalAnalysis: CriticalSignalAnalysis;
   conflicts: SignalConflict[];
+  /** Contradictions between answer claims and CV data */
+  cvContradictions: CVContradiction[];
   computedAt: string;
 }
 

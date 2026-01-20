@@ -130,6 +130,20 @@ All errors follow a consistent format:
 | GET    | `/v1/applications/:id/posture`  | Required | Get application posture        |
 | PATCH  | `/v1/applications/:id`          | Required | Update application status      |
 | GET    | `/v1/applications/:id/cv`       | Required | Download CV file               |
+| GET    | `/v1/applications/:id/cv/summary`| Required | Get structured CV summary     |
+| POST   | `/v1/applications/:id/cv/reprocess`| Required | Reprocess CV extraction     |
+| GET    | `/v1/applications/:id/notes`    | Required | Get application notes          |
+| POST   | `/v1/applications/:id/notes`    | Required | Add note to application        |
+| DELETE | `/v1/applications/:id/notes/:nid`| Required | Delete a note                 |
+| GET    | `/v1/applications/:id/timeline` | Required | Get activity timeline          |
+| GET    | `/v1/candidates/lookup`         | Required | Cross-app lookup by email      |
+| POST   | `/v1/jobs/:id/custom-questions` | Required | Create custom question         |
+| GET    | `/v1/jobs/:id/custom-questions` | Required | List custom questions          |
+| GET    | `/v1/jobs/:id/custom-questions/:qid`| Required | Get custom question         |
+| PUT    | `/v1/jobs/:id/custom-questions/:qid`| Required | Update custom question      |
+| DELETE | `/v1/jobs/:id/custom-questions/:qid`| Required | Delete custom question      |
+| POST   | `/v1/jobs/:id/custom-questions/reorder`| Required | Reorder questions        |
+| POST   | `/v1/custom-questions/suggest-signals`| Required | Suggest signals for question |
 | GET    | `/v1/assessment-providers`      | Required | List assessment providers      |
 | GET    | `/v1/capacity`                  | Required | Get organization capacity      |
 | GET    | `/v1/billing`                   | Required | Current month usage summary    |
@@ -149,6 +163,10 @@ All errors follow a consistent format:
 See [Public Applications API](./public-applications.md) for candidate-facing application endpoints.
 
 See [Applications Management API](./applications.md) for recruiter-facing application management.
+
+See [Custom Questions API](./custom-questions.md) for custom questions CRUD and signal suggestion.
+
+See [Candidates API](./candidates.md) for cross-application lookup.
 
 ### Internal (Public)
 

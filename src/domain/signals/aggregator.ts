@@ -447,6 +447,8 @@ export interface ComputeSignalStateInput {
   applicationId: string;
   extractions: AnswerExtractionResult[];
   primarySignals: SignalId[];
+  /** CV contradictions (from CV service, if available) */
+  cvContradictions?: SignalStateResult["cvContradictions"];
 }
 
 /**
@@ -458,7 +460,7 @@ export interface ComputeSignalStateInput {
  * 3. Conflict detection
  */
 export function computeSignalState(input: ComputeSignalStateInput): SignalStateResult {
-  const { extractions, primarySignals } = input;
+  const { extractions, primarySignals, cvContradictions = [] } = input;
 
   // 1. Get all possible signal IDs
   const allSignalIds = [...SIGNAL_IDS];
@@ -482,6 +484,7 @@ export function computeSignalState(input: ComputeSignalStateInput): SignalStateR
     aggregated,
     criticalAnalysis,
     conflicts,
+    cvContradictions,
     computedAt: new Date().toISOString(),
   };
 }

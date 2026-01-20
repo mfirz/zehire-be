@@ -9,7 +9,9 @@
  * - GET /:slug/apply/draft/:draftId - Resume saved progress
  *
  * Design: All Required + Smart Design
- * - All 3 questions must be answered for submission
+ * - All 3 archetype questions must be answered for submission
+ * - Custom questions validated based on required flag
+ * - Screening questions checked against expected answers
  * - Drafts can have partial answers and expire after 7 days
  * - CV can be included in the same request (multipart/form-data)
  */
@@ -23,9 +25,12 @@ import {
   DRAFT_EXPIRY_DAYS,
   PublicApplySchema,
   SaveDraftSchema,
+  type CustomAnswerInput,
   type DraftAnswer,
 } from "../../../domain/applications/schemas";
+import { CustomQuestionsRepository } from "../../../domain/custom-questions";
 import { JobRepository, type RenderedQuestionOutput } from "../../../domain/jobs";
+import type { CustomQuestion } from "../../../db";
 import type { Env } from "../../../types/bindings";
 
 // =============================================================================
@@ -70,6 +75,7 @@ applyRoutes.post("/apply", async (c) => {
     preferredName?: string;
     phone?: string;
     answers: Array<{ archetypeId: string; answerText: string }>;
+    customAnswers?: CustomAnswerInput[];
     draftId?: string;
   };
 
@@ -101,6 +107,7 @@ applyRoutes.post("/apply", async (c) => {
 
   const jobRepository = new JobRepository(c.env.DB);
   const applicationRepository = new ApplicationRepository(c.env.DB);
+  const customQuestionsRepo = new CustomQuestionsRepository(c.env.DB);
 
   // 1. Find the job by slug (returns any status, allows better error messages)
   const job = await jobRepository.findBySlug(slug);
@@ -131,7 +138,20 @@ applyRoutes.post("/apply", async (c) => {
     );
   }
 
-  // 4. Validate CV if provided
+  // 4. Validate CV requirements
+  const appConfig = job.applicationConfig;
+  const cvRequired = appConfig?.requireCv ?? false;
+
+  if (cvRequired && !cvFile) {
+    return c.json(
+      {
+        error: "CV is required for this application",
+        code: "CV_REQUIRED",
+      },
+      400
+    );
+  }
+
   if (cvFile) {
     const cvService = new CvService(c.env.CV_BUCKET, applicationRepository);
     const cvError = cvService.validateFile(cvFile);
@@ -148,14 +168,14 @@ applyRoutes.post("/apply", async (c) => {
     }
   }
 
-  // 5. Parse questions from job (trusted data from database)
+  // 5. Parse archetype questions from job (trusted data from database)
   const questions = JSON.parse(job.questions) as RenderedQuestionOutput[];
   const questionData = questions.map((q) => ({
     archetypeId: q.archetypeId,
     questionText: q.questionText,
   }));
 
-  // 6. Validate all questions have answers
+  // 6. Validate all archetype questions have answers
   const questionArchetypeIds = new Set(questions.map((q) => q.archetypeId));
   const answerArchetypeIds = new Set(validatedInput.answers.map((a) => a.archetypeId));
 
@@ -185,13 +205,34 @@ applyRoutes.post("/apply", async (c) => {
     }
   }
 
-  // 7. Capture geo data from Cloudflare
+  // 7. Fetch and validate custom questions
+  const customQuestions = await customQuestionsRepo.listByJobId(job.id);
+  const customAnswersInput = validatedInput.customAnswers ?? [];
+
+  // Validate custom answers
+  const customValidation = validateCustomAnswers(
+    customQuestions,
+    customAnswersInput
+  );
+
+  if (!customValidation.valid) {
+    return c.json(
+      {
+        error: customValidation.error,
+        missingQuestions: customValidation.missingQuestions,
+        invalidQuestions: customValidation.invalidQuestions,
+      },
+      400
+    );
+  }
+
+  // 8. Capture geo data from Cloudflare
   const cf = c.req.raw.cf as { country?: string; timezone?: string } | undefined;
   const geoData: { country?: string; timezone?: string } = {};
   if (cf?.country) geoData.country = cf.country;
   if (cf?.timezone) geoData.timezone = cf.timezone;
 
-  // 8. Create application with answers
+  // 9. Create application with archetype answers
   const { applicationId } = await applicationRepository.createApplication(
     job.id,
     validatedInput,
@@ -199,7 +240,47 @@ applyRoutes.post("/apply", async (c) => {
     geoData
   );
 
-  // 9. Upload CV if provided
+  // 10. Store custom answers and check screening
+  let hasScreeningFailure = false;
+
+  if (customAnswersInput.length > 0 && customQuestions.length > 0) {
+    // Store custom answers (this also checks screening)
+    await customQuestionsRepo.createAnswers(
+      applicationId,
+      customAnswersInput,
+      customQuestions
+    );
+
+    // Check for screening failures
+    const failures = await customQuestionsRepo.getScreeningFailures(applicationId);
+
+    if (failures.length > 0) {
+      hasScreeningFailure = true;
+
+      // Update application with screening failure flag
+      await applicationRepository.updateScreeningFailure(applicationId, true);
+
+      // Check if any screening question has "reject" fail action
+      const hasAutoReject = failures.some((f) => f.question.failAction === "reject");
+
+      if (hasAutoReject) {
+        // Auto-reject the application
+        await applicationRepository.updateStatus(applicationId, { status: "rejected" });
+
+        return c.json(
+          {
+            success: false,
+            applicationId,
+            message: "Your application could not be submitted due to eligibility requirements.",
+            screeningFailed: true,
+          },
+          200 // Return 200 since the request was processed correctly
+        );
+      }
+    }
+  }
+
+  // 11. Upload CV if provided
   let cvInfo: { filename: string; size: number } | null = null;
   if (cvFile) {
     const cvService = new CvService(c.env.CV_BUCKET, applicationRepository);
@@ -207,7 +288,7 @@ applyRoutes.post("/apply", async (c) => {
     cvInfo = { filename: result.filename, size: result.size };
   }
 
-  // 10. Delete draft if exists (user might have saved progress)
+  // 12. Delete draft if exists (user might have saved progress)
   if (validatedInput.draftId) {
     await applicationRepository.deleteDraft(validatedInput.draftId);
   } else {
@@ -218,7 +299,7 @@ applyRoutes.post("/apply", async (c) => {
     }
   }
 
-  // 11. Queue signal extraction job
+  // 13. Queue signal extraction job (includes custom evaluative questions)
   await c.env.JOB_QUEUE.send({
     type: "evaluate_application" as const,
     applicationId,
@@ -226,17 +307,175 @@ applyRoutes.post("/apply", async (c) => {
     createdAt: new Date().toISOString(),
   });
 
-  // 12. Return success
-  return c.json(
-    {
-      success: true,
+  // 14. Queue CV processing if CV was uploaded
+  if (cvFile) {
+    await c.env.JOB_QUEUE.send({
+      type: "process_cv" as const,
       applicationId,
-      message: "Your application has been submitted successfully",
-      cv: cvInfo,
-    },
-    201
-  );
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  // 15. Return success (with screening warning if flagged)
+  const response: {
+    success: true;
+    applicationId: string;
+    message: string;
+    cv: { filename: string; size: number } | null;
+    screeningWarning?: boolean;
+  } = {
+    success: true,
+    applicationId,
+    message: hasScreeningFailure
+      ? "Your application has been submitted. Some responses will be reviewed by the hiring team."
+      : "Your application has been submitted successfully",
+    cv: cvInfo,
+  };
+
+  if (hasScreeningFailure) {
+    response.screeningWarning = true;
+  }
+
+  return c.json(response, 201);
 });
+
+// =============================================================================
+// HELPER: Validate custom answers
+// =============================================================================
+
+type CustomAnswerValidationResult =
+  | { valid: true }
+  | {
+      valid: false;
+      error: string;
+      missingQuestions: string[] | undefined;
+      invalidQuestions: Array<{ questionId: string; reason: string }> | undefined;
+    };
+
+function validateCustomAnswers(
+  questions: CustomQuestion[],
+  answers: CustomAnswerInput[]
+): CustomAnswerValidationResult {
+  const answerMap = new Map(answers.map((a) => [a.questionId, a.value]));
+  const questionMap = new Map(questions.map((q) => [q.id, q]));
+  const missingQuestions: string[] = [];
+  const invalidQuestions: Array<{ questionId: string; reason: string }> = [];
+
+  // Check all required questions are answered
+  for (const question of questions) {
+    const answer = answerMap.get(question.id);
+
+    // Check required questions
+    if (question.required) {
+      if (answer === undefined || answer === null) {
+        missingQuestions.push(question.id);
+        continue;
+      }
+
+      // Check free_text minimum length
+      if (question.answerType === "free_text") {
+        if (typeof answer !== "string" || answer.trim().length < 50) {
+          invalidQuestions.push({
+            questionId: question.id,
+            reason: "Answer must be at least 50 characters",
+          });
+        }
+      }
+    }
+
+    // Validate answer type matches question type
+    if (answer !== undefined && answer !== null) {
+      const validation = validateAnswerType(question, answer);
+      if (!validation.valid) {
+        invalidQuestions.push({
+          questionId: question.id,
+          reason: validation.reason!,
+        });
+      }
+    }
+  }
+
+  // Check for unknown questions
+  for (const answer of answers) {
+    if (!questionMap.has(answer.questionId)) {
+      invalidQuestions.push({
+        questionId: answer.questionId,
+        reason: "Unknown question",
+      });
+    }
+  }
+
+  if (missingQuestions.length > 0 || invalidQuestions.length > 0) {
+    return {
+      valid: false,
+      error: "Custom question validation failed",
+      missingQuestions: missingQuestions.length > 0 ? missingQuestions : undefined,
+      invalidQuestions: invalidQuestions.length > 0 ? invalidQuestions : undefined,
+    };
+  }
+
+  return { valid: true };
+}
+
+function validateAnswerType(
+  question: CustomQuestion,
+  value: string | string[] | number | null
+): { valid: boolean; reason?: string } {
+  switch (question.answerType) {
+    case "free_text":
+    case "yes_no":
+    case "single_choice":
+    case "date":
+    case "url":
+      if (typeof value !== "string") {
+        return { valid: false, reason: `Expected string for ${question.answerType}` };
+      }
+      // Validate single_choice against options
+      if (question.answerType === "single_choice" && question.options) {
+        const options = JSON.parse(question.options) as string[];
+        if (!options.includes(value)) {
+          return { valid: false, reason: "Value must be one of the options" };
+        }
+      }
+      // Validate yes_no
+      if (question.answerType === "yes_no") {
+        if (value !== "Yes" && value !== "No") {
+          return { valid: false, reason: "Value must be 'Yes' or 'No'" };
+        }
+      }
+      break;
+
+    case "multiple_choice":
+      if (!Array.isArray(value)) {
+        return { valid: false, reason: "Expected array for multiple_choice" };
+      }
+      // Validate all values are in options
+      if (question.options) {
+        const options = JSON.parse(question.options) as string[];
+        for (const v of value) {
+          if (!options.includes(v)) {
+            return { valid: false, reason: `Invalid option: ${v}` };
+          }
+        }
+      }
+      break;
+
+    case "number":
+      if (typeof value !== "number") {
+        return { valid: false, reason: "Expected number" };
+      }
+      // Validate min/max
+      if (question.minValue !== null && value < question.minValue) {
+        return { valid: false, reason: `Value must be at least ${question.minValue}` };
+      }
+      if (question.maxValue !== null && value > question.maxValue) {
+        return { valid: false, reason: `Value must be at most ${question.maxValue}` };
+      }
+      break;
+  }
+
+  return { valid: true };
+}
 
 // =============================================================================
 // POST /:slug/apply/draft - Save progress (Save & Continue)

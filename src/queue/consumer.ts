@@ -7,6 +7,7 @@
  * 1. questions (default): Generate interview questions
  * 2. pipeline: Generate hiring pipeline recommendation
  * 3. evaluate_application: Extract signals from application answers
+ * 4. process_cv: Extract and summarize CV content
  *
  * Built-in retry with exponential backoff (max 3 retries).
  * Failed messages go to dead-letter queue for debugging.
@@ -14,12 +15,14 @@
 
 import type { MessageBatch } from "@cloudflare/workers-types";
 import { ApplicationRepository } from "../domain/applications/repository";
+import { CVService } from "../domain/cv";
 import { JobProcessor } from "../domain/jobs/processor";
 import { JobRepository, OrgRepository } from "../domain/jobs/repository";
 import { SignalExtractionService } from "../domain/signals/service";
 import { createLLMClient } from "../lib/llm";
 import type {
   ApplicationEvaluationMessage,
+  CVProcessingMessage,
   Env,
   JobProcessingMessage,
   JobQueueMessage,
@@ -49,7 +52,8 @@ async function processApplicationEvaluation(
   const { applicationId, jobId } = msg;
   const applicationRepository = new ApplicationRepository(env.DB);
   const llmClient = createLLMClient({ env });
-  const signalService = new SignalExtractionService(env.DB);
+  // Pass CV_BUCKET to enable CV contradiction detection
+  const signalService = new SignalExtractionService(env.DB, env.CV_BUCKET);
 
   console.log(`[Queue] Starting signal extraction for application ${applicationId} (job ${jobId})`);
 
@@ -59,9 +63,10 @@ async function processApplicationEvaluation(
     // 2. Extract signals from each answer via LLM
     // 3. Aggregate signals across all answers
     // 4. Analyze critical signals
-    // 5. Detect conflicts
-    // 6. Compute decision posture
-    // 7. Save results to DB
+    // 5. Detect answer-to-answer conflicts
+    // 6. Detect CV-to-answer contradictions
+    // 7. Compute decision posture
+    // 8. Save results to DB
     const { posture } = await signalService.processApplication(llmClient, applicationId, {
       parallel: false, // Sequential to avoid rate limits
       maxRetries: 2,
@@ -82,6 +87,36 @@ async function processApplicationEvaluation(
       message: errorMessage,
       code: "EXTRACTION_FAILED",
     });
+
+    throw error; // Re-throw to trigger retry
+  }
+}
+
+/**
+ * Process CV extraction and summarization.
+ * Extracts text from PDF/DOCX and structures it using LLM.
+ */
+async function processCVExtraction(
+  msg: CVProcessingMessage,
+  env: Env
+): Promise<void> {
+  const { applicationId } = msg;
+  const llmClient = createLLMClient({ env });
+  const cvService = new CVService(env.DB, env.CV_BUCKET);
+
+  console.log(`[Queue] Starting CV processing for application ${applicationId}`);
+
+  try {
+    const result = await cvService.processCV(llmClient, applicationId);
+
+    if (result.success) {
+      console.log(`[Queue] CV processing completed for application ${applicationId}`);
+    } else {
+      console.log(`[Queue] CV processing skipped/failed for application ${applicationId}: ${result.error}`);
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error(`[Queue] CV processing failed for application ${applicationId}: ${errorMessage}`);
 
     throw error; // Re-throw to trigger retry
   }
@@ -112,7 +147,17 @@ export async function handleQueue(batch: MessageBatch<JobQueueMessage>, env: Env
         await processApplicationEvaluation(evalMsg, env);
 
         message.ack();
-        console.log(`[Queue] Application ${evalMsg.applicationId} evaluation queued successfully`);
+        console.log(`[Queue] Application ${evalMsg.applicationId} evaluation completed`);
+      } else if (messageType === "process_cv") {
+        const cvMsg = body as CVProcessingMessage;
+        console.log(
+          `[Queue] Processing process_cv for application ${cvMsg.applicationId} (queued at ${cvMsg.createdAt})`
+        );
+
+        await processCVExtraction(cvMsg, env);
+
+        message.ack();
+        console.log(`[Queue] Application ${cvMsg.applicationId} CV processing completed`);
       } else if (messageType === "pipeline") {
         const jobMsg = body as JobProcessingMessage;
         console.log(`[Queue] Processing pipeline for job ${jobMsg.jobId} (queued at ${jobMsg.createdAt})`);
@@ -133,10 +178,15 @@ export async function handleQueue(batch: MessageBatch<JobQueueMessage>, env: Env
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      const identifier =
-        messageType === "evaluate_application"
-          ? `application ${(body as ApplicationEvaluationMessage).applicationId}`
-          : `job ${(body as JobProcessingMessage).jobId}`;
+      let identifier: string;
+
+      if (messageType === "evaluate_application") {
+        identifier = `application ${(body as ApplicationEvaluationMessage).applicationId}`;
+      } else if (messageType === "process_cv") {
+        identifier = `application ${(body as CVProcessingMessage).applicationId}`;
+      } else {
+        identifier = `job ${(body as JobProcessingMessage).jobId}`;
+      }
 
       console.error(`[Queue] ${identifier} ${messageType} failed: ${errorMessage}`);
 

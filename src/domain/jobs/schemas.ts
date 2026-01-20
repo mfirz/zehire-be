@@ -499,6 +499,24 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
 export type JobStatusResponse = z.infer<typeof JobStatusResponseSchema>;
 
 /**
+ * Schema for custom questions in public view (Phase 8).
+ * Limited fields for candidate-facing display.
+ */
+export const PublicCustomQuestionSchema = z.object({
+  id: z.string(),
+  category: z.enum(["evaluative", "screening", "logistical"]),
+  answerType: z.enum(["free_text", "yes_no", "single_choice", "multiple_choice", "number", "date", "url"]),
+  questionText: z.string(),
+  required: z.boolean(),
+  orderIndex: z.number(),
+  options: z.array(z.string()).nullable(),
+  minValue: z.number().nullable(),
+  maxValue: z.number().nullable(),
+});
+
+export type PublicCustomQuestion = z.infer<typeof PublicCustomQuestionSchema>;
+
+/**
  * Schema for public job view (for candidates, no auth).
  * Returns pre-rendered HTML for SSR/SEO.
  */
@@ -516,6 +534,7 @@ export const PublicJobResponseSchema = z.object({
   salaryCurrency: z.enum(SALARY_CURRENCIES).nullable(),
   // Content - pre-rendered HTML for SSR
   descriptionHtml: z.string(),
+  // Archetype questions
   questions: z.array(
     z.object({
       archetypeId: z.string(),
@@ -523,6 +542,10 @@ export const PublicJobResponseSchema = z.object({
       minWords: z.number().optional(),
     })
   ),
+  // Custom questions (Phase 8)
+  customQuestions: z.array(PublicCustomQuestionSchema),
+  // CV requirement (Phase 8)
+  cvRequired: z.boolean(),
 });
 
 export type PublicJobResponse = z.infer<typeof PublicJobResponseSchema>;

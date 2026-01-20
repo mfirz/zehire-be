@@ -620,6 +620,21 @@ export class ApplicationRepository {
   }
 
   /**
+   * Update screening failure flag for an application.
+   */
+  async updateScreeningFailure(id: string, hasFailure: boolean): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .update(applications)
+      .set({
+        hasScreeningFailure: hasFailure,
+        updatedAt: now,
+      })
+      .where(eq(applications.id, id));
+  }
+
+  /**
    * Get the job_id for an application.
    * Used for authorization checks.
    */

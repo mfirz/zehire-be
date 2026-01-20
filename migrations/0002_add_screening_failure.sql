@@ -1,0 +1,1 @@
+ALTER TABLE `applications` ADD `has_screening_failure` integer DEFAULT false;

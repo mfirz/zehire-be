@@ -64,15 +64,130 @@ Content-Type: application/pdf
 | `name`         | string   | Yes      | Candidate's full name (1-200 chars)              |
 | `preferredName`| string   | No       | Preferred/nickname (optional)                    |
 | `phone`        | string   | No       | Phone number (may be required per job config)    |
-| `answers`      | array    | Yes      | Array of answers to ALL questions                |
+| `answers`      | array    | Yes      | Array of answers to ALL archetype questions      |
+| `customAnswers`| array    | No       | Array of answers to custom questions             |
 | `draftId`      | string   | No       | Draft ID if resuming from saved progress         |
 
-### Answer Object
+### Answer Object (Archetype Questions)
 
 | Field         | Type   | Required | Description                                |
 | ------------- | ------ | -------- | ------------------------------------------ |
 | `archetypeId` | string | Yes      | The archetype ID of the question           |
 | `answerText`  | string | Yes      | Answer text (minimum 50 characters)        |
+
+### Custom Answer Object
+
+| Field        | Type                     | Required | Description                                |
+| ------------ | ------------------------ | -------- | ------------------------------------------ |
+| `questionId` | string                   | Yes      | The custom question ID                     |
+| `value`      | string/string[]/number/null | Yes   | Answer value (type depends on question)    |
+
+**Value Types by Question Type:**
+
+| Question Type    | Value Type    | Example                          |
+| --------------- | ------------- | -------------------------------- |
+| `free_text`     | string        | `"My detailed answer..."`        |
+| `yes_no`        | string        | `"Yes"` or `"No"`                |
+| `single_choice` | string        | `"Option A"`                     |
+| `multiple_choice`| string[]     | `["Option A", "Option B"]`       |
+| `number`        | number        | `50000`                          |
+| `date`          | string        | `"2024-06-01"`                   |
+| `url`           | string        | `"https://example.com/portfolio"` |
+
+### Complete Example with Custom Answers
+
+Given custom questions from `GET /public/jobs/:slug`:
+
+```json
+{
+  "customQuestions": [
+    {
+      "id": "NMqKEEgefEtMkikZMMqEy",
+      "category": "evaluative",
+      "answerType": "free_text",
+      "questionText": "Describe a challenging situation...",
+      "required": false
+    },
+    {
+      "id": "qQjaXmVbh4DwGbmtCQN41",
+      "category": "screening",
+      "answerType": "yes_no",
+      "questionText": "Do you have authorization to work in the United States?",
+      "required": true
+    },
+    {
+      "id": "bFBEmEWVM8ypZiOnTsLxZ",
+      "category": "screening",
+      "answerType": "single_choice",
+      "questionText": "What is your highest level of education?",
+      "required": true,
+      "options": ["High School", "Bachelor's Degree", "Master's Degree", "PhD"]
+    },
+    {
+      "id": "BaUBUW5pCjdHXnrk9843I",
+      "category": "logistical",
+      "answerType": "number",
+      "questionText": "What is your expected annual salary (USD)?",
+      "required": false,
+      "minValue": 0,
+      "maxValue": 1000000
+    },
+    {
+      "id": "0e1TAVEbeyOnbcRFsGm8X",
+      "category": "logistical",
+      "answerType": "multiple_choice",
+      "questionText": "Which office locations would work for you?",
+      "required": true,
+      "options": ["New York", "San Francisco", "Austin", "Remote"]
+    }
+  ]
+}
+```
+
+The `customAnswers` payload should be:
+
+```json
+{
+  "customAnswers": [
+    {
+      "questionId": "NMqKEEgefEtMkikZMMqEy",
+      "value": "When I was leading a cross-functional team at my previous company, we faced a critical deadline with incomplete requirements. I organized daily standups with stakeholders to clarify priorities and delivered the project on time with positive feedback."
+    },
+    {
+      "questionId": "qQjaXmVbh4DwGbmtCQN41",
+      "value": "Yes"
+    },
+    {
+      "questionId": "bFBEmEWVM8ypZiOnTsLxZ",
+      "value": "Master's Degree"
+    },
+    {
+      "questionId": "BaUBUW5pCjdHXnrk9843I",
+      "value": 120000
+    },
+    {
+      "questionId": "0e1TAVEbeyOnbcRFsGm8X",
+      "value": ["San Francisco", "Remote"]
+    }
+  ]
+}
+```
+
+**Important Notes:**
+
+| Answer Type      | Value Format | Example                          | Notes |
+| --------------- | ------------ | -------------------------------- | ----- |
+| `free_text`     | string       | `"My detailed answer..."` | Min 50 chars for evaluative questions |
+| `yes_no`        | string       | `"Yes"` or `"No"` | Case-insensitive |
+| `single_choice` | string       | `"Master's Degree"` | Must match one of `options` exactly |
+| `multiple_choice`| string[]    | `["Option A", "Option B"]` | Each must match an `option` |
+| `number`        | number       | `120000` | Must be within `minValue`/`maxValue` |
+| `date`          | string       | `"2024-06-01"` | ISO date format (YYYY-MM-DD) |
+| `url`           | string       | `"https://example.com"` | Valid URL format |
+
+- **Optional questions**: Can be omitted from `customAnswers` or set `value: null`
+- **Required questions**: Must be included with a valid value
+- **Screening questions**: If answer doesn't match `expectedAnswer`, application may be flagged or rejected based on `failAction`
 
 ### CV File Requirements
 
@@ -84,7 +199,7 @@ Content-Type: application/pdf
 
 ### Response
 
-**201 Created**
+**201 Created** - Standard success:
 
 ```json
 {
@@ -98,7 +213,39 @@ Content-Type: application/pdf
 }
 ```
 
-The `cv` field is only present if a CV was uploaded.
+**201 Created** - With screening warning (flagged but not rejected):
+
+```json
+{
+  "success": true,
+  "applicationId": "app_xyz789",
+  "message": "Your application has been submitted. Some responses will be reviewed by the hiring team.",
+  "cv": null,
+  "screeningWarning": true
+}
+```
+
+**200 OK** - Screening auto-reject (eligibility not met):
+
+```json
+{
+  "success": false,
+  "applicationId": "app_xyz789",
+  "message": "Your application could not be submitted due to eligibility requirements.",
+  "screeningFailed": true
+}
+```
+
+| Field             | Type        | Description                                  |
+| ----------------- | ----------- | -------------------------------------------- |
+| `success`         | boolean     | Whether application was accepted             |
+| `applicationId`   | string      | Created application ID                       |
+| `message`         | string      | Human-readable status message                |
+| `cv`              | object/null | CV file info (only if uploaded)              |
+| `screeningWarning`| boolean     | Present if screening question failed (flagged) |
+| `screeningFailed` | boolean     | Present if auto-rejected due to screening    |
+
+**Note:** The `cv` field is only present if a CV was uploaded. The `screeningWarning` field is only present if a screening question failed but the application was still accepted (flagged for review).
 
 ### Auto-Detected Fields
 
@@ -119,6 +266,8 @@ These are visible to recruiters in the application detail.
 | 400    | Job not published     | Job is not accepting applications        |
 | 400    | Invalid CV type       | CV file type not allowed                 |
 | 400    | CV too large          | CV exceeds 5MB                           |
+| 400    | CV required           | CV is required for this job              |
+| 400    | Custom question error | Custom question validation failed        |
 | 404    | Job not found         | No job with this slug exists             |
 | 409    | Already applied       | Email has already applied to this job    |
 | 415    | Wrong content type    | Content-Type must be multipart/form-data |
@@ -150,6 +299,21 @@ These are visible to recruiters in the application detail.
 {
   "error": "Content-Type must be multipart/form-data",
   "hint": "Send 'data' field with JSON string and optional 'cv' file"
+}
+```
+
+**Example Error (Custom Question Validation)**
+
+```json
+{
+  "error": "Custom question validation failed",
+  "missingQuestions": ["cq_123"],
+  "invalidQuestions": [
+    {
+      "questionId": "cq_456",
+      "reason": "Answer must be at least 50 characters"
+    }
+  ]
 }
 ```
 

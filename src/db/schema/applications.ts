@@ -4,7 +4,7 @@
  * Job applications, answers, and drafts for candidate tracking.
  */
 
-import { sqliteTable, text, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { jobs } from "./jobs";
 import { users } from "./users";
 
@@ -56,6 +56,14 @@ export const applications = sqliteTable(
     cvFilename: text("cv_filename"), // Original filename: "resume.pdf"
     cvUploadedAt: text("cv_uploaded_at"), // ISO timestamp
 
+    // CV processing (Phase 8)
+    cvRawText: text("cv_raw_text"), // Extracted text from CV
+    cvSummaryJson: text("cv_summary_json"), // Full LLM output backup
+    cvExtractionStatus: text("cv_extraction_status").default("pending"), // 'pending' | 'processing' | 'completed' | 'failed' | 'skipped'
+    cvContradictions: text("cv_contradictions"), // JSON array of contradiction objects
+    totalYearsExperience: integer("total_years_experience"),
+    hasManagementExperience: integer("has_management_experience", { mode: "boolean" }).default(false),
+
     // Application status
     status: text("status", { enum: applicationStatuses }).notNull().default("pending"),
     signalsStatus: text("signals_status", { enum: signalsStatuses }).notNull().default("pending"),
@@ -66,6 +74,9 @@ export const applications = sqliteTable(
 
     // Triage status for quick decisions
     triageStatus: text("triage_status", { enum: triageStatuses }),
+
+    // Custom questions screening (Phase 8)
+    hasScreeningFailure: integer("has_screening_failure", { mode: "boolean" }).default(false),
 
     // Source tracking (organic, referral, etc.)
     source: text("source").default("organic"),

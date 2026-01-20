@@ -19,6 +19,8 @@ Recruiter-facing endpoints for managing job applications.
 | DELETE | `/v1/applications/:applicationId/notes/:noteId`   | Delete a note                      |
 | GET    | `/v1/applications/:applicationId/timeline`        | Get activity timeline              |
 | GET    | `/v1/applications/:applicationId/cv`              | Download CV file                   |
+| GET    | `/v1/applications/:applicationId/cv/summary`      | Get structured CV summary          |
+| POST   | `/v1/applications/:applicationId/cv/reprocess`    | Reprocess CV extraction            |
 
 ---
 
@@ -205,6 +207,7 @@ Get full application details including answers, extracted signals, and navigatio
         "hasCriticalGap": false
       },
       "conflicts": [],
+      "cvContradictions": [],
       "computedAt": "2024-01-15T10:05:00Z"
     },
     "suggestedActions": [],
@@ -232,6 +235,62 @@ Get full application details including answers, extracted signals, and navigatio
       "extractionStatus": "completed",
       "answeredAt": "2024-01-15T10:00:00Z",
       "extractedAt": "2024-01-15T10:05:00Z"
+    }
+  ],
+  "customAnswers": [
+    {
+      "id": "ca_123",
+      "questionId": "cq_456",
+      "questionText": "Describe a situation where you had to push back on a stakeholder...",
+      "category": "evaluative",
+      "answerType": "free_text",
+      "required": true,
+      "value": "When I was leading the API redesign project, our VP wanted to ship immediately...",
+      "screeningPassed": null,
+      "extractedSignals": [
+        {
+          "signalId": "stakeholder_management",
+          "confidence": "clear",
+          "evidence": "Candidate demonstrates clear stakeholder management..."
+        }
+      ],
+      "extractionStatus": "completed"
+    },
+    {
+      "id": "ca_789",
+      "questionId": "cq_012",
+      "questionText": "Do you have authorization to work in the United States?",
+      "category": "screening",
+      "answerType": "yes_no",
+      "required": true,
+      "value": "Yes",
+      "screeningPassed": true,
+      "extractedSignals": null,
+      "extractionStatus": "skipped"
+    },
+    {
+      "id": "ca_345",
+      "questionId": "cq_678",
+      "questionText": "Which office locations would work for you?",
+      "category": "logistical",
+      "answerType": "multiple_choice",
+      "required": true,
+      "value": ["San Francisco", "Remote"],
+      "screeningPassed": null,
+      "extractedSignals": null,
+      "extractionStatus": "skipped"
+    },
+    {
+      "id": "ca_901",
+      "questionId": "cq_234",
+      "questionText": "What is your expected annual salary (USD)?",
+      "category": "logistical",
+      "answerType": "number",
+      "required": false,
+      "value": 120000,
+      "screeningPassed": null,
+      "extractedSignals": null,
+      "extractionStatus": "skipped"
     }
   ],
   "navigation": {
@@ -270,7 +329,8 @@ Get full application details including answers, extracted signals, and navigatio
 | `createdAt`        | string      | Application submission timestamp          |
 | `updatedAt`        | string      | Last update timestamp                     |
 | `signalsComputedAt`| string/null | When signals were computed                |
-| `answers`          | array       | Array of answers with signals             |
+| `answers`          | array       | Array of archetype answers with signals   |
+| `customAnswers`    | array       | Array of custom question answers          |
 | `navigation`       | object/null | Navigation context for prev/next          |
 
 ### Navigation Context
@@ -310,6 +370,7 @@ The `signalEvaluations` object contains the full posture computation result:
 | `criticalAnalysis.gaps` | array | Critical signals with gaps                    |
 | `criticalAnalysis.hasCriticalGap` | boolean | Whether there are critical gaps      |
 | `conflicts`       | array  | Detected contradictions between signals          |
+| `cvContradictions`| array  | Contradictions between answer claims and CV data |
 
 ### Answer Fields
 
@@ -332,6 +393,38 @@ The `signalEvaluations` object contains the full posture computation result:
 | `confidence` | string | Confidence level: `clear`, `partial`, `absent`, or `unclear` |
 | `evidence`   | string | Quote from answer supporting this signal       |
 | `reasoning`  | string | Explanation of why signal was detected         |
+
+### Custom Answer Fields
+
+| Field            | Type                     | Description                          |
+| ---------------- | ------------------------ | ------------------------------------ |
+| `id`             | string                   | Custom answer ID                     |
+| `questionId`     | string                   | Custom question ID                   |
+| `questionText`   | string                   | The question that was asked          |
+| `category`       | string                   | `evaluative`, `screening`, or `logistical` |
+| `answerType`     | string                   | Answer format (see below)            |
+| `required`       | boolean                  | Whether question was required        |
+| `value`          | string/string[]/number/null | Answer value (format varies by type) |
+| `screeningPassed`| boolean/null             | Pass/fail for screening questions    |
+| `extractedSignals`| array/null              | Extracted signals (evaluative only)  |
+| `extractionStatus`| string                  | `pending`, `completed`, `failed`, or `skipped` |
+
+**Value Format by Answer Type:**
+
+| Answer Type      | Value Format | Example                          |
+| --------------- | ------------ | -------------------------------- |
+| `free_text`     | string       | `"My detailed answer..."` |
+| `yes_no`        | string       | `"Yes"` or `"No"` |
+| `single_choice` | string       | `"Master's Degree"` |
+| `multiple_choice`| string[]    | `["San Francisco", "Remote"]` |
+| `number`        | number       | `120000` |
+| `date`          | string       | `"2024-06-01"` |
+| `url`           | string       | `"https://example.com"` |
+
+**Notes:**
+- `screeningPassed` is only populated for screening questions
+- `extractedSignals` is only populated for evaluative questions after extraction
+- `extractionStatus` is `skipped` for non-evaluative questions (no signal extraction needed)
 
 ### Errors
 
@@ -782,6 +875,143 @@ Returns the CV file as a binary stream.
 | 404    | Application not found           |
 | 404    | No CV uploaded for this application |
 | 404    | CV file not found               |
+
+---
+
+## GET /v1/applications/:applicationId/cv/summary
+
+Get structured CV summary for an application. Returns parsed work experiences, education, skills, and contradiction analysis.
+
+### Path Parameters
+
+| Parameter       | Type   | Description        |
+| --------------- | ------ | ------------------ |
+| `applicationId` | string | The application ID |
+
+### Response (200 OK)
+
+```json
+{
+  "extractionStatus": "completed",
+  "totalYearsExperience": 8,
+  "hasManagementExperience": true,
+  "workExperiences": [
+    {
+      "id": "exp_123",
+      "title": "Senior Software Engineer",
+      "company": "Tech Corp",
+      "startDate": "2020-01-01",
+      "endDate": null,
+      "isCurrent": true,
+      "durationMonths": 48,
+      "highlights": ["Led team of 5 engineers", "Architected microservices platform"]
+    }
+  ],
+  "education": [
+    {
+      "id": "edu_456",
+      "degree": "Bachelor of Science",
+      "field": "Computer Science",
+      "institution": "MIT",
+      "year": "2016"
+    }
+  ],
+  "skills": [
+    {
+      "id": "skill_789",
+      "name": "TypeScript",
+      "category": "Programming Languages"
+    }
+  ],
+  "gaps": ["6-month gap between roles in 2019"],
+  "contradictions": [
+    {
+      "claim": "Claims 10 years of management experience",
+      "cvEvidence": "CV shows first management role started 3 years ago",
+      "severity": "warning"
+    }
+  ]
+}
+```
+
+### Response Fields
+
+| Field                  | Type        | Description                                    |
+| ---------------------- | ----------- | ---------------------------------------------- |
+| `extractionStatus`     | string      | CV processing status: pending, processing, completed, failed, skipped |
+| `totalYearsExperience` | number/null | Total years of work experience                 |
+| `hasManagementExperience` | boolean  | Whether CV shows management/leadership roles   |
+| `workExperiences`      | array       | Array of work experience entries               |
+| `education`            | array       | Array of education entries                     |
+| `skills`               | array       | Array of extracted skills                      |
+| `gaps`                 | array       | Detected career gaps                           |
+| `contradictions`       | array       | Contradictions between answers and CV          |
+
+### Work Experience Fields
+
+| Field           | Type        | Description                          |
+| --------------- | ----------- | ------------------------------------ |
+| `id`            | string      | Experience entry ID                  |
+| `title`         | string      | Job title                            |
+| `company`       | string      | Company name                         |
+| `startDate`     | string/null | Start date (YYYY-MM-DD format)       |
+| `endDate`       | string/null | End date (null if current)           |
+| `isCurrent`     | boolean     | Whether this is current role         |
+| `durationMonths`| number/null | Duration in months                   |
+| `highlights`    | array       | Key achievements/responsibilities    |
+
+### Contradiction Fields
+
+| Field        | Type   | Description                                    |
+| ------------ | ------ | ---------------------------------------------- |
+| `claim`      | string | What the candidate claimed in their answer     |
+| `cvEvidence` | string | What the CV shows (or doesn't show)            |
+| `severity`   | string | `warning` (material) or `info` (minor)         |
+
+### Errors
+
+| Status | Message               |
+| ------ | --------------------- |
+| 404    | Application not found |
+| 404    | CV data not found     |
+
+---
+
+## POST /v1/applications/:applicationId/cv/reprocess
+
+Trigger CV reprocessing for an application. Clears existing CV data and runs extraction pipeline again.
+
+### Path Parameters
+
+| Parameter       | Type   | Description        |
+| --------------- | ------ | ------------------ |
+| `applicationId` | string | The application ID |
+
+### Response (200 OK)
+
+```json
+{
+  "success": true,
+  "message": "CV reprocessed successfully"
+}
+```
+
+### Response (500 Error)
+
+```json
+{
+  "error": "CV reprocessing failed",
+  "details": "Text extraction failed: corrupted PDF"
+}
+```
+
+### Errors
+
+| Status | Message                              |
+| ------ | ------------------------------------ |
+| 400    | No CV uploaded for this application  |
+| 404    | Application not found                |
+| 500    | CV reprocessing failed               |
 
 ---
 
