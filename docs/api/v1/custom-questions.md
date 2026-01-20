@@ -449,3 +449,91 @@ Logistical questions collect planning information. They:
 - Are displayed to recruiters in the application detail
 
 **Use case:** "What is your expected salary range?" (number), "When can you start?" (date)
+
+---
+
+## Quick Reference
+
+### Answer Types by Category
+
+| Category     | Allowed Answer Types                                    |
+| ------------ | ------------------------------------------------------- |
+| `evaluative` | `free_text`                                             |
+| `screening`  | `yes_no`, `single_choice`                               |
+| `logistical` | `single_choice`, `multiple_choice`, `number`, `date`, `url` |
+
+### Required Fields by Category
+
+#### Evaluative Questions
+
+| Field          | Required | Default | Notes                           |
+| -------------- | -------- | ------- | ------------------------------- |
+| `category`     | Yes      | -       | Must be `"evaluative"`          |
+| `answerType`   | Yes      | -       | Must be `"free_text"`           |
+| `questionText` | Yes      | -       | 10-500 characters               |
+| `required`     | No       | `true`  |                                 |
+| `targetSignals`| No       | `null`  | 1-5 signal IDs if provided      |
+| `expectedAnswer` | -      | -       | **Not allowed**                 |
+| `failAction`   | -        | -       | **Not allowed**                 |
+| `options`      | -        | -       | **Not allowed**                 |
+
+#### Screening Questions
+
+| Field          | Required    | Default  | Notes                                        |
+| -------------- | ----------- | -------- | -------------------------------------------- |
+| `category`     | Yes         | -        | Must be `"screening"`                        |
+| `answerType`   | Yes         | -        | `"yes_no"` or `"single_choice"`              |
+| `questionText` | Yes         | -        | 10-500 characters                            |
+| `required`     | No          | `true`   |                                              |
+| `expectedAnswer` | Yes       | -        | String or string[]                           |
+| `failAction`   | No          | `"flag"` | `"flag"`, `"reject"`, or `"allow"`           |
+| `options`      | Conditional | -        | Required if `answerType` is `"single_choice"` |
+| `targetSignals`| -           | -        | **Not allowed**                              |
+
+#### Logistical Questions
+
+| Field          | Required    | Default | Notes                                               |
+| -------------- | ----------- | ------- | --------------------------------------------------- |
+| `category`     | Yes         | -       | Must be `"logistical"`                              |
+| `answerType`   | Yes         | -       | `"single_choice"`, `"multiple_choice"`, `"number"`, `"date"`, `"url"` |
+| `questionText` | Yes         | -       | 10-500 characters                                   |
+| `required`     | No          | `true`  |                                                     |
+| `options`      | Conditional | -       | Required if `answerType` is `"single_choice"` or `"multiple_choice"` |
+| `minValue`     | No          | `null`  | For `number` type only                              |
+| `maxValue`     | No          | `null`  | For `number` type only                              |
+| `targetSignals`| -           | -       | **Not allowed**                                     |
+| `expectedAnswer` | -         | -       | **Not allowed**                                     |
+| `failAction`   | -           | -       | **Not allowed**                                     |
+
+### Valid Signal IDs
+
+```
+decision_under_uncertainty  - Decision Under Uncertainty
+tradeoff_awareness          - Tradeoff Awareness
+risk_reasoning              - Risk Reasoning
+ethical_awareness           - Ethical Awareness
+technical_depth             - Technical Depth
+system_thinking             - System Thinking
+communication_clarity       - Communication Clarity
+stakeholder_management      - Stakeholder Management
+accountability              - Accountability
+learning_from_failure       - Learning From Failure
+```
+
+### Field Constraints
+
+| Field          | Constraint                                              |
+| -------------- | ------------------------------------------------------- |
+| `questionText` | Min: 10 characters, Max: 500 characters                 |
+| `targetSignals`| Min: 1 signal, Max: 5 signals                           |
+| `options` (screening) | Min: 2 options, Max: 10 options                  |
+| `options` (logistical) | Min: 2 options, Max: 20 options                 |
+| `expectedAnswer` | Must match one of `options` for `single_choice` type  |
+
+### Screening Failure Handling
+
+| `failAction` | Behavior | Response to Candidate |
+| ------------ | -------- | --------------------- |
+| `"flag"` (default) | Application submitted, marked for review | "Your application has been submitted. Some responses will be reviewed by the hiring team." |
+| `"reject"` | Application auto-rejected | "Your application could not be submitted due to eligibility requirements." |
+| `"allow"` | No action, just records the answer | Normal success message |
