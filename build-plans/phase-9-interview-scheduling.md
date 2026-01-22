@@ -259,184 +259,352 @@ If "All required" mode (or no backup):
 
 ---
 
-## Database Schema
+## Database Schema (Drizzle ORM)
 
-### New Tables
+### New File: `src/db/schema/interviews.ts`
 
-```sql
--- Interviewers (team members who can conduct interviews)
-CREATE TABLE interviewers (
-    id TEXT PRIMARY KEY,
-    org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    email TEXT NOT NULL,
-    name TEXT,
+```typescript
+/**
+ * Interview Scheduling Schema
+ * ===========================
+ * Tables for interviewer management, availability, and scheduling.
+ */
 
-    -- Magic link access
-    magic_token TEXT UNIQUE NOT NULL,
-    magic_token_expires_at TEXT,  -- Optional expiry
+import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { organizations } from "./organizations";
+import { jobs } from "./jobs";
+import { applications } from "./applications";
 
-    -- Google Calendar integration
-    google_calendar_connected INTEGER DEFAULT 0,
-    google_access_token TEXT,      -- Encrypted
-    google_refresh_token TEXT,     -- Encrypted
-    google_token_expires_at TEXT,
-    google_calendar_id TEXT,       -- Primary calendar ID
+// =============================================================================
+// ENUMS
+// =============================================================================
 
-    -- Status
-    status TEXT DEFAULT 'invited',  -- invited, active, inactive
-    invited_at TEXT,
-    connected_at TEXT,
+export const interviewerStatuses = ["invited", "active", "inactive"] as const;
+export type InterviewerStatus = (typeof interviewerStatuses)[number];
 
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
+export const interviewModes = ["any_one", "all_required"] as const;
+export type InterviewMode = (typeof interviewModes)[number];
 
-    UNIQUE(org_id, email)
+export const interviewStatuses = ["scheduled", "completed", "cancelled", "rescheduled", "no_show"] as const;
+export type InterviewStatus = (typeof interviewStatuses)[number];
+
+export const feedbackStatuses = ["pending", "submitted"] as const;
+export type FeedbackStatus = (typeof feedbackStatuses)[number];
+
+export const videoCallProviders = ["google_meet", "zoom", "teams", "other"] as const;
+export type VideoCallProvider = (typeof videoCallProviders)[number];
+
+// =============================================================================
+// INTERVIEWERS
+// =============================================================================
+
+/**
+ * Interviewers
+ * Team members who can conduct interviews.
+ */
+export const interviewers = sqliteTable(
+  "interviewers",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    name: text("name"),
+
+    // Magic link access
+    magicToken: text("magic_token").unique().notNull(),
+    magicTokenExpiresAt: text("magic_token_expires_at"),
+
+    // Google Calendar integration
+    googleCalendarConnected: integer("google_calendar_connected", { mode: "boolean" }).default(false),
+    googleAccessToken: text("google_access_token"),      // Encrypted
+    googleRefreshToken: text("google_refresh_token"),    // Encrypted
+    googleTokenExpiresAt: text("google_token_expires_at"),
+    googleCalendarId: text("google_calendar_id"),        // Primary calendar ID
+
+    // Timezone (for availability windows)
+    timezone: text("timezone").default("UTC"),
+
+    // Status
+    status: text("status", { enum: interviewerStatuses }).default("invited"),
+    invitedAt: text("invited_at"),
+    connectedAt: text("connected_at"),
+
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("idx_interviewers_org").on(table.orgId),
+    index("idx_interviewers_magic_token").on(table.magicToken),
+    uniqueIndex("idx_interviewers_org_email").on(table.orgId, table.email),
+  ]
 );
 
-CREATE INDEX idx_interviewers_org ON interviewers(org_id);
-CREATE INDEX idx_interviewers_magic_token ON interviewers(magic_token);
+export type Interviewer = typeof interviewers.$inferSelect;
+export type NewInterviewer = typeof interviewers.$inferInsert;
 
--- Interviewer availability windows (recurring preferences)
-CREATE TABLE interviewer_availability (
-    id TEXT PRIMARY KEY,
-    interviewer_id TEXT NOT NULL REFERENCES interviewers(id) ON DELETE CASCADE,
+// =============================================================================
+// INTERVIEWER AVAILABILITY
+// =============================================================================
 
-    day_of_week INTEGER NOT NULL,  -- 0=Sunday, 1=Monday, etc.
-    start_time TEXT NOT NULL,       -- "09:00" (24h format)
-    end_time TEXT NOT NULL,         -- "17:00"
-    timezone TEXT NOT NULL,         -- "Asia/Jakarta"
+/**
+ * Interviewer Availability Windows
+ * Recurring weekly preferences for when interviewers are willing to interview.
+ */
+export const interviewerAvailability = sqliteTable(
+  "interviewer_availability",
+  {
+    id: text("id").primaryKey(),
+    interviewerId: text("interviewer_id")
+      .notNull()
+      .references(() => interviewers.id, { onDelete: "cascade" }),
 
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    dayOfWeek: integer("day_of_week").notNull(), // 0=Sunday, 1=Monday, etc.
+    startTime: text("start_time").notNull(),     // "09:00" (24h format)
+    endTime: text("end_time").notNull(),         // "17:00"
+
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("idx_availability_interviewer").on(table.interviewerId),
+  ]
 );
 
-CREATE INDEX idx_availability_interviewer ON interviewer_availability(interviewer_id);
+export type InterviewerAvailabilityRecord = typeof interviewerAvailability.$inferSelect;
+export type NewInterviewerAvailability = typeof interviewerAvailability.$inferInsert;
 
--- Interviewer blocked dates (vacations, one-off unavailability)
-CREATE TABLE interviewer_blocked_dates (
-    id TEXT PRIMARY KEY,
-    interviewer_id TEXT NOT NULL REFERENCES interviewers(id) ON DELETE CASCADE,
+// =============================================================================
+// INTERVIEWER BLOCKED DATES
+// =============================================================================
 
-    blocked_date TEXT NOT NULL,     -- "2025-01-15"
-    reason TEXT,                    -- "Vacation", "Sick", etc.
+/**
+ * Interviewer Blocked Dates
+ * One-off unavailability (vacations, sick days, etc.)
+ */
+export const interviewerBlockedDates = sqliteTable(
+  "interviewer_blocked_dates",
+  {
+    id: text("id").primaryKey(),
+    interviewerId: text("interviewer_id")
+      .notNull()
+      .references(() => interviewers.id, { onDelete: "cascade" }),
 
-    created_at TEXT NOT NULL
+    blockedDate: text("blocked_date").notNull(), // "2025-01-15"
+    reason: text("reason"),                       // "Vacation", "Sick", etc.
+
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_blocked_dates_interviewer").on(table.interviewerId),
+    index("idx_blocked_dates_date").on(table.blockedDate),
+  ]
 );
 
-CREATE INDEX idx_blocked_dates_interviewer ON interviewer_blocked_dates(interviewer_id);
-CREATE INDEX idx_blocked_dates_date ON interviewer_blocked_dates(blocked_date);
+export type InterviewerBlockedDate = typeof interviewerBlockedDates.$inferSelect;
+export type NewInterviewerBlockedDate = typeof interviewerBlockedDates.$inferInsert;
 
--- Interview stage assignments (which interviewers for which stage)
-CREATE TABLE interview_stage_interviewers (
-    id TEXT PRIMARY KEY,
-    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-    stage_id TEXT NOT NULL,         -- References pipeline stage
-    interviewer_id TEXT NOT NULL REFERENCES interviewers(id) ON DELETE CASCADE,
+// =============================================================================
+// INTERVIEW STAGE CONFIG
+// =============================================================================
 
-    created_at TEXT NOT NULL,
+/**
+ * Interview Stage Configuration
+ * Settings for each interview stage in a job's pipeline.
+ */
+export const interviewStageConfig = sqliteTable(
+  "interview_stage_config",
+  {
+    id: text("id").primaryKey(),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    stageId: text("stage_id").notNull(),
 
-    UNIQUE(job_id, stage_id, interviewer_id)
+    mode: text("mode", { enum: interviewModes }).default("any_one"),
+    durationMinutes: integer("duration_minutes").default(45),
+    bufferMinutes: integer("buffer_minutes").default(15),
+
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("idx_stage_config_job_stage").on(table.jobId, table.stageId),
+  ]
 );
 
-CREATE INDEX idx_stage_interviewers_job ON interview_stage_interviewers(job_id);
-CREATE INDEX idx_stage_interviewers_stage ON interview_stage_interviewers(stage_id);
+export type InterviewStageConfigRecord = typeof interviewStageConfig.$inferSelect;
+export type NewInterviewStageConfig = typeof interviewStageConfig.$inferInsert;
 
--- Interview stage configuration
-CREATE TABLE interview_stage_config (
-    id TEXT PRIMARY KEY,
-    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-    stage_id TEXT NOT NULL,
+// =============================================================================
+// INTERVIEW STAGE INTERVIEWERS
+// =============================================================================
 
-    mode TEXT DEFAULT 'any_one',    -- 'any_one' or 'all_required'
-    duration_minutes INTEGER DEFAULT 45,
-    buffer_minutes INTEGER DEFAULT 15,
+/**
+ * Interview Stage Interviewers
+ * Which interviewers are assigned to which stage.
+ */
+export const interviewStageInterviewers = sqliteTable(
+  "interview_stage_interviewers",
+  {
+    id: text("id").primaryKey(),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    stageId: text("stage_id").notNull(),
+    interviewerId: text("interviewer_id")
+      .notNull()
+      .references(() => interviewers.id, { onDelete: "cascade" }),
 
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-
-    UNIQUE(job_id, stage_id)
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_stage_interviewers_job").on(table.jobId),
+    index("idx_stage_interviewers_stage").on(table.stageId),
+    uniqueIndex("idx_stage_interviewers_unique").on(table.jobId, table.stageId, table.interviewerId),
+  ]
 );
 
--- Scheduled interviews
-CREATE TABLE scheduled_interviews (
-    id TEXT PRIMARY KEY,
-    application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
-    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-    stage_id TEXT NOT NULL,
+export type InterviewStageInterviewer = typeof interviewStageInterviewers.$inferSelect;
+export type NewInterviewStageInterviewer = typeof interviewStageInterviewers.$inferInsert;
 
-    -- Scheduling
-    scheduled_at TEXT NOT NULL,     -- ISO datetime
-    duration_minutes INTEGER NOT NULL,
-    timezone TEXT NOT NULL,
+// =============================================================================
+// SCHEDULED INTERVIEWS
+// =============================================================================
 
-    -- Video call
-    video_call_link TEXT,
-    video_call_provider TEXT,       -- 'google_meet', 'zoom', etc.
+/**
+ * Scheduled Interviews
+ * Actual booked interviews between candidates and interviewers.
+ */
+export const scheduledInterviews = sqliteTable(
+  "scheduled_interviews",
+  {
+    id: text("id").primaryKey(),
+    applicationId: text("application_id")
+      .notNull()
+      .references(() => applications.id, { onDelete: "cascade" }),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    stageId: text("stage_id").notNull(),
 
-    -- Status
-    status TEXT DEFAULT 'scheduled', -- scheduled, completed, cancelled, rescheduled, no_show
-    cancelled_reason TEXT,
-    rescheduled_from_id TEXT,       -- References previous interview if rescheduled
+    // Scheduling
+    scheduledAt: text("scheduled_at").notNull(),     // ISO datetime
+    durationMinutes: integer("duration_minutes").notNull(),
+    timezone: text("timezone").notNull(),
 
-    -- Calendar events
-    candidate_calendar_event_id TEXT,
+    // Video call
+    videoCallLink: text("video_call_link"),
+    videoCallProvider: text("video_call_provider", { enum: videoCallProviders }),
 
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    // Status
+    status: text("status", { enum: interviewStatuses }).default("scheduled"),
+    cancelledReason: text("cancelled_reason"),
+    rescheduledFromId: text("rescheduled_from_id"), // References previous interview
+
+    // Calendar events
+    candidateCalendarEventId: text("candidate_calendar_event_id"),
+
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("idx_scheduled_interviews_application").on(table.applicationId),
+    index("idx_scheduled_interviews_job").on(table.jobId),
+    index("idx_scheduled_interviews_status").on(table.status),
+    index("idx_scheduled_interviews_date").on(table.scheduledAt),
+  ]
 );
 
-CREATE INDEX idx_scheduled_interviews_application ON scheduled_interviews(application_id);
-CREATE INDEX idx_scheduled_interviews_job ON scheduled_interviews(job_id);
-CREATE INDEX idx_scheduled_interviews_status ON scheduled_interviews(status);
-CREATE INDEX idx_scheduled_interviews_date ON scheduled_interviews(scheduled_at);
+export type ScheduledInterview = typeof scheduledInterviews.$inferSelect;
+export type NewScheduledInterview = typeof scheduledInterviews.$inferInsert;
 
--- Interview participants (interviewers assigned to specific interview)
-CREATE TABLE interview_participants (
-    id TEXT PRIMARY KEY,
-    interview_id TEXT NOT NULL REFERENCES scheduled_interviews(id) ON DELETE CASCADE,
-    interviewer_id TEXT NOT NULL REFERENCES interviewers(id) ON DELETE CASCADE,
+// =============================================================================
+// INTERVIEW PARTICIPANTS
+// =============================================================================
 
-    -- Calendar event on interviewer's calendar
-    calendar_event_id TEXT,
+/**
+ * Interview Participants
+ * Interviewers assigned to a specific scheduled interview.
+ */
+export const interviewParticipants = sqliteTable(
+  "interview_participants",
+  {
+    id: text("id").primaryKey(),
+    interviewId: text("interview_id")
+      .notNull()
+      .references(() => scheduledInterviews.id, { onDelete: "cascade" }),
+    interviewerId: text("interviewer_id")
+      .notNull()
+      .references(() => interviewers.id, { onDelete: "cascade" }),
 
-    -- Feedback
-    feedback_status TEXT DEFAULT 'pending',  -- pending, submitted
-    feedback_submitted_at TEXT,
+    // Calendar event on interviewer's calendar
+    calendarEventId: text("calendar_event_id"),
 
-    created_at TEXT NOT NULL,
+    // Feedback
+    feedbackStatus: text("feedback_status", { enum: feedbackStatuses }).default("pending"),
+    feedbackSubmittedAt: text("feedback_submitted_at"),
+    feedbackContent: text("feedback_content"), // JSON or text
 
-    UNIQUE(interview_id, interviewer_id)
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_participants_interview").on(table.interviewId),
+    index("idx_participants_interviewer").on(table.interviewerId),
+    uniqueIndex("idx_participants_unique").on(table.interviewId, table.interviewerId),
+  ]
 );
 
-CREATE INDEX idx_participants_interview ON interview_participants(interview_id);
-CREATE INDEX idx_participants_interviewer ON interview_participants(interviewer_id);
+export type InterviewParticipant = typeof interviewParticipants.$inferSelect;
+export type NewInterviewParticipant = typeof interviewParticipants.$inferInsert;
 
--- Scheduling tokens (for candidate self-scheduling)
-CREATE TABLE scheduling_tokens (
-    id TEXT PRIMARY KEY,
-    application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
-    stage_id TEXT NOT NULL,
+// =============================================================================
+// SCHEDULING TOKENS
+// =============================================================================
 
-    token TEXT UNIQUE NOT NULL,
-    expires_at TEXT NOT NULL,
-    used_at TEXT,                   -- NULL until used
+/**
+ * Scheduling Tokens
+ * Magic links for candidates to self-schedule interviews.
+ */
+export const schedulingTokens = sqliteTable(
+  "scheduling_tokens",
+  {
+    id: text("id").primaryKey(),
+    applicationId: text("application_id")
+      .notNull()
+      .references(() => applications.id, { onDelete: "cascade" }),
+    stageId: text("stage_id").notNull(),
 
-    created_at TEXT NOT NULL
+    token: text("token").unique().notNull(),
+    expiresAt: text("expires_at").notNull(),
+    usedAt: text("used_at"), // NULL until used
+
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_scheduling_tokens_token").on(table.token),
+    index("idx_scheduling_tokens_application").on(table.applicationId),
+  ]
 );
 
-CREATE INDEX idx_scheduling_tokens_token ON scheduling_tokens(token);
-CREATE INDEX idx_scheduling_tokens_application ON scheduling_tokens(application_id);
+export type SchedulingToken = typeof schedulingTokens.$inferSelect;
+export type NewSchedulingToken = typeof schedulingTokens.$inferInsert;
+```
+
+### Update `src/db/schema/index.ts`
+
+```typescript
+// Add to existing exports
+export * from "./interviews";
 ```
 
 ### Schema Updates to Existing Tables
 
-```sql
--- Add to jobs table
-ALTER TABLE jobs ADD COLUMN interview_pipeline_config TEXT;  -- JSON: stage configurations
-
--- Add to applications table
-ALTER TABLE applications ADD COLUMN current_stage_id TEXT;
-ALTER TABLE applications ADD COLUMN stage_updated_at TEXT;
+```typescript
+// In src/db/schema/applications.ts - add fields:
+currentStageId: text("current_stage_id"),
+stageUpdatedAt: text("stage_updated_at"),
 ```
 
 ---
