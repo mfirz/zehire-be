@@ -73,9 +73,13 @@ applicationsRoute.get("/:applicationId", async (c) => {
       case "free_text":
       case "yes_no":
       case "single_choice":
-      case "date":
-      case "url":
         value = answer.answerText;
+        break;
+      case "date":
+        value = answer.answerDate;
+        break;
+      case "url":
+        value = answer.answerUrl;
         break;
       case "multiple_choice":
         value = answer.answerValues ? JSON.parse(answer.answerValues) : null;
