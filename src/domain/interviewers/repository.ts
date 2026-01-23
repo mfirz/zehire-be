@@ -200,6 +200,21 @@ export class InterviewerRepository {
   }
 
   /**
+   * Update calendar tokens only (for token refresh).
+   */
+  async updateCalendarTokens(id: string, encryptedTokens: string): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .update(interviewers)
+      .set({
+        calendarTokens: encryptedTokens,
+        updatedAt: now,
+      })
+      .where(eq(interviewers.id, id));
+  }
+
+  /**
    * Regenerate magic token (for resend invite).
    */
   async regenerateMagicToken(id: string): Promise<string> {

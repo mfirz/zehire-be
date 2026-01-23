@@ -36,6 +36,11 @@ import {
   calculateSlots,
   type InterviewerFreeBusy,
 } from "../../domain/availability";
+import { InterviewerRepository } from "../../domain/interviewers";
+import { CalendarService, type CalendarTokens } from "../../domain/calendar";
+import { VideoCallService, type VideoTokens, type VideoMeetingInput } from "../../domain/video";
+import { createDb, orgs, jobs } from "../../db";
+import { eq } from "drizzle-orm";
 import type { Env } from "../../types/bindings";
 
 // Variables available in the scheduling context
@@ -87,7 +92,7 @@ scheduleRoutes.get("/:token", async (c) => {
       company: ctx.job.companyName,
     },
     stage: {
-      name: ctx.stageId, // TODO: Get stage name from pipeline
+      name: ctx.stageName,
       durationMinutes: stageConfig?.durationMinutes ?? 45,
     },
     interviewers: (stageConfig?.interviewers ?? []).map((i) => ({
@@ -145,6 +150,7 @@ scheduleRoutes.get("/:token/slots", async (c) => {
 
   // Get availability data
   const availRepo = new AvailabilityRepository(c.env.DB);
+  const interviewerRepo = new InterviewerRepository(c.env.DB);
   const interviewerIds = interviewerList.map((i) => i.id);
 
   const allWindows = await Promise.all(
@@ -157,11 +163,52 @@ scheduleRoutes.get("/:token/slots", async (c) => {
   const windows = allWindows.flat();
   const blockedDates = allBlockedDates.flat();
 
-  // TODO: Integrate with calendar free/busy from Phase 9B
-  const freeBusy: InterviewerFreeBusy[] = interviewerIds.map((id) => ({
+  // Get calendar free/busy if available
+  let freeBusy: InterviewerFreeBusy[] = interviewerIds.map((id) => ({
     interviewerId: id,
     busy: [],
   }));
+
+  // Try to get calendar free/busy data (requires TOKEN_ENCRYPTION_KEY)
+  if (c.env.TOKEN_ENCRYPTION_KEY) {
+    try {
+      const calendarService = new CalendarService(c.env as unknown as Record<string, string>);
+
+      // Get full interviewer records for calendar access
+      const fullInterviewers = await Promise.all(
+        interviewerIds.map((id) => interviewerRepo.findById(id))
+      );
+      const validInterviewers = fullInterviewers.filter(
+        (i): i is NonNullable<typeof i> => i !== null
+      );
+
+      // Token update callback
+      const updateTokens = async (interviewerId: string, tokens: CalendarTokens) => {
+        const encrypted = await calendarService.encryptTokensForStorage(tokens);
+        await interviewerRepo.updateCalendarTokens(interviewerId, encrypted);
+      };
+
+      // Get free/busy from calendar providers
+      const busyMap = await calendarService.getFreeBusy(
+        validInterviewers,
+        startDate,
+        endDate,
+        updateTokens
+      );
+
+      // Convert to InterviewerFreeBusy format
+      freeBusy = interviewerIds.map((id) => ({
+        interviewerId: id,
+        busy: (busyMap.get(id) ?? []).map((period) => ({
+          start: period.start,
+          end: period.end,
+        })),
+      }));
+    } catch (error) {
+      console.error("Failed to get calendar free/busy, proceeding with availability only:", error);
+      // Continue with empty free/busy - slots will be based on availability windows only
+    }
+  }
 
   // Calculate slots
   const slots = calculateSlots({
@@ -256,6 +303,77 @@ scheduleRoutes.post("/:token/book", async (c) => {
     );
   }
 
+  // Try to create video call link
+  let videoCallLink: string | undefined;
+  let videoCallProvider: "google_meet" | "zoom" | "teams" | "other" | undefined;
+
+  if (c.env.TOKEN_ENCRYPTION_KEY) {
+    try {
+      const db = createDb(c.env.DB);
+      const interviewerRepo = new InterviewerRepository(c.env.DB);
+
+      // Get job's org for video provider settings
+      const jobRecord = await db.select({ orgId: jobs.orgId }).from(jobs).where(eq(jobs.id, ctx.job.id)).get();
+      const org = jobRecord?.orgId
+        ? await db.select().from(orgs).where(eq(orgs.id, jobRecord.orgId)).get()
+        : null;
+
+      // Get the first interviewer with connected calendar
+      const interviewersData = await Promise.all(
+        interviewerIds.map((id) => interviewerRepo.findById(id))
+      );
+      const primaryInterviewer = interviewersData.find(
+        (i) => i?.calendarConnected && i.calendarProvider
+      );
+
+      if (primaryInterviewer && org) {
+        const videoService = new VideoCallService(c.env as unknown as Record<string, string>);
+
+        const startTime = new Date(scheduledAt);
+        const endTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
+
+        const meetingInput: VideoMeetingInput = {
+          title: `Interview: ${ctx.application.candidateName} - ${ctx.job.title}`,
+          description: `Interview for ${ctx.job.title} position`,
+          startTime,
+          endTime,
+          timezone: input.timezone,
+          attendees: [
+            { email: ctx.application.candidateEmail, name: ctx.application.candidateName },
+          ],
+        };
+
+        const meeting = await videoService.createMeeting(
+          org,
+          primaryInterviewer,
+          meetingInput,
+          async (tokens: VideoTokens) => {
+            const encrypted = await videoService.encryptTokensForStorage(tokens);
+            await db.update(orgs).set({ videoTokens: encrypted }).where(eq(orgs.id, org.id));
+          },
+          async (tokens: CalendarTokens) => {
+            const calService = new CalendarService(c.env as unknown as Record<string, string>);
+            const encrypted = await calService.encryptTokensForStorage(tokens);
+            await interviewerRepo.updateCalendarTokens(primaryInterviewer.id, encrypted);
+          }
+        );
+
+        videoCallLink = meeting.joinUrl;
+        // Infer provider from org settings
+        if (org.videoCallProvider === "zoom") {
+          videoCallProvider = "zoom";
+        } else if (primaryInterviewer.calendarProvider === "google") {
+          videoCallProvider = "google_meet";
+        } else if (primaryInterviewer.calendarProvider === "outlook") {
+          videoCallProvider = "teams";
+        }
+      }
+    } catch (error) {
+      // Video call creation failed - log but continue with booking
+      console.error("Failed to create video call:", error);
+    }
+  }
+
   // Create the interview
   const interview = await schedulingRepo.createInterview(
     {
@@ -265,9 +383,8 @@ scheduleRoutes.post("/:token/book", async (c) => {
       scheduledAt,
       durationMinutes,
       timezone: input.timezone,
-      // TODO: Create video call link via VideoCallService
-      videoCallLink: undefined,
-      videoCallProvider: undefined,
+      videoCallLink,
+      videoCallProvider,
     },
     interviewerIds
   );

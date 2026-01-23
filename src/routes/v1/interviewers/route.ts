@@ -16,12 +16,15 @@
 
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
+import { eq } from "drizzle-orm";
 
+import { createDb, orgs } from "../../../db";
 import {
   CreateInterviewerSchema,
   InterviewerRepository,
   UpdateInterviewerSchema,
 } from "../../../domain/interviewers";
+import { createEmailGatewayFromEnv } from "../../../modules/email";
 import { jwtAuth } from "../../../middleware/auth";
 import type { AuthVariables, Env } from "../../../types/bindings";
 
@@ -44,6 +47,7 @@ interviewersRoute.post("/", zValidator("json", CreateInterviewerSchema), async (
   const input = c.req.valid("json");
 
   const repo = new InterviewerRepository(c.env.DB);
+  const db = createDb(c.env.DB);
 
   // Check if interviewer already exists
   const existing = await repo.findByEmail(orgId, input.email);
@@ -51,17 +55,32 @@ interviewersRoute.post("/", zValidator("json", CreateInterviewerSchema), async (
     return c.json({ error: "Interviewer with this email already exists" }, 409);
   }
 
+  // Get org name for email
+  const org = await db.select({ name: orgs.name }).from(orgs).where(eq(orgs.id, orgId)).get();
+  const companyName = org?.name ?? "Your company";
+
   // Create interviewer
   const interviewer = await repo.create(orgId, input.email, input.name);
-
-  // TODO: Send invite email with magic link
-  // For now, just return the interviewer with the magic token for testing
   const magicLink = `${c.env.APP_BASE_URL}/i/${interviewer.magicToken}`;
+
+  // Send invite email
+  try {
+    const emailGateway = createEmailGatewayFromEnv(c.env);
+    await emailGateway.sendInterviewerInvite({
+      email: interviewer.email,
+      name: interviewer.name,
+      companyName,
+      setupUrl: magicLink,
+    });
+  } catch (error) {
+    // Log but don't fail - interviewer is created, email can be resent
+    console.error("Failed to send interviewer invite email:", error);
+  }
 
   return c.json(
     {
       ...repo.toResponse(interviewer),
-      // Include magic link in response for now (remove in production)
+      // Include magic link in dev for testing
       _magicLink: c.env.ENVIRONMENT === "development" ? magicLink : undefined,
     },
     201
@@ -179,6 +198,7 @@ interviewersRoute.post("/:id/resend", async (c) => {
   const interviewerId = c.req.param("id");
 
   const repo = new InterviewerRepository(c.env.DB);
+  const db = createDb(c.env.DB);
 
   // Verify interviewer belongs to org
   const existing = await repo.findByIdAndOrg(interviewerId, orgId);
@@ -186,16 +206,31 @@ interviewersRoute.post("/:id/resend", async (c) => {
     return c.json({ error: "Interviewer not found" }, 404);
   }
 
+  // Get org name for email
+  const org = await db.select({ name: orgs.name }).from(orgs).where(eq(orgs.id, orgId)).get();
+  const companyName = org?.name ?? "Your company";
+
   // Regenerate magic token
   const newToken = await repo.regenerateMagicToken(interviewerId);
-
-  // TODO: Send invite email with new magic link
   const magicLink = `${c.env.APP_BASE_URL}/i/${newToken}`;
+
+  // Send invite email
+  try {
+    const emailGateway = createEmailGatewayFromEnv(c.env);
+    await emailGateway.sendInterviewerInvite({
+      email: existing.email,
+      name: existing.name,
+      companyName,
+      setupUrl: magicLink,
+    });
+  } catch (error) {
+    console.error("Failed to send interviewer invite email:", error);
+    return c.json({ error: "Failed to send invite email" }, 500);
+  }
 
   return c.json({
     success: true,
     message: "Invite resent successfully",
-    // Include magic link in response for now (remove in production)
     _magicLink: c.env.ENVIRONMENT === "development" ? magicLink : undefined,
   });
 });

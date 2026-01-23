@@ -92,9 +92,13 @@ interviewerRoutes.use("/:token/*", async (c, next): Promise<Response | void> => 
  */
 interviewerRoutes.get("/:token", async (c) => {
   const interviewer = c.get("interviewer");
+  const schedulingRepo = new SchedulingRepository(c.env.DB);
 
-  // TODO: Get upcoming interviews and pending feedback
-  // For now, return basic interviewer info
+  // Get upcoming interviews and pending feedback
+  const [upcomingInterviews, pendingFeedback] = await Promise.all([
+    schedulingRepo.getUpcomingInterviewsWithDetails(interviewer.id),
+    schedulingRepo.getPendingFeedbackWithDetails(interviewer.id),
+  ]);
 
   return c.json({
     id: interviewer.id,
@@ -104,24 +108,21 @@ interviewerRoutes.get("/:token", async (c) => {
     status: interviewer.status,
     calendarConnected: interviewer.calendarConnected ?? false,
     calendarProvider: interviewer.calendarProvider,
-    // Placeholder for future data
-    upcomingInterviews: [],
-    pendingFeedback: [],
-  });
-});
-
-/**
- * GET /i/:token/interviews
- *
- * List interviewer's upcoming interviews.
- */
-interviewerRoutes.get("/:token/interviews", async (c) => {
-  // TODO: Query scheduled_interviews and interview_participants (Phase 9E)
-  // const interviewer = c.get("interviewer");
-  // For now, return empty list
-
-  return c.json({
-    interviews: [],
+    upcomingInterviews: upcomingInterviews.map((i) => ({
+      id: i.id,
+      scheduledAt: i.scheduledAt,
+      durationMinutes: i.durationMinutes,
+      videoCallLink: i.videoCallLink,
+      candidateName: i.candidateName,
+      jobTitle: i.jobTitle,
+      stageName: i.stageName,
+    })),
+    pendingFeedback: pendingFeedback.map((i) => ({
+      interviewId: i.id,
+      completedAt: i.scheduledAt,
+      candidateName: i.candidateName,
+      jobTitle: i.jobTitle,
+    })),
   });
 });
 
@@ -355,22 +356,26 @@ interviewerRoutes.get("/:token/interviews", async (c) => {
   const schedulingRepo = new SchedulingRepository(c.env.DB);
 
   const [upcomingInterviews, pendingFeedback] = await Promise.all([
-    schedulingRepo.getUpcomingInterviews(interviewer.id),
-    schedulingRepo.getPendingFeedback(interviewer.id),
+    schedulingRepo.getUpcomingInterviewsWithDetails(interviewer.id),
+    schedulingRepo.getPendingFeedbackWithDetails(interviewer.id),
   ]);
 
   return c.json({
-    upcomingInterviews: upcomingInterviews.map((interview) => ({
-      id: interview.id,
-      scheduledAt: interview.scheduledAt,
-      durationMinutes: interview.durationMinutes,
-      videoCallLink: interview.videoCallLink,
-      // TODO: Add candidate and job info
+    upcomingInterviews: upcomingInterviews.map((i) => ({
+      id: i.id,
+      scheduledAt: i.scheduledAt,
+      durationMinutes: i.durationMinutes,
+      videoCallLink: i.videoCallLink,
+      candidateName: i.candidateName,
+      jobTitle: i.jobTitle,
+      companyName: i.companyName,
+      stageName: i.stageName,
     })),
-    pendingFeedback: pendingFeedback.map((interview) => ({
-      interviewId: interview.id,
-      completedAt: interview.scheduledAt,
-      // TODO: Add candidate info
+    pendingFeedback: pendingFeedback.map((i) => ({
+      interviewId: i.id,
+      completedAt: i.scheduledAt,
+      candidateName: i.candidateName,
+      jobTitle: i.jobTitle,
     })),
   });
 });

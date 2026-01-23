@@ -28,6 +28,8 @@ import {
   calculateSlots,
   type InterviewerFreeBusy,
 } from "../../../domain/availability";
+import { InterviewerRepository } from "../../../domain/interviewers";
+import { CalendarService, type CalendarTokens } from "../../../domain/calendar";
 import type { AuthVariables, Env } from "../../../types/bindings";
 
 type AppContext = Context<{ Bindings: Env; Variables: AuthVariables }>;
@@ -299,6 +301,7 @@ export async function previewStageAvailability(c: AppContext) {
 
   // Get availability data for all interviewers
   const availRepo = new AvailabilityRepository(c.env.DB);
+  const interviewerRepo = new InterviewerRepository(c.env.DB);
   const interviewerIds = interviewerList.map((i) => i.id);
 
   // Fetch availability windows and blocked dates for all interviewers
@@ -313,11 +316,51 @@ export async function previewStageAvailability(c: AppContext) {
   const windows = allWindows.flat();
   const blockedDates = allBlockedDates.flat();
 
-  // For now, assume no calendar free/busy data (Phase 9B integration would add this)
-  const freeBusy: InterviewerFreeBusy[] = interviewerIds.map((id) => ({
+  // Get calendar free/busy if available
+  let freeBusy: InterviewerFreeBusy[] = interviewerIds.map((id) => ({
     interviewerId: id,
     busy: [],
   }));
+
+  // Try to get calendar free/busy data (requires TOKEN_ENCRYPTION_KEY)
+  if (c.env.TOKEN_ENCRYPTION_KEY) {
+    try {
+      const calendarService = new CalendarService(c.env as unknown as Record<string, string>);
+
+      // Get full interviewer records for calendar access
+      const fullInterviewers = await Promise.all(
+        interviewerIds.map((id) => interviewerRepo.findById(id))
+      );
+      const validInterviewers = fullInterviewers.filter(
+        (i): i is NonNullable<typeof i> => i !== null
+      );
+
+      // Token update callback
+      const updateTokens = async (interviewerId: string, tokens: CalendarTokens) => {
+        const encrypted = await calendarService.encryptTokensForStorage(tokens);
+        await interviewerRepo.updateCalendarTokens(interviewerId, encrypted);
+      };
+
+      // Get free/busy from calendar providers
+      const busyMap = await calendarService.getFreeBusy(
+        validInterviewers,
+        startDate,
+        endDate,
+        updateTokens
+      );
+
+      // Convert to InterviewerFreeBusy format
+      freeBusy = interviewerIds.map((id) => ({
+        interviewerId: id,
+        busy: (busyMap.get(id) ?? []).map((period) => ({
+          start: period.start,
+          end: period.end,
+        })),
+      }));
+    } catch (error) {
+      console.error("Failed to get calendar free/busy, proceeding with availability only:", error);
+    }
+  }
 
   // Calculate slots
   const slots = calculateSlots({

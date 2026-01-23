@@ -48,8 +48,10 @@ export interface SchedulingContext {
     id: string;
     title: string;
     companyName: string | null;
+    pipeline: string | null;
   };
   stageId: string;
+  stageName: string;
 }
 
 export interface InterviewWithParticipants extends ScheduledInterview {
@@ -146,12 +148,13 @@ export class SchedulingRepository {
       return null;
     }
 
-    // Get job details
+    // Get job details including pipeline for stage name
     const job = await this.db
       .select({
         id: jobs.id,
         title: jobs.title,
         companyName: jobs.companyName,
+        pipeline: jobs.pipeline,
       })
       .from(jobs)
       .innerJoin(applications, eq(applications.jobId, jobs.id))
@@ -173,8 +176,10 @@ export class SchedulingRepository {
         id: job.id,
         title: job.title,
         companyName: job.companyName,
+        pipeline: job.pipeline,
       },
       stageId: tokenRecord.stageId,
+      stageName: getStageName(job.pipeline, tokenRecord.stageId),
     };
   }
 
@@ -523,6 +528,112 @@ export class SchedulingRepository {
     return results;
   }
 
+  /**
+   * Get upcoming interviews with candidate and job details.
+   */
+  async getUpcomingInterviewsWithDetails(
+    interviewerId: string
+  ): Promise<InterviewWithDetails[]> {
+    const now = new Date().toISOString();
+
+    const results = await this.db
+      .select({
+        id: scheduledInterviews.id,
+        scheduledAt: scheduledInterviews.scheduledAt,
+        durationMinutes: scheduledInterviews.durationMinutes,
+        videoCallLink: scheduledInterviews.videoCallLink,
+        stageId: scheduledInterviews.stageId,
+        candidateName: applications.candidateName,
+        jobTitle: jobs.title,
+        companyName: jobs.companyName,
+        pipeline: jobs.pipeline,
+      })
+      .from(scheduledInterviews)
+      .innerJoin(
+        interviewParticipants,
+        eq(interviewParticipants.interviewId, scheduledInterviews.id)
+      )
+      .innerJoin(applications, eq(scheduledInterviews.applicationId, applications.id))
+      .innerJoin(jobs, eq(scheduledInterviews.jobId, jobs.id))
+      .where(
+        and(
+          eq(interviewParticipants.interviewerId, interviewerId),
+          eq(scheduledInterviews.status, "scheduled"),
+          gt(scheduledInterviews.scheduledAt, now)
+        )
+      )
+      .orderBy(scheduledInterviews.scheduledAt)
+      .all();
+
+    return results.map((r) => ({
+      id: r.id,
+      scheduledAt: r.scheduledAt,
+      durationMinutes: r.durationMinutes,
+      videoCallLink: r.videoCallLink,
+      stageId: r.stageId,
+      stageName: getStageName(r.pipeline, r.stageId),
+      candidateName: r.candidateName,
+      jobTitle: r.jobTitle,
+      companyName: r.companyName,
+    }));
+  }
+
+  /**
+   * Get pending feedback with candidate and job details.
+   */
+  async getPendingFeedbackWithDetails(
+    interviewerId: string
+  ): Promise<InterviewWithDetails[]> {
+    const now = new Date().toISOString();
+
+    const results = await this.db
+      .select({
+        id: scheduledInterviews.id,
+        scheduledAt: scheduledInterviews.scheduledAt,
+        durationMinutes: scheduledInterviews.durationMinutes,
+        videoCallLink: scheduledInterviews.videoCallLink,
+        stageId: scheduledInterviews.stageId,
+        candidateName: applications.candidateName,
+        jobTitle: jobs.title,
+        companyName: jobs.companyName,
+        pipeline: jobs.pipeline,
+      })
+      .from(scheduledInterviews)
+      .innerJoin(
+        interviewParticipants,
+        eq(interviewParticipants.interviewId, scheduledInterviews.id)
+      )
+      .innerJoin(applications, eq(scheduledInterviews.applicationId, applications.id))
+      .innerJoin(jobs, eq(scheduledInterviews.jobId, jobs.id))
+      .where(
+        and(
+          eq(interviewParticipants.interviewerId, interviewerId),
+          eq(interviewParticipants.feedbackStatus, "pending"),
+          eq(scheduledInterviews.status, "scheduled")
+        )
+      )
+      .all();
+
+    // Filter to past interviews (interview has ended) and map to include stage name
+    return results
+      .filter((r) => {
+        const endTime = new Date(r.scheduledAt);
+        endTime.setMinutes(endTime.getMinutes() + r.durationMinutes);
+        return endTime.toISOString() < now;
+      })
+      .map((r) => ({
+        id: r.id,
+        scheduledAt: r.scheduledAt,
+        durationMinutes: r.durationMinutes,
+        videoCallLink: r.videoCallLink,
+        stageId: r.stageId,
+        stageName: getStageName(r.pipeline, r.stageId),
+        candidateName: r.candidateName,
+        jobTitle: r.jobTitle,
+        companyName: r.companyName,
+      }));
+  }
+
   // ===========================================================================
   // REMINDER QUERIES (Cron Jobs)
   // ===========================================================================
@@ -699,4 +810,33 @@ export interface FeedbackReminderRecord {
   feedbackStatus: string | null;
   candidateName: string;
   jobTitle: string;
+}
+
+// Types for interviewer dashboard
+export interface InterviewWithDetails {
+  id: string;
+  scheduledAt: string;
+  durationMinutes: number;
+  videoCallLink: string | null;
+  stageId: string;
+  stageName: string;
+  candidateName: string;
+  jobTitle: string;
+  companyName: string | null;
+}
+
+/**
+ * Helper to extract stage name from pipeline JSON.
+ */
+function getStageName(pipelineJson: string | null, stageId: string): string {
+  if (!pipelineJson) {
+    return stageId;
+  }
+  try {
+    const pipeline = JSON.parse(pipelineJson);
+    const round = pipeline.interviewRounds?.find((r: { id: string }) => r.id === stageId);
+    return round?.name ?? stageId;
+  } catch {
+    return stageId;
+  }
 }

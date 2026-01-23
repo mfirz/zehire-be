@@ -35,4 +35,5 @@ export {
   type InterviewWithParticipants,
   type InterviewReminderContext,
   type FeedbackReminderRecord,
+  type InterviewWithDetails,
 } from "./repository";
