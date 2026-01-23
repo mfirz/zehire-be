@@ -2,7 +2,7 @@
 
 ## Overview
 
-Enable candidate self-scheduling for interviews with interviewer availability management and Google Calendar integration.
+Enable candidate self-scheduling for interviews with interviewer availability management and calendar integration.
 
 **Core Philosophy:**
 - Automation-first, not admin-heavy
@@ -10,6 +10,7 @@ Enable candidate self-scheduling for interviews with interviewer availability ma
 - Interviewers set availability once
 - Candidates self-schedule after passing assessment
 - Calendar sync handles real-time conflicts
+- **Provider-agnostic**: Supports Google Calendar, Outlook, and future providers via abstraction layer
 
 ---
 
@@ -62,12 +63,30 @@ Interviewer receives email:
 │                                                     │
 │  Connect your calendar so candidates can book:      │
 │                                                     │
-│  [Connect Google Calendar]                          │
+│  [Set up my calendar]                               │
 │                                                     │
 │  Takes 30 seconds. One-time setup.                  │
 └─────────────────────────────────────────────────────┘
     ↓
-Clicks link → Google OAuth
+Clicks link → Calendar provider selection:
+┌─────────────────────────────────────────────────────┐
+│  Connect your calendar                              │
+│                                                     │
+│  Choose your calendar provider:                     │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ 🔵 Google Calendar                          │   │
+│  └─────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ 🔷 Microsoft Outlook                        │   │
+│  └─────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ 🍎 Apple Calendar (coming soon)             │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+    ↓
+Selects provider → OAuth flow for that provider
     ↓
 Set availability windows:
 ┌─────────────────────────────────────────────────────┐
@@ -282,6 +301,9 @@ import { applications } from "./applications";
 export const interviewerStatuses = ["invited", "active", "inactive"] as const;
 export type InterviewerStatus = (typeof interviewerStatuses)[number];
 
+export const calendarProviders = ["google", "outlook", "apple"] as const;
+export type CalendarProvider = (typeof calendarProviders)[number];
+
 export const interviewModes = ["any_one", "all_required"] as const;
 export type InterviewMode = (typeof interviewModes)[number];
 
@@ -316,12 +338,11 @@ export const interviewers = sqliteTable(
     magicToken: text("magic_token").unique().notNull(),
     magicTokenExpiresAt: text("magic_token_expires_at"),
 
-    // Google Calendar integration
-    googleCalendarConnected: integer("google_calendar_connected", { mode: "boolean" }).default(false),
-    googleAccessToken: text("google_access_token"),      // Encrypted
-    googleRefreshToken: text("google_refresh_token"),    // Encrypted
-    googleTokenExpiresAt: text("google_token_expires_at"),
-    googleCalendarId: text("google_calendar_id"),        // Primary calendar ID
+    // Calendar integration (provider-agnostic)
+    calendarProvider: text("calendar_provider", { enum: calendarProviders }), // "google", "outlook", "apple"
+    calendarConnected: integer("calendar_connected", { mode: "boolean" }).default(false),
+    calendarTokens: text("calendar_tokens"),     // Encrypted JSON: { accessToken, refreshToken, expiresAt, ... }
+    calendarId: text("calendar_id"),             // Primary calendar ID (provider-specific format)
 
     // Timezone (for availability windows)
     timezone: text("timezone").default("UTC"),
@@ -634,12 +655,13 @@ DELETE /i/:token/block-date/:dateId        Unblock a date
 POST   /i/:token/unavailable-today         Quick "I'm out today"
 ```
 
-### Google Calendar OAuth
+### Calendar Provider OAuth (Provider-Agnostic)
 
 ```
-GET    /auth/google/callback               OAuth callback
-GET    /i/:token/connect-google            Start Google OAuth flow
-POST   /i/:token/disconnect-google         Disconnect Google Calendar
+GET    /auth/calendar/:provider/callback   OAuth callback (google, outlook, apple)
+GET    /i/:token/connect/:provider         Start OAuth flow for provider
+POST   /i/:token/disconnect                Disconnect calendar
+GET    /i/:token/calendar-status           Check calendar connection status
 ```
 
 ### Interview Stage Configuration (Recruiter)
@@ -696,7 +718,8 @@ Create/invite an interviewer.
   "email": "sarah@company.com",
   "name": "Sarah Chen",
   "status": "invited",
-  "googleCalendarConnected": false,
+  "calendarConnected": false,
+  "calendarProvider": null,
   "invitedAt": "2025-01-22T10:00:00Z",
   "magicLinkUrl": "https://zehire.com/i/xyz789token"
 }
@@ -713,7 +736,8 @@ Interviewer dashboard via magic link.
     "id": "int_abc123",
     "email": "sarah@company.com",
     "name": "Sarah Chen",
-    "googleCalendarConnected": true,
+    "calendarConnected": true,
+    "calendarProvider": "google",
     "timezone": "Asia/Jakarta"
   },
   "availability": [
@@ -882,145 +906,775 @@ Configure interview stage.
 
 ---
 
-## Google Calendar Integration
+## Calendar Provider Abstraction
 
-### OAuth Flow
+### Architecture Overview
 
 ```
-1. Interviewer clicks "Connect Google Calendar"
+┌─────────────────────────────────────────────────────────────────┐
+│                     CalendarService                              │
+│  (Orchestrates availability checks, event creation, etc.)        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   CalendarProvider Interface                     │
+│  getFreeBusy(), createEvent(), deleteEvent(), refreshToken()     │
+└─────────────────────────────────────────────────────────────────┘
+           │                    │                    │
+           ▼                    ▼                    ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│ GoogleCalendar  │  │ OutlookCalendar │  │  AppleCalendar  │
+│    Provider     │  │    Provider     │  │    Provider     │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+```
+
+### CalendarProvider Interface
+
+```typescript
+// src/domain/calendar/types.ts
+
+export type CalendarProviderType = "google" | "outlook" | "apple";
+
+export interface BusyPeriod {
+  start: string;  // ISO datetime
+  end: string;    // ISO datetime
+}
+
+export interface CalendarTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: string;  // ISO datetime
+  // Provider-specific fields stored here
+  [key: string]: unknown;
+}
+
+export interface CalendarEventInput {
+  summary: string;
+  description: string;
+  startTime: string;      // ISO datetime
+  endTime: string;        // ISO datetime
+  timezone: string;
+  attendees: Array<{ email: string; name?: string }>;
+  createVideoCall?: boolean;
+}
+
+export interface CalendarEvent {
+  id: string;
+  link: string;           // Calendar event link
+  videoCallLink?: string; // Video call link if created
+}
+
+export interface OAuthConfig {
+  authUrl: string;
+  tokenUrl: string;
+  clientId: string;
+  clientSecret: string;
+  scopes: string[];
+  redirectUri: string;
+}
+```
+
+### CalendarProvider Interface
+
+```typescript
+// src/domain/calendar/provider.ts
+
+export interface CalendarProvider {
+  readonly type: CalendarProviderType;
+
+  /**
+   * Get OAuth configuration for this provider.
+   */
+  getOAuthConfig(): OAuthConfig;
+
+  /**
+   * Build the OAuth authorization URL.
+   */
+  getAuthorizationUrl(state: string): string;
+
+  /**
+   * Exchange authorization code for tokens.
+   */
+  exchangeCodeForTokens(code: string): Promise<CalendarTokens>;
+
+  /**
+   * Refresh expired access token.
+   */
+  refreshAccessToken(tokens: CalendarTokens): Promise<CalendarTokens>;
+
+  /**
+   * Check if tokens need refresh.
+   */
+  needsRefresh(tokens: CalendarTokens): boolean;
+
+  /**
+   * Get free/busy information for a date range.
+   */
+  getFreeBusy(
+    tokens: CalendarTokens,
+    calendarId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<BusyPeriod[]>;
+
+  /**
+   * Create a calendar event.
+   */
+  createEvent(
+    tokens: CalendarTokens,
+    calendarId: string,
+    event: CalendarEventInput
+  ): Promise<CalendarEvent>;
+
+  /**
+   * Delete a calendar event.
+   */
+  deleteEvent(
+    tokens: CalendarTokens,
+    calendarId: string,
+    eventId: string
+  ): Promise<void>;
+
+  /**
+   * Update a calendar event.
+   */
+  updateEvent(
+    tokens: CalendarTokens,
+    calendarId: string,
+    eventId: string,
+    event: Partial<CalendarEventInput>
+  ): Promise<CalendarEvent>;
+}
+```
+
+### Google Calendar Provider Implementation
+
+```typescript
+// src/domain/calendar/providers/google.ts
+
+import type { CalendarProvider, CalendarTokens, BusyPeriod, CalendarEventInput, CalendarEvent } from "../types";
+
+export class GoogleCalendarProvider implements CalendarProvider {
+  readonly type = "google" as const;
+
+  private clientId: string;
+  private clientSecret: string;
+  private redirectUri: string;
+
+  constructor(env: { GOOGLE_CLIENT_ID: string; GOOGLE_CLIENT_SECRET: string; GOOGLE_REDIRECT_URI: string }) {
+    this.clientId = env.GOOGLE_CLIENT_ID;
+    this.clientSecret = env.GOOGLE_CLIENT_SECRET;
+    this.redirectUri = env.GOOGLE_REDIRECT_URI;
+  }
+
+  getOAuthConfig() {
+    return {
+      authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+      tokenUrl: "https://oauth2.googleapis.com/token",
+      clientId: this.clientId,
+      clientSecret: this.clientSecret,
+      scopes: [
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/calendar.events",
+      ],
+      redirectUri: this.redirectUri,
+    };
+  }
+
+  getAuthorizationUrl(state: string): string {
+    const config = this.getOAuthConfig();
+    const params = new URLSearchParams({
+      client_id: config.clientId,
+      redirect_uri: config.redirectUri,
+      response_type: "code",
+      scope: config.scopes.join(" "),
+      access_type: "offline",
+      prompt: "consent",
+      state,
+    });
+    return `${config.authUrl}?${params}`;
+  }
+
+  async exchangeCodeForTokens(code: string): Promise<CalendarTokens> {
+    const config = this.getOAuthConfig();
+    const response = await fetch(config.tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        redirect_uri: config.redirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
+
+    const data = await response.json();
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresAt: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+    };
+  }
+
+  async refreshAccessToken(tokens: CalendarTokens): Promise<CalendarTokens> {
+    const config = this.getOAuthConfig();
+    const response = await fetch(config.tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        refresh_token: tokens.refreshToken,
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        grant_type: "refresh_token",
+      }),
+    });
+
+    const data = await response.json();
+    return {
+      ...tokens,
+      accessToken: data.access_token,
+      expiresAt: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+    };
+  }
+
+  needsRefresh(tokens: CalendarTokens): boolean {
+    const expiresAt = new Date(tokens.expiresAt);
+    const now = new Date();
+    // Refresh if expires in less than 5 minutes
+    return expiresAt.getTime() - now.getTime() < 5 * 60 * 1000;
+  }
+
+  async getFreeBusy(
+    tokens: CalendarTokens,
+    calendarId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<BusyPeriod[]> {
+    const response = await fetch(
+      "https://www.googleapis.com/calendar/v3/freeBusy",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${tokens.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          timeMin: startDate.toISOString(),
+          timeMax: endDate.toISOString(),
+          items: [{ id: calendarId || "primary" }],
+        }),
+      }
+    );
+
+    const data = await response.json();
+    return data.calendars[calendarId || "primary"].busy;
+  }
+
+  async createEvent(
+    tokens: CalendarTokens,
+    calendarId: string,
+    event: CalendarEventInput
+  ): Promise<CalendarEvent> {
+    const body: Record<string, unknown> = {
+      summary: event.summary,
+      description: event.description,
+      start: { dateTime: event.startTime, timeZone: event.timezone },
+      end: { dateTime: event.endTime, timeZone: event.timezone },
+      attendees: event.attendees.map((a) => ({ email: a.email })),
+    };
+
+    if (event.createVideoCall) {
+      body.conferenceData = {
+        createRequest: {
+          requestId: crypto.randomUUID(),
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
+      };
+    }
+
+    const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${calendarId || "primary"}/events`);
+    if (event.createVideoCall) {
+      url.searchParams.set("conferenceDataVersion", "1");
+    }
+
+    const response = await fetch(url.toString(), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+    return {
+      id: data.id,
+      link: data.htmlLink,
+      videoCallLink: data.conferenceData?.entryPoints?.[0]?.uri,
+    };
+  }
+
+  async deleteEvent(tokens: CalendarTokens, calendarId: string, eventId: string): Promise<void> {
+    await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${calendarId || "primary"}/events/${eventId}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${tokens.accessToken}` },
+      }
+    );
+  }
+
+  async updateEvent(
+    tokens: CalendarTokens,
+    calendarId: string,
+    eventId: string,
+    event: Partial<CalendarEventInput>
+  ): Promise<CalendarEvent> {
+    const body: Record<string, unknown> = {};
+    if (event.summary) body.summary = event.summary;
+    if (event.description) body.description = event.description;
+    if (event.startTime && event.timezone) {
+      body.start = { dateTime: event.startTime, timeZone: event.timezone };
+    }
+    if (event.endTime && event.timezone) {
+      body.end = { dateTime: event.endTime, timeZone: event.timezone };
+    }
+
+    const response = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${calendarId || "primary"}/events/${eventId}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${tokens.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      }
+    );
+
+    const data = await response.json();
+    return {
+      id: data.id,
+      link: data.htmlLink,
+      videoCallLink: data.conferenceData?.entryPoints?.[0]?.uri,
+    };
+  }
+}
+```
+
+### Outlook Calendar Provider Implementation
+
+```typescript
+// src/domain/calendar/providers/outlook.ts
+
+import type { CalendarProvider, CalendarTokens, BusyPeriod, CalendarEventInput, CalendarEvent } from "../types";
+
+export class OutlookCalendarProvider implements CalendarProvider {
+  readonly type = "outlook" as const;
+
+  private clientId: string;
+  private clientSecret: string;
+  private redirectUri: string;
+
+  constructor(env: { OUTLOOK_CLIENT_ID: string; OUTLOOK_CLIENT_SECRET: string; OUTLOOK_REDIRECT_URI: string }) {
+    this.clientId = env.OUTLOOK_CLIENT_ID;
+    this.clientSecret = env.OUTLOOK_CLIENT_SECRET;
+    this.redirectUri = env.OUTLOOK_REDIRECT_URI;
+  }
+
+  getOAuthConfig() {
+    return {
+      authUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+      tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+      clientId: this.clientId,
+      clientSecret: this.clientSecret,
+      scopes: [
+        "Calendars.ReadWrite",
+        "OnlineMeetings.ReadWrite",
+        "offline_access",
+      ],
+      redirectUri: this.redirectUri,
+    };
+  }
+
+  getAuthorizationUrl(state: string): string {
+    const config = this.getOAuthConfig();
+    const params = new URLSearchParams({
+      client_id: config.clientId,
+      redirect_uri: config.redirectUri,
+      response_type: "code",
+      scope: config.scopes.join(" "),
+      state,
+    });
+    return `${config.authUrl}?${params}`;
+  }
+
+  async exchangeCodeForTokens(code: string): Promise<CalendarTokens> {
+    const config = this.getOAuthConfig();
+    const response = await fetch(config.tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        redirect_uri: config.redirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
+
+    const data = await response.json();
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresAt: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+    };
+  }
+
+  async refreshAccessToken(tokens: CalendarTokens): Promise<CalendarTokens> {
+    const config = this.getOAuthConfig();
+    const response = await fetch(config.tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        refresh_token: tokens.refreshToken,
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        grant_type: "refresh_token",
+      }),
+    });
+
+    const data = await response.json();
+    return {
+      ...tokens,
+      accessToken: data.access_token,
+      expiresAt: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+    };
+  }
+
+  needsRefresh(tokens: CalendarTokens): boolean {
+    const expiresAt = new Date(tokens.expiresAt);
+    const now = new Date();
+    return expiresAt.getTime() - now.getTime() < 5 * 60 * 1000;
+  }
+
+  async getFreeBusy(
+    tokens: CalendarTokens,
+    calendarId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<BusyPeriod[]> {
+    // Microsoft Graph API uses different endpoint
+    const response = await fetch(
+      "https://graph.microsoft.com/v1.0/me/calendar/getSchedule",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${tokens.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          schedules: [calendarId || "me"],
+          startTime: { dateTime: startDate.toISOString(), timeZone: "UTC" },
+          endTime: { dateTime: endDate.toISOString(), timeZone: "UTC" },
+        }),
+      }
+    );
+
+    const data = await response.json();
+    const schedule = data.value?.[0]?.scheduleItems || [];
+    return schedule.map((item: { start: { dateTime: string }; end: { dateTime: string } }) => ({
+      start: item.start.dateTime,
+      end: item.end.dateTime,
+    }));
+  }
+
+  async createEvent(
+    tokens: CalendarTokens,
+    calendarId: string,
+    event: CalendarEventInput
+  ): Promise<CalendarEvent> {
+    const body: Record<string, unknown> = {
+      subject: event.summary,
+      body: { contentType: "text", content: event.description },
+      start: { dateTime: event.startTime, timeZone: event.timezone },
+      end: { dateTime: event.endTime, timeZone: event.timezone },
+      attendees: event.attendees.map((a) => ({
+        emailAddress: { address: a.email, name: a.name },
+        type: "required",
+      })),
+    };
+
+    if (event.createVideoCall) {
+      body.isOnlineMeeting = true;
+      body.onlineMeetingProvider = "teamsForBusiness";
+    }
+
+    const response = await fetch(
+      "https://graph.microsoft.com/v1.0/me/events",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${tokens.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      }
+    );
+
+    const data = await response.json();
+    return {
+      id: data.id,
+      link: data.webLink,
+      videoCallLink: data.onlineMeeting?.joinUrl,
+    };
+  }
+
+  async deleteEvent(tokens: CalendarTokens, calendarId: string, eventId: string): Promise<void> {
+    await fetch(
+      `https://graph.microsoft.com/v1.0/me/events/${eventId}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${tokens.accessToken}` },
+      }
+    );
+  }
+
+  async updateEvent(
+    tokens: CalendarTokens,
+    calendarId: string,
+    eventId: string,
+    event: Partial<CalendarEventInput>
+  ): Promise<CalendarEvent> {
+    const body: Record<string, unknown> = {};
+    if (event.summary) body.subject = event.summary;
+    if (event.description) body.body = { contentType: "text", content: event.description };
+    if (event.startTime && event.timezone) {
+      body.start = { dateTime: event.startTime, timeZone: event.timezone };
+    }
+    if (event.endTime && event.timezone) {
+      body.end = { dateTime: event.endTime, timeZone: event.timezone };
+    }
+
+    const response = await fetch(
+      `https://graph.microsoft.com/v1.0/me/events/${eventId}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${tokens.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      }
+    );
+
+    const data = await response.json();
+    return {
+      id: data.id,
+      link: data.webLink,
+      videoCallLink: data.onlineMeeting?.joinUrl,
+    };
+  }
+}
+```
+
+### Calendar Provider Factory
+
+```typescript
+// src/domain/calendar/factory.ts
+
+import type { CalendarProvider, CalendarProviderType } from "./types";
+import { GoogleCalendarProvider } from "./providers/google";
+import { OutlookCalendarProvider } from "./providers/outlook";
+
+export function createCalendarProvider(
+  type: CalendarProviderType,
+  env: Record<string, string>
+): CalendarProvider {
+  switch (type) {
+    case "google":
+      return new GoogleCalendarProvider({
+        GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID,
+        GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
+        GOOGLE_REDIRECT_URI: env.GOOGLE_REDIRECT_URI,
+      });
+    case "outlook":
+      return new OutlookCalendarProvider({
+        OUTLOOK_CLIENT_ID: env.OUTLOOK_CLIENT_ID,
+        OUTLOOK_CLIENT_SECRET: env.OUTLOOK_CLIENT_SECRET,
+        OUTLOOK_REDIRECT_URI: env.OUTLOOK_REDIRECT_URI,
+      });
+    case "apple":
+      throw new Error("Apple Calendar provider not yet implemented");
+    default:
+      throw new Error(`Unknown calendar provider: ${type}`);
+  }
+}
+```
+
+### Calendar Service (Orchestration Layer)
+
+```typescript
+// src/domain/calendar/service.ts
+
+import type { CalendarProvider, CalendarTokens, BusyPeriod, CalendarEventInput, CalendarEvent } from "./types";
+import { createCalendarProvider } from "./factory";
+import type { Interviewer } from "../../db/schema";
+
+export class CalendarService {
+  private env: Record<string, string>;
+
+  constructor(env: Record<string, string>) {
+    this.env = env;
+  }
+
+  /**
+   * Get provider for an interviewer.
+   */
+  private getProvider(interviewer: Interviewer): CalendarProvider {
+    if (!interviewer.calendarProvider) {
+      throw new Error("Interviewer has no calendar connected");
+    }
+    return createCalendarProvider(interviewer.calendarProvider, this.env);
+  }
+
+  /**
+   * Get tokens, refreshing if needed.
+   */
+  private async getValidTokens(
+    interviewer: Interviewer,
+    provider: CalendarProvider,
+    updateTokens: (tokens: CalendarTokens) => Promise<void>
+  ): Promise<CalendarTokens> {
+    const tokens: CalendarTokens = JSON.parse(interviewer.calendarTokens || "{}");
+
+    if (provider.needsRefresh(tokens)) {
+      const newTokens = await provider.refreshAccessToken(tokens);
+      await updateTokens(newTokens);
+      return newTokens;
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Get free/busy for multiple interviewers (handles different providers).
+   */
+  async getFreeBusy(
+    interviewers: Interviewer[],
+    startDate: Date,
+    endDate: Date,
+    updateTokens: (interviewerId: string, tokens: CalendarTokens) => Promise<void>
+  ): Promise<Map<string, BusyPeriod[]>> {
+    const results = new Map<string, BusyPeriod[]>();
+
+    await Promise.all(
+      interviewers.map(async (interviewer) => {
+        if (!interviewer.calendarConnected || !interviewer.calendarProvider) {
+          results.set(interviewer.id, []);
+          return;
+        }
+
+        try {
+          const provider = this.getProvider(interviewer);
+          const tokens = await this.getValidTokens(
+            interviewer,
+            provider,
+            (t) => updateTokens(interviewer.id, t)
+          );
+          const busy = await provider.getFreeBusy(
+            tokens,
+            interviewer.calendarId || "primary",
+            startDate,
+            endDate
+          );
+          results.set(interviewer.id, busy);
+        } catch (error) {
+          console.error(`Failed to get free/busy for ${interviewer.id}:`, error);
+          results.set(interviewer.id, []);
+        }
+      })
+    );
+
+    return results;
+  }
+
+  /**
+   * Create calendar events for all participants.
+   */
+  async createEvents(
+    interviewers: Interviewer[],
+    event: CalendarEventInput,
+    updateTokens: (interviewerId: string, tokens: CalendarTokens) => Promise<void>
+  ): Promise<Map<string, CalendarEvent>> {
+    const results = new Map<string, CalendarEvent>();
+
+    // Create on primary interviewer's calendar first (with video call)
+    const primaryInterviewer = interviewers[0];
+    if (primaryInterviewer.calendarConnected && primaryInterviewer.calendarProvider) {
+      const provider = this.getProvider(primaryInterviewer);
+      const tokens = await this.getValidTokens(
+        primaryInterviewer,
+        provider,
+        (t) => updateTokens(primaryInterviewer.id, t)
+      );
+      const calendarEvent = await provider.createEvent(
+        tokens,
+        primaryInterviewer.calendarId || "primary",
+        { ...event, createVideoCall: true }
+      );
+      results.set(primaryInterviewer.id, calendarEvent);
+
+      // Update event for other interviewers to include video call link
+      const eventWithVideo = { ...event, description: `${event.description}\n\nVideo Call: ${calendarEvent.videoCallLink}` };
+
+      // Create on other interviewers' calendars (no new video call)
+      await Promise.all(
+        interviewers.slice(1).map(async (interviewer) => {
+          if (!interviewer.calendarConnected || !interviewer.calendarProvider) return;
+
+          try {
+            const p = this.getProvider(interviewer);
+            const t = await this.getValidTokens(interviewer, p, (tk) => updateTokens(interviewer.id, tk));
+            const evt = await p.createEvent(t, interviewer.calendarId || "primary", eventWithVideo);
+            results.set(interviewer.id, evt);
+          } catch (error) {
+            console.error(`Failed to create event for ${interviewer.id}:`, error);
+          }
+        })
+      );
+    }
+
+    return results;
+  }
+}
+```
+
+### OAuth Flow (Provider-Agnostic)
+
+```
+1. Interviewer selects provider (Google, Outlook, etc.)
     ↓
-2. Redirect to Google OAuth:
-   GET https://accounts.google.com/o/oauth2/v2/auth
-   ?client_id={CLIENT_ID}
-   &redirect_uri={CALLBACK_URL}
-   &response_type=code
-   &scope=https://www.googleapis.com/auth/calendar.readonly
-          https://www.googleapis.com/auth/calendar.events
-   &access_type=offline
-   &prompt=consent
-   &state={interviewer_token}
+2. Redirect to provider's OAuth:
+   GET /i/:token/connect/:provider
+    ↓
+   System calls provider.getAuthorizationUrl(state)
+    ↓
+   Redirects to provider's consent screen
     ↓
 3. User grants permission
     ↓
 4. Callback receives code:
-   GET /auth/google/callback?code={CODE}&state={interviewer_token}
+   GET /auth/calendar/:provider/callback?code={CODE}&state={interviewer_token}
     ↓
 5. Exchange code for tokens:
-   POST https://oauth2.googleapis.com/token
+   provider.exchangeCodeForTokens(code)
     ↓
-6. Store encrypted tokens in interviewer record
+6. Store encrypted tokens + provider type in interviewer record
     ↓
 7. Redirect to availability setup page
-```
-
-### Reading Free/Busy
-
-```typescript
-// When candidate opens scheduling page
-async function getAvailableSlots(
-  interviewerIds: string[],
-  startDate: Date,
-  endDate: Date,
-  durationMinutes: number,
-  mode: 'any_one' | 'all_required'
-): Promise<TimeSlot[]> {
-
-  // 1. Get availability windows for all interviewers
-  const windows = await getAvailabilityWindows(interviewerIds);
-
-  // 2. Get blocked dates
-  const blockedDates = await getBlockedDates(interviewerIds, startDate, endDate);
-
-  // 3. Query Google Calendar free/busy for each interviewer
-  const freeBusy = await Promise.all(
-    interviewerIds.map(id => queryGoogleFreeBusy(id, startDate, endDate))
-  );
-
-  // 4. Calculate available slots
-  const slots = calculateSlots(windows, blockedDates, freeBusy, durationMinutes, mode);
-
-  return slots;
-}
-
-// Google Calendar API call
-async function queryGoogleFreeBusy(
-  interviewerId: string,
-  startDate: Date,
-  endDate: Date
-): Promise<BusyPeriod[]> {
-  const interviewer = await getInterviewer(interviewerId);
-  const accessToken = await getValidAccessToken(interviewer);
-
-  const response = await fetch(
-    'https://www.googleapis.com/calendar/v3/freeBusy',
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        timeMin: startDate.toISOString(),
-        timeMax: endDate.toISOString(),
-        items: [{ id: interviewer.googleCalendarId || 'primary' }]
-      })
-    }
-  );
-
-  const data = await response.json();
-  return data.calendars[interviewer.googleCalendarId || 'primary'].busy;
-}
-```
-
-### Creating Calendar Events
-
-```typescript
-// When candidate books a slot
-async function createCalendarEvents(
-  interview: ScheduledInterview,
-  interviewers: Interviewer[],
-  candidate: Candidate
-): Promise<void> {
-
-  const eventDetails = {
-    summary: `Interview: ${candidate.name} - ${interview.jobTitle}`,
-    description: `
-      Candidate: ${candidate.name}
-      Position: ${interview.jobTitle}
-      Stage: ${interview.stageName}
-
-      Interview Guide: ${interview.guideUrl}
-    `,
-    start: {
-      dateTime: interview.scheduledAt,
-      timeZone: interview.timezone
-    },
-    end: {
-      dateTime: addMinutes(interview.scheduledAt, interview.durationMinutes),
-      timeZone: interview.timezone
-    },
-    conferenceData: {
-      createRequest: {
-        requestId: interview.id,
-        conferenceSolutionKey: { type: 'hangoutsMeet' }
-      }
-    },
-    attendees: [
-      { email: candidate.email },
-      ...interviewers.map(i => ({ email: i.email }))
-    ]
-  };
-
-  // Create event on primary interviewer's calendar
-  const primaryInterviewer = interviewers[0];
-  const response = await createGoogleEvent(primaryInterviewer, eventDetails);
-
-  // Store event ID and video call link
-  await updateInterview(interview.id, {
-    videoCallLink: response.hangoutLink,
-    calendarEventId: response.id
-  });
-}
 ```
 
 ---
@@ -1214,17 +1868,18 @@ async function handleCalendarDisconnect(interviewerId: string) {
 - [ ] Magic link generation and validation
 - [ ] Basic interviewer dashboard
 
-### Phase 9B: Google Calendar Integration (Week 2-3)
-- [ ] OAuth flow implementation
-- [ ] Token storage (encrypted)
-- [ ] Free/busy API integration
-- [ ] Calendar event creation
+### Phase 9B: Calendar Provider Abstraction (Week 2-3)
+- [ ] CalendarProvider interface definition
+- [ ] Google Calendar provider implementation
+- [ ] CalendarService orchestration layer
+- [ ] Token encryption/decryption utilities
+- [ ] OAuth flow (provider-agnostic callback)
 
 ### Phase 9C: Availability Management (Week 3-4)
 - [ ] Availability windows CRUD
 - [ ] Blocked dates management
 - [ ] "I'm unavailable today" quick action
-- [ ] Slot calculation engine
+- [ ] Slot calculation engine (uses CalendarService)
 
 ### Phase 9D: Stage Configuration (Week 4)
 - [ ] Stage config endpoints
@@ -1244,6 +1899,11 @@ async function handleCalendarDisconnect(interviewerId: string) {
 - [ ] Rescheduling and cancellation
 - [ ] Race condition handling
 
+### Phase 9G: Additional Providers (Future)
+- [ ] Outlook Calendar provider implementation
+- [ ] Apple Calendar provider implementation
+- [ ] Provider switching support (disconnect + reconnect)
+
 ---
 
 ## Security Considerations
@@ -1253,10 +1913,12 @@ async function handleCalendarDisconnect(interviewerId: string) {
    - Tokens are single-use for booking (not for dashboard access)
    - Optional: IP-based rate limiting
 
-2. **Google OAuth Tokens**
-   - Stored encrypted at rest
+2. **Calendar OAuth Tokens (Provider-Agnostic)**
+   - Stored encrypted at rest (AES-256-GCM)
+   - Stored as JSON in `calendarTokens` field
    - Refresh tokens used to get new access tokens
-   - Automatic token refresh before expiry
+   - Automatic token refresh before expiry (5 min buffer)
+   - Provider type stored separately for factory lookup
 
 3. **Scheduling Tokens**
    - Expire after 7 days
@@ -1267,6 +1929,11 @@ async function handleCalendarDisconnect(interviewerId: string) {
    - Interviewers only see their own interviews
    - Candidates only see their own scheduling options
    - Recruiters see all within their org
+
+5. **Provider Credentials**
+   - Client IDs/Secrets stored in environment variables
+   - Different credentials per provider (GOOGLE_*, OUTLOOK_*, etc.)
+   - Never exposed to frontend
 
 ---
 
