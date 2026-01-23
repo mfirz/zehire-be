@@ -33,4 +33,6 @@ export {
   SchedulingRepository,
   type SchedulingContext,
   type InterviewWithParticipants,
+  type InterviewReminderContext,
+  type FeedbackReminderRecord,
 } from "./repository";

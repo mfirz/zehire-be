@@ -62,6 +62,17 @@ max_retries = 3
 dead_letter_queue = "zehire-jobs-dlq-dev"
 
 # =============================================================================
+# CRON TRIGGERS
+# =============================================================================
+# Scheduled tasks for interview reminders.
+# Runs hourly to send:
+# - Interview reminders (24h before)
+# - Feedback reminders (2h after interview ends)
+
+[triggers]
+crons = ["0 * * * *"]  # Every hour at minute 0
+
+# =============================================================================
 # ENVIRONMENT: STAGING
 # =============================================================================
 [env.staging]
@@ -98,6 +109,10 @@ queue = "zehire-jobs-staging"
 max_batch_size = 1
 max_retries = 3
 dead_letter_queue = "zehire-jobs-dlq-staging"
+
+# Staging cron triggers
+[env.staging.triggers]
+crons = ["0 * * * *"]  # Every hour at minute 0
 
 # =============================================================================
 # ENVIRONMENT: PRODUCTION
@@ -136,6 +151,10 @@ queue = "zehire-jobs-production"
 max_batch_size = 1
 max_retries = 3
 dead_letter_queue = "zehire-jobs-dlq-production"
+
+# Production cron triggers
+[env.production.triggers]
+crons = ["0 * * * *"]  # Every hour at minute 0
 
 # =============================================================================
 # SECRETS (set via wrangler secret put)

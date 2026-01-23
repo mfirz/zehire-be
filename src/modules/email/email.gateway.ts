@@ -33,17 +33,224 @@ export interface SendMagicLinkInput {
 }
 
 /**
+ * Input for sending an interviewer invite email.
+ */
+export interface SendInterviewerInviteInput {
+  /** Interviewer email address */
+  email: string;
+
+  /** Interviewer name */
+  name: string | null;
+
+  /** Company/org name */
+  companyName: string;
+
+  /** Magic link URL to set up calendar */
+  setupUrl: string;
+}
+
+/**
+ * Input for sending interview confirmation email.
+ */
+export interface SendInterviewConfirmationInput {
+  /** Candidate email address */
+  candidateEmail: string;
+
+  /** Candidate name */
+  candidateName: string;
+
+  /** Job title */
+  jobTitle: string;
+
+  /** Company name */
+  companyName: string;
+
+  /** Stage name (e.g., "Technical Interview") */
+  stageName: string;
+
+  /** Scheduled date/time in ISO format */
+  scheduledAt: string;
+
+  /** Interview duration in minutes */
+  durationMinutes: number;
+
+  /** Timezone for display */
+  timezone: string;
+
+  /** Video call link */
+  videoCallLink: string | null;
+
+  /** Interviewer names */
+  interviewerNames: string[];
+
+  /** ICS calendar file content */
+  icsContent: string;
+}
+
+/**
+ * Input for sending interview reminder email (24h before).
+ */
+export interface SendInterviewReminderInput {
+  /** Recipient email (candidate or interviewer) */
+  email: string;
+
+  /** Recipient name */
+  name: string;
+
+  /** Whether this is for candidate or interviewer */
+  recipientType: "candidate" | "interviewer";
+
+  /** Job title */
+  jobTitle: string;
+
+  /** Company name */
+  companyName: string;
+
+  /** Scheduled date/time in ISO format */
+  scheduledAt: string;
+
+  /** Interview duration in minutes */
+  durationMinutes: number;
+
+  /** Timezone for display */
+  timezone: string;
+
+  /** Video call link */
+  videoCallLink: string | null;
+
+  /** For interviewer: candidate name */
+  candidateName?: string | undefined;
+
+  /** For interviewer: link to interview guide */
+  interviewGuideUrl?: string | undefined;
+}
+
+/**
+ * Input for sending feedback reminder email (2h after interview).
+ */
+export interface SendFeedbackReminderInput {
+  /** Interviewer email */
+  email: string;
+
+  /** Interviewer name */
+  interviewerName: string;
+
+  /** Candidate name */
+  candidateName: string;
+
+  /** Job title */
+  jobTitle: string;
+
+  /** Link to submit feedback */
+  feedbackUrl: string;
+}
+
+/**
+ * Input for sending interview reschedule email.
+ */
+export interface SendInterviewRescheduleInput {
+  /** Recipient email */
+  email: string;
+
+  /** Recipient name */
+  name: string;
+
+  /** Whether this is for candidate or interviewer */
+  recipientType: "candidate" | "interviewer";
+
+  /** Job title */
+  jobTitle: string;
+
+  /** Company name */
+  companyName: string;
+
+  /** Original scheduled time */
+  originalScheduledAt: string;
+
+  /** New scheduled time */
+  newScheduledAt: string;
+
+  /** Interview duration in minutes */
+  durationMinutes: number;
+
+  /** Timezone for display */
+  timezone: string;
+
+  /** Video call link */
+  videoCallLink: string | null;
+
+  /** Updated ICS calendar file content */
+  icsContent: string;
+}
+
+/**
+ * Input for sending interview cancellation email.
+ */
+export interface SendInterviewCancellationInput {
+  /** Recipient email */
+  email: string;
+
+  /** Recipient name */
+  name: string;
+
+  /** Whether this is for candidate or interviewer */
+  recipientType: "candidate" | "interviewer";
+
+  /** Job title */
+  jobTitle: string;
+
+  /** Company name */
+  companyName: string;
+
+  /** Original scheduled time */
+  scheduledAt: string;
+
+  /** Timezone for display */
+  timezone: string;
+
+  /** Cancellation reason (optional) */
+  reason?: string | undefined;
+}
+
+/**
  * Email gateway interface.
  * Implement this interface to add a new email provider.
  */
 export interface EmailGateway {
   /**
    * Send a magic link email for authentication.
-   *
-   * @param input - Magic link details
-   * @throws Error if email delivery fails
    */
   sendMagicLink(input: SendMagicLinkInput): Promise<void>;
+
+  /**
+   * Send an interviewer invite email.
+   */
+  sendInterviewerInvite(input: SendInterviewerInviteInput): Promise<void>;
+
+  /**
+   * Send interview confirmation email to candidate.
+   */
+  sendInterviewConfirmation(input: SendInterviewConfirmationInput): Promise<void>;
+
+  /**
+   * Send interview reminder email (24h before).
+   */
+  sendInterviewReminder(input: SendInterviewReminderInput): Promise<void>;
+
+  /**
+   * Send feedback reminder email to interviewer (2h after).
+   */
+  sendFeedbackReminder(input: SendFeedbackReminderInput): Promise<void>;
+
+  /**
+   * Send interview reschedule notification.
+   */
+  sendInterviewReschedule(input: SendInterviewRescheduleInput): Promise<void>;
+
+  /**
+   * Send interview cancellation notification.
+   */
+  sendInterviewCancellation(input: SendInterviewCancellationInput): Promise<void>;
 }
 
 // =============================================================================
@@ -63,9 +270,86 @@ export class ConsoleEmailGateway implements EmailGateway {
     console.log(`Magic Link: ${input.magicLinkUrl}`);
     console.log(`Expires At: ${input.expiresAt.toISOString()}`);
     console.log("========================================");
+  }
 
-    // Simulate async operation
-    await Promise.resolve();
+  async sendInterviewerInvite(input: SendInterviewerInviteInput): Promise<void> {
+    console.log("========================================");
+    console.log("[EmailGateway] Interviewer Invite (Console)");
+    console.log("========================================");
+    console.log(`To: ${input.email}`);
+    console.log(`Name: ${input.name ?? "N/A"}`);
+    console.log(`Company: ${input.companyName}`);
+    console.log(`Setup URL: ${input.setupUrl}`);
+    console.log("========================================");
+  }
+
+  async sendInterviewConfirmation(input: SendInterviewConfirmationInput): Promise<void> {
+    console.log("========================================");
+    console.log("[EmailGateway] Interview Confirmation (Console)");
+    console.log("========================================");
+    console.log(`To: ${input.candidateEmail}`);
+    console.log(`Candidate: ${input.candidateName}`);
+    console.log(`Job: ${input.jobTitle} at ${input.companyName}`);
+    console.log(`Stage: ${input.stageName}`);
+    console.log(`When: ${input.scheduledAt} (${input.timezone})`);
+    console.log(`Duration: ${input.durationMinutes} minutes`);
+    console.log(`Video Call: ${input.videoCallLink ?? "N/A"}`);
+    console.log(`Interviewers: ${input.interviewerNames.join(", ")}`);
+    console.log(`ICS Content: ${input.icsContent.substring(0, 100)}...`);
+    console.log("========================================");
+  }
+
+  async sendInterviewReminder(input: SendInterviewReminderInput): Promise<void> {
+    console.log("========================================");
+    console.log(`[EmailGateway] Interview Reminder - ${input.recipientType} (Console)`);
+    console.log("========================================");
+    console.log(`To: ${input.email}`);
+    console.log(`Name: ${input.name}`);
+    console.log(`Job: ${input.jobTitle} at ${input.companyName}`);
+    console.log(`When: ${input.scheduledAt} (${input.timezone})`);
+    console.log(`Duration: ${input.durationMinutes} minutes`);
+    console.log(`Video Call: ${input.videoCallLink ?? "N/A"}`);
+    if (input.candidateName) console.log(`Candidate: ${input.candidateName}`);
+    if (input.interviewGuideUrl) console.log(`Guide: ${input.interviewGuideUrl}`);
+    console.log("========================================");
+  }
+
+  async sendFeedbackReminder(input: SendFeedbackReminderInput): Promise<void> {
+    console.log("========================================");
+    console.log("[EmailGateway] Feedback Reminder (Console)");
+    console.log("========================================");
+    console.log(`To: ${input.email}`);
+    console.log(`Interviewer: ${input.interviewerName}`);
+    console.log(`Candidate: ${input.candidateName}`);
+    console.log(`Job: ${input.jobTitle}`);
+    console.log(`Feedback URL: ${input.feedbackUrl}`);
+    console.log("========================================");
+  }
+
+  async sendInterviewReschedule(input: SendInterviewRescheduleInput): Promise<void> {
+    console.log("========================================");
+    console.log(`[EmailGateway] Interview Rescheduled - ${input.recipientType} (Console)`);
+    console.log("========================================");
+    console.log(`To: ${input.email}`);
+    console.log(`Name: ${input.name}`);
+    console.log(`Job: ${input.jobTitle} at ${input.companyName}`);
+    console.log(`Original: ${input.originalScheduledAt}`);
+    console.log(`New: ${input.newScheduledAt} (${input.timezone})`);
+    console.log(`Duration: ${input.durationMinutes} minutes`);
+    console.log(`Video Call: ${input.videoCallLink ?? "N/A"}`);
+    console.log("========================================");
+  }
+
+  async sendInterviewCancellation(input: SendInterviewCancellationInput): Promise<void> {
+    console.log("========================================");
+    console.log(`[EmailGateway] Interview Cancelled - ${input.recipientType} (Console)`);
+    console.log("========================================");
+    console.log(`To: ${input.email}`);
+    console.log(`Name: ${input.name}`);
+    console.log(`Job: ${input.jobTitle} at ${input.companyName}`);
+    console.log(`Was Scheduled: ${input.scheduledAt} (${input.timezone})`);
+    if (input.reason) console.log(`Reason: ${input.reason}`);
+    console.log("========================================");
   }
 }
 

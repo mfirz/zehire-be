@@ -522,4 +522,181 @@ export class SchedulingRepository {
 
     return results;
   }
+
+  // ===========================================================================
+  // REMINDER QUERIES (Cron Jobs)
+  // ===========================================================================
+
+  /**
+   * Interview with full context for sending reminders.
+   */
+  async getInterviewWithContext(interviewId: string): Promise<InterviewReminderContext | null> {
+    // Get interview with application and job info
+    const result = await this.db
+      .select({
+        interview: scheduledInterviews,
+        candidateName: applications.candidateName,
+        candidateEmail: applications.candidateEmail,
+        jobTitle: jobs.title,
+        companyName: jobs.companyName,
+      })
+      .from(scheduledInterviews)
+      .innerJoin(applications, eq(scheduledInterviews.applicationId, applications.id))
+      .innerJoin(jobs, eq(scheduledInterviews.jobId, jobs.id))
+      .where(eq(scheduledInterviews.id, interviewId))
+      .get();
+
+    if (!result) {
+      return null;
+    }
+
+    // Get participants with interviewer details
+    const participantRecords = await this.db
+      .select({
+        id: interviewParticipants.id,
+        interviewerId: interviewParticipants.interviewerId,
+        interviewerName: interviewers.name,
+        interviewerEmail: interviewers.email,
+        feedbackStatus: interviewParticipants.feedbackStatus,
+      })
+      .from(interviewParticipants)
+      .innerJoin(interviewers, eq(interviewParticipants.interviewerId, interviewers.id))
+      .where(eq(interviewParticipants.interviewId, interviewId))
+      .all();
+
+    return {
+      interview: result.interview,
+      candidate: {
+        name: result.candidateName,
+        email: result.candidateEmail,
+      },
+      job: {
+        title: result.jobTitle,
+        companyName: result.companyName,
+      },
+      participants: participantRecords,
+    };
+  }
+
+  /**
+   * Find interviews that need 24h reminder.
+   * Returns interviews scheduled between 23-24 hours from now
+   * that haven't had their reminder sent yet.
+   */
+  async getInterviewsNeedingReminder(): Promise<ScheduledInterview[]> {
+    const now = new Date();
+    const in23Hours = new Date(now.getTime() + 23 * 60 * 60 * 1000);
+    const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    const interviews = await this.db
+      .select()
+      .from(scheduledInterviews)
+      .where(
+        and(
+          eq(scheduledInterviews.status, "scheduled"),
+          isNull(scheduledInterviews.reminderSentAt),
+          gt(scheduledInterviews.scheduledAt, in23Hours.toISOString()),
+          // scheduledAt <= in24Hours
+        )
+      )
+      .all();
+
+    // Filter to only interviews within 23-24h window
+    return interviews.filter((i) => i.scheduledAt <= in24Hours.toISOString());
+  }
+
+  /**
+   * Mark interview reminder as sent.
+   */
+  async markReminderSent(interviewId: string): Promise<void> {
+    const now = new Date().toISOString();
+
+    await this.db
+      .update(scheduledInterviews)
+      .set({ reminderSentAt: now })
+      .where(eq(scheduledInterviews.id, interviewId));
+  }
+
+  /**
+   * Find participants who need feedback reminder.
+   * Returns participants for interviews that ended 2-3 hours ago
+   * who haven't submitted feedback yet.
+   */
+  async getParticipantsNeedingFeedbackReminder(): Promise<FeedbackReminderRecord[]> {
+    const now = new Date();
+    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+    const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+
+    // Get completed interviews (past scheduled time + duration) with pending feedback
+    const results = await this.db
+      .select({
+        interviewId: scheduledInterviews.id,
+        scheduledAt: scheduledInterviews.scheduledAt,
+        durationMinutes: scheduledInterviews.durationMinutes,
+        participantId: interviewParticipants.id,
+        interviewerId: interviewParticipants.interviewerId,
+        interviewerEmail: interviewers.email,
+        interviewerName: interviewers.name,
+        feedbackStatus: interviewParticipants.feedbackStatus,
+        candidateName: applications.candidateName,
+        jobTitle: jobs.title,
+      })
+      .from(scheduledInterviews)
+      .innerJoin(
+        interviewParticipants,
+        eq(interviewParticipants.interviewId, scheduledInterviews.id)
+      )
+      .innerJoin(interviewers, eq(interviewParticipants.interviewerId, interviewers.id))
+      .innerJoin(applications, eq(scheduledInterviews.applicationId, applications.id))
+      .innerJoin(jobs, eq(scheduledInterviews.jobId, jobs.id))
+      .where(
+        and(
+          eq(scheduledInterviews.status, "scheduled"),
+          eq(interviewParticipants.feedbackStatus, "pending"),
+          isNull(interviewParticipants.feedbackSubmittedAt)
+        )
+      )
+      .all();
+
+    // Filter to interviews that ended 2-3 hours ago
+    return results.filter((r) => {
+      const interviewEnd = new Date(r.scheduledAt);
+      interviewEnd.setMinutes(interviewEnd.getMinutes() + r.durationMinutes);
+
+      return interviewEnd >= threeHoursAgo && interviewEnd <= twoHoursAgo;
+    });
+  }
+}
+
+// Types for cron job queries
+export interface InterviewReminderContext {
+  interview: ScheduledInterview;
+  candidate: {
+    name: string;
+    email: string;
+  };
+  job: {
+    title: string;
+    companyName: string | null;
+  };
+  participants: Array<{
+    id: string;
+    interviewerId: string;
+    interviewerName: string | null;
+    interviewerEmail: string;
+    feedbackStatus: string | null;
+  }>;
+}
+
+export interface FeedbackReminderRecord {
+  interviewId: string;
+  scheduledAt: string;
+  durationMinutes: number;
+  participantId: string;
+  interviewerId: string;
+  interviewerEmail: string;
+  interviewerName: string | null;
+  feedbackStatus: string | null;
+  candidateName: string;
+  jobTitle: string;
 }
