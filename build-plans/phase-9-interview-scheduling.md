@@ -280,6 +280,19 @@ If "All required" mode (or no backup):
 
 ## Database Schema (Drizzle ORM)
 
+### Updates to Existing Tables
+
+```typescript
+// In src/db/schema/organizations.ts - add field:
+videoCallProvider: text("video_call_provider", {
+  enum: ["calendar_native", "zoom", "google_meet", "teams"]
+}).default("calendar_native"),
+
+// In src/db/schema/applications.ts - add fields:
+currentStageId: text("current_stage_id"),
+stageUpdatedAt: text("stage_updated_at"),
+```
+
 ### New File: `src/db/schema/interviews.ts`
 
 ```typescript
@@ -527,6 +540,9 @@ export const scheduledInterviews = sqliteTable(
     // Calendar events
     candidateCalendarEventId: text("candidate_calendar_event_id"),
 
+    // Reminders
+    reminderSentAt: text("reminder_sent_at"),  // ISO datetime, null until 24h reminder sent
+
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -618,14 +634,6 @@ export type NewSchedulingToken = typeof schedulingTokens.$inferInsert;
 ```typescript
 // Add to existing exports
 export * from "./interviews";
-```
-
-### Schema Updates to Existing Tables
-
-```typescript
-// In src/db/schema/applications.ts - add fields:
-currentStageId: text("current_stage_id"),
-stageUpdatedAt: text("stage_updated_at"),
 ```
 
 ---
@@ -2008,10 +2016,291 @@ export interface EmailGateway {
 
 ---
 
+## Video Call Provider
+
+Video call creation is **decoupled from calendar provider** to give organizations flexibility.
+
+### Configuration
+
+```typescript
+// Organization-level setting
+videoCallProvider: "calendar_native" | "zoom" | "google_meet" | "teams"
+```
+
+| Setting | Behavior |
+|---------|----------|
+| `calendar_native` (default) | Uses calendar's native video: Google Calendar → Meet, Outlook → Teams |
+| `zoom` | Always creates Zoom meeting (requires Zoom OAuth) |
+| `google_meet` | Always creates Google Meet (requires Google OAuth) |
+| `teams` | Always creates Teams meeting (requires Microsoft OAuth) |
+
+### Why Decoupled?
+
+- Company may use Outlook calendars but prefer Zoom for interviews
+- Google Meet only available if someone has Google Calendar
+- Teams only available if someone has Outlook
+- Zoom works regardless of calendar provider
+
+### Schema Addition
+
+```typescript
+// In organizations table
+videoCallProvider: text("video_call_provider", {
+  enum: ["calendar_native", "zoom", "google_meet", "teams"]
+}).default("calendar_native"),
+```
+
+### Video Provider Interface
+
+```typescript
+// src/domain/video/types.ts
+
+export interface VideoCallProvider {
+  readonly type: "google_meet" | "zoom" | "teams";
+
+  createMeeting(input: {
+    title: string;
+    startTime: Date;
+    durationMinutes: number;
+    attendees: string[];
+  }): Promise<{ meetingUrl: string; meetingId: string }>;
+
+  deleteMeeting(meetingId: string): Promise<void>;
+}
+```
+
+---
+
+## Interview Feedback Structure
+
+Aligned with Zehire's **signal-first philosophy** — no numeric ratings, no scores.
+
+### Design Principles (from zehire-product-summary.md)
+
+- ❌ No scores, no rankings, no confidence percentages
+- ✅ Signal-first, evaluated independently
+- ✅ Never collapsed into a single numeric score
+- ✅ Interpreted in context
+
+### Feedback Schema
+
+```typescript
+// src/domain/interviews/types.ts
+
+export interface InterviewFeedback {
+  /**
+   * Signal-based observations.
+   * Interviewer evaluates specific signals, not overall "quality".
+   */
+  observations: Array<{
+    signalId: string;  // From the 10 core signals
+    observation: "clear" | "partial" | "absent" | "unclear";
+    evidence: string;  // Specific quote or example from interview
+  }>;
+
+  /**
+   * Free-form summary.
+   * Context that doesn't fit into signal observations.
+   */
+  summary: string;
+
+  /**
+   * Action-oriented recommendation.
+   * NOT a quality judgment — just "is it safe to proceed?"
+   */
+  recommendation: "advance" | "hold" | "pass";
+  recommendationReason: string;
+}
+```
+
+### Why This Structure?
+
+| Traditional ATS | Zehire Approach |
+|-----------------|-----------------|
+| "Rate candidate 1-5" | "What signals did you observe?" |
+| "Would you hire? Yes/No" | "Is it safe to advance based on evidence?" |
+| Collapses to a number | Preserves context and nuance |
+| Enables ranking | Enables decision safety |
+
+### Database Schema
+
+```typescript
+// In interview_participants table, feedbackContent stores JSON:
+feedbackContent: text("feedback_content"),  // JSON string of InterviewFeedback
+
+// Parsed example:
+{
+  "observations": [
+    {
+      "signalId": "technical_depth",
+      "observation": "clear",
+      "evidence": "Explained distributed systems tradeoffs with specific examples from previous role"
+    },
+    {
+      "signalId": "communication_clarity",
+      "observation": "partial",
+      "evidence": "Clear on technical topics, less structured when discussing project management"
+    }
+  ],
+  "summary": "Strong technical foundation, would benefit from more structured communication coaching.",
+  "recommendation": "advance",
+  "recommendationReason": "Technical signals are strong enough for next round. Communication gap is coachable."
+}
+```
+
+---
+
+## Reminder Scheduling
+
+24-hour interview reminders using **Cloudflare Cron Triggers** — reliable and free.
+
+### Why Cron Triggers?
+
+| Option | Cost | Reliability | Complexity |
+|--------|------|-------------|------------|
+| **Cron Trigger (hourly)** ✅ | Free | High | Low |
+| Queues with delay | Not supported | - | - |
+| External scheduler | $$ | High | Medium |
+
+### Implementation
+
+```typescript
+// wrangler.toml
+[triggers]
+crons = ["0 * * * *"]  // Every hour, on the hour
+
+// src/scheduled/interview-reminders.ts
+export default {
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    const db = drizzle(env.DB);
+    const emailGateway = createEmailGatewayFromEnv(env);
+
+    const now = new Date();
+    const reminderWindow = new Date(now.getTime() + 25 * 60 * 60 * 1000); // 25 hours
+
+    // Find interviews needing reminders
+    // - Scheduled in next 24-25 hours
+    // - Not yet reminded
+    // - Still active (not cancelled)
+    const interviews = await db.select()
+      .from(scheduledInterviews)
+      .where(and(
+        gte(scheduledInterviews.scheduledAt, now.toISOString()),
+        lte(scheduledInterviews.scheduledAt, reminderWindow.toISOString()),
+        isNull(scheduledInterviews.reminderSentAt),
+        eq(scheduledInterviews.status, "scheduled")
+      ));
+
+    for (const interview of interviews) {
+      try {
+        // Send to candidate
+        await emailGateway.sendInterviewReminder({
+          recipientEmail: interview.candidateEmail,
+          recipientType: "candidate",
+          // ... other fields
+        });
+
+        // Send to interviewers
+        const participants = await db.select()
+          .from(interviewParticipants)
+          .where(eq(interviewParticipants.interviewId, interview.id));
+
+        for (const participant of participants) {
+          await emailGateway.sendInterviewReminder({
+            recipientEmail: participant.interviewerEmail,
+            recipientType: "interviewer",
+            // ... other fields
+          });
+        }
+
+        // Mark as reminded
+        await db.update(scheduledInterviews)
+          .set({ reminderSentAt: now.toISOString() })
+          .where(eq(scheduledInterviews.id, interview.id));
+
+      } catch (error) {
+        console.error(`Failed to send reminder for ${interview.id}:`, error);
+        // Will retry next hour
+      }
+    }
+  }
+};
+```
+
+### Schema Addition
+
+```typescript
+// In scheduled_interviews table
+reminderSentAt: text("reminder_sent_at"),  // ISO datetime, null until sent
+```
+
+### Why 25-Hour Window?
+
+- We check every hour
+- If a run fails, next hour catches it
+- 25h window > 24h reminder = no missed reminders
+
+---
+
+## Environment Variables
+
+All new environment variables required for Phase 9:
+
+```bash
+# =============================================================================
+# CALENDAR PROVIDERS
+# =============================================================================
+
+# Google Calendar OAuth
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_REDIRECT_URI=https://api.zehire.com/auth/calendar/google/callback
+
+# Microsoft Outlook OAuth (Phase 9G)
+OUTLOOK_CLIENT_ID=your-outlook-client-id
+OUTLOOK_CLIENT_SECRET=your-outlook-client-secret
+OUTLOOK_REDIRECT_URI=https://api.zehire.com/auth/calendar/outlook/callback
+
+# =============================================================================
+# VIDEO CALL PROVIDERS (Optional, for org-level override)
+# =============================================================================
+
+# Zoom OAuth (only if orgs want Zoom instead of calendar-native)
+ZOOM_CLIENT_ID=your-zoom-client-id
+ZOOM_CLIENT_SECRET=your-zoom-client-secret
+ZOOM_REDIRECT_URI=https://api.zehire.com/auth/video/zoom/callback
+
+# =============================================================================
+# SECURITY
+# =============================================================================
+
+# Token encryption key for storing OAuth tokens at rest
+# Generate with: openssl rand -base64 32
+CALENDAR_TOKEN_ENCRYPTION_KEY=your-32-byte-base64-key
+
+# Magic link signing secret (for interviewer/candidate tokens)
+MAGIC_LINK_SECRET=your-signing-secret
+```
+
+### Local Development (.dev.vars)
+
+```bash
+# For local development, use test credentials or console logging
+GOOGLE_CLIENT_ID=test
+GOOGLE_CLIENT_SECRET=test
+GOOGLE_REDIRECT_URI=http://localhost:8787/auth/calendar/google/callback
+CALENDAR_TOKEN_ENCRYPTION_KEY=test-key-do-not-use-in-production
+MAGIC_LINK_SECRET=dev-secret
+```
+
+---
+
 ## Implementation Phases
 
 ### Phase 9A: Core Infrastructure (Week 1-2)
-- [ ] Database schema migration
+- [ ] Database schema migration (all new tables)
+- [ ] Add `videoCallProvider` to organizations table
+- [ ] Add `reminderSentAt` to scheduled_interviews table
 - [ ] Interviewer CRUD endpoints
 - [ ] Magic link generation and validation
 - [ ] Basic interviewer dashboard
@@ -2022,6 +2311,7 @@ export interface EmailGateway {
 - [ ] CalendarService orchestration layer
 - [ ] Token encryption/decryption utilities
 - [ ] OAuth flow (provider-agnostic callback)
+- [ ] Video call provider abstraction (calendar-native default)
 
 ### Phase 9C: Availability Management (Week 3-4)
 - [ ] Availability windows CRUD
@@ -2035,19 +2325,23 @@ export interface EmailGateway {
 - [ ] "Any one" vs "All required" modes
 - [ ] Availability preview for recruiters
 
-### Phase 9E: Candidate Scheduling (Week 5)
+### Phase 9E: Candidate Scheduling & Feedback (Week 5)
 - [ ] Scheduling token generation
 - [ ] Public scheduling page
 - [ ] Slot listing with real-time availability
 - [ ] Booking flow with confirmation
+- [ ] Interview feedback schema (signal-based, no scores)
+- [ ] Feedback submission endpoint
+- [ ] Feedback display in recruiter dashboard
 
-### Phase 9F: Notifications & Edge Cases (Week 6)
+### Phase 9F: Notifications & Reminders (Week 6)
 - [ ] Extend EmailGateway interface with new email types
 - [ ] Implement interviewer invite email
 - [ ] Implement interview confirmation email (with calendar .ics)
-- [ ] Implement interview reminder email (24h before)
 - [ ] Implement reschedule/cancellation emails
-- [ ] Implement feedback reminder email
+- [ ] Cloudflare Cron Trigger for 24h reminders
+- [ ] Implement interview reminder email
+- [ ] Implement feedback reminder email (2h after interview)
 - [ ] Conflict resolution flows
 - [ ] Rescheduling and cancellation
 - [ ] Race condition handling
@@ -2055,6 +2349,7 @@ export interface EmailGateway {
 ### Phase 9G: Additional Providers (Future)
 - [ ] Outlook Calendar provider implementation
 - [ ] Apple Calendar provider implementation
+- [ ] Zoom video provider (org-level override)
 - [ ] Provider switching support (disconnect + reconnect)
 
 ---
