@@ -303,17 +303,17 @@ Submit interview feedback.
 | `absent` | No evidence observed |
 | `unclear` | Conflicting/ambiguous evidence |
 
-**signal** (from Zehire's 10 core signals):
-- `decision_under_uncertainty`
-- `technical_depth`
-- `communication_clarity`
-- `ownership_instinct`
-- `learning_velocity`
-- `stakeholder_management`
-- `prioritization`
-- `self_awareness`
-- `accountability`
-- `adaptability`
+**signal** (from Zehire's 10 core signals - see `archetypes/types.ts`):
+- `decision_under_uncertainty` — How a candidate makes decisions when information is incomplete
+- `tradeoff_awareness` — Explicit reasoning about competing priorities and constraints
+- `risk_reasoning` — Understanding of risk, consequences, and mitigation
+- `ethical_awareness` — Judgment in ambiguous or ethically complex situations
+- `technical_depth` — Hands-on expertise beyond surface-level claims
+- `system_thinking` — Understanding of interconnected systems and second-order effects
+- `communication_clarity` — Ability to explain complex ideas clearly
+- `stakeholder_management` — Navigating relationships, disagreements, and alignment
+- `accountability` — Ownership of outcomes, including mistakes
+- `learning_from_failure` — Growth behavior and adaptation after setbacks
 
 ---
 

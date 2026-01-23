@@ -6,6 +6,8 @@
 
 import { z } from "zod";
 
+import { SIGNAL_IDS, type SignalId as ArchetypeSignalId } from "../jobs/archetypes/types";
+
 // =============================================================================
 // BOOKING SCHEMAS
 // =============================================================================
@@ -59,21 +61,11 @@ export const ObservationValues = ["clear", "partial", "absent", "unclear"] as co
 export type Observation = (typeof ObservationValues)[number];
 
 /**
- * Zehire's 10 core signals.
+ * Re-export canonical signal IDs from archetypes.
+ * These are Zehire's 10 core signals used across the system.
  */
-export const SignalIds = [
-  "decision_under_uncertainty",
-  "technical_depth",
-  "communication_clarity",
-  "ownership_instinct",
-  "learning_velocity",
-  "stakeholder_management",
-  "prioritization",
-  "self_awareness",
-  "accountability",
-  "adaptability",
-] as const;
-export type SignalId = (typeof SignalIds)[number];
+export const SignalIds = SIGNAL_IDS;
+export type SignalId = ArchetypeSignalId;
 
 /**
  * Single signal observation in feedback.
