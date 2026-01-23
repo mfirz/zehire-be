@@ -283,10 +283,13 @@ If "All required" mode (or no backup):
 ### Updates to Existing Tables
 
 ```typescript
-// In src/db/schema/organizations.ts - add field:
+// In src/db/schema/organizations.ts - add fields:
 videoCallProvider: text("video_call_provider", {
   enum: ["calendar_native", "zoom", "google_meet", "teams"]
 }).default("calendar_native"),
+videoTokens: text("video_tokens"),           // Encrypted JSON (for Zoom, etc.)
+videoAccountId: text("video_account_id"),    // Provider-specific account ID
+videoConnectedAt: text("video_connected_at"),
 
 // In src/db/schema/applications.ts - add fields:
 currentStageId: text("current_stage_id"),
@@ -2016,57 +2019,587 @@ export interface EmailGateway {
 
 ---
 
-## Video Call Provider
+## Video Call Provider Abstraction
 
-Video call creation is **decoupled from calendar provider** to give organizations flexibility.
+Video call creation is **decoupled from calendar provider** and **provider-agnostic** to give organizations flexibility.
+
+### Popular Providers
+
+| Provider | Popularity | Auth Type | Auth Level |
+|----------|------------|-----------|------------|
+| **Zoom** | #1 | OAuth | Organization |
+| **Google Meet** | #2 | Tied to Google Calendar | Interviewer |
+| **Microsoft Teams** | #3 | Tied to Outlook/M365 | Interviewer |
+| **Webex** | #4 | OAuth | Organization |
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     VideoCallService                             │
+│  (Selects provider based on org settings, creates meetings)     │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   VideoCallProvider Interface                    │
+│  createMeeting(), deleteMeeting(), updateMeeting()              │
+└─────────────────────────────────────────────────────────────────┘
+           │                    │                    │
+           ▼                    ▼                    ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│   GoogleMeet    │  │   MsTeams       │  │     Zoom        │
+│    Provider     │  │   Provider      │  │    Provider     │
+│ (via Calendar)  │  │ (via Calendar)  │  │  (standalone)   │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+```
 
 ### Configuration
 
-```typescript
-// Organization-level setting
-videoCallProvider: "calendar_native" | "zoom" | "google_meet" | "teams"
-```
-
-| Setting | Behavior |
-|---------|----------|
-| `calendar_native` (default) | Uses calendar's native video: Google Calendar → Meet, Outlook → Teams |
-| `zoom` | Always creates Zoom meeting (requires Zoom OAuth) |
-| `google_meet` | Always creates Google Meet (requires Google OAuth) |
-| `teams` | Always creates Teams meeting (requires Microsoft OAuth) |
+| Setting | Behavior | Auth Required |
+|---------|----------|---------------|
+| `calendar_native` (default) | Uses interviewer's calendar: Google → Meet, Outlook → Teams | None (uses interviewer's) |
+| `zoom` | Always creates Zoom meeting | Org-level Zoom OAuth |
+| `google_meet` | Always creates Google Meet | Org-level Google OAuth |
+| `teams` | Always creates Teams meeting | Org-level Microsoft OAuth |
 
 ### Why Decoupled?
 
 - Company may use Outlook calendars but prefer Zoom for interviews
-- Google Meet only available if someone has Google Calendar
-- Teams only available if someone has Outlook
+- Google Meet only available if interviewer has Google Calendar
+- Teams only available if interviewer has Outlook
 - Zoom works regardless of calendar provider
 
-### Schema Addition
+### Schema Updates
 
 ```typescript
-// In organizations table
+// In organizations table - add fields:
 videoCallProvider: text("video_call_provider", {
   enum: ["calendar_native", "zoom", "google_meet", "teams"]
 }).default("calendar_native"),
+videoTokens: text("video_tokens"),        // Encrypted JSON (for Zoom, standalone Google, etc.)
+videoAccountId: text("video_account_id"), // Provider-specific account ID
+videoConnectedAt: text("video_connected_at"),
 ```
 
-### Video Provider Interface
+### VideoCallProvider Interface
 
 ```typescript
 // src/domain/video/types.ts
 
-export interface VideoCallProvider {
-  readonly type: "google_meet" | "zoom" | "teams";
+export type VideoProviderType = "google_meet" | "teams" | "zoom";
 
-  createMeeting(input: {
-    title: string;
-    startTime: Date;
-    durationMinutes: number;
-    attendees: string[];
-  }): Promise<{ meetingUrl: string; meetingId: string }>;
-
-  deleteMeeting(meetingId: string): Promise<void>;
+export interface VideoTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: string;
+  [key: string]: unknown;  // Provider-specific fields
 }
+
+export interface VideoMeetingInput {
+  title: string;
+  description?: string;
+  startTime: Date;
+  endTime: Date;
+  timezone: string;
+  attendees: Array<{ email: string; name?: string }>;
+}
+
+export interface VideoMeeting {
+  id: string;
+  joinUrl: string;        // For all participants
+  hostUrl?: string;       // Some providers have separate host URL
+  password?: string;      // Some providers require password
+  dialIn?: string;        // Phone dial-in info
+}
+
+// src/domain/video/provider.ts
+
+export interface VideoCallProvider {
+  readonly type: VideoProviderType;
+
+  /**
+   * Check if this provider requires org-level OAuth.
+   * calendar_native providers return false (use interviewer's tokens).
+   */
+  requiresOrgAuth(): boolean;
+
+  /**
+   * Get OAuth authorization URL (for standalone providers like Zoom).
+   */
+  getAuthorizationUrl(state: string): string;
+
+  /**
+   * Exchange authorization code for tokens.
+   */
+  exchangeCodeForTokens(code: string): Promise<VideoTokens>;
+
+  /**
+   * Refresh expired access token.
+   */
+  refreshAccessToken(tokens: VideoTokens): Promise<VideoTokens>;
+
+  /**
+   * Check if tokens need refresh.
+   */
+  needsRefresh(tokens: VideoTokens): boolean;
+
+  /**
+   * Create a video meeting.
+   */
+  createMeeting(tokens: VideoTokens, input: VideoMeetingInput): Promise<VideoMeeting>;
+
+  /**
+   * Delete a video meeting.
+   */
+  deleteMeeting(tokens: VideoTokens, meetingId: string): Promise<void>;
+
+  /**
+   * Update a video meeting.
+   */
+  updateMeeting(
+    tokens: VideoTokens,
+    meetingId: string,
+    input: Partial<VideoMeetingInput>
+  ): Promise<VideoMeeting>;
+}
+```
+
+### Zoom Provider Implementation
+
+```typescript
+// src/domain/video/providers/zoom.ts
+
+export class ZoomProvider implements VideoCallProvider {
+  readonly type = "zoom" as const;
+
+  private clientId: string;
+  private clientSecret: string;
+  private redirectUri: string;
+
+  constructor(env: { ZOOM_CLIENT_ID: string; ZOOM_CLIENT_SECRET: string; ZOOM_REDIRECT_URI: string }) {
+    this.clientId = env.ZOOM_CLIENT_ID;
+    this.clientSecret = env.ZOOM_CLIENT_SECRET;
+    this.redirectUri = env.ZOOM_REDIRECT_URI;
+  }
+
+  requiresOrgAuth(): boolean {
+    return true;  // Zoom needs org-level OAuth
+  }
+
+  getAuthorizationUrl(state: string): string {
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: this.clientId,
+      redirect_uri: this.redirectUri,
+      state,
+    });
+    return `https://zoom.us/oauth/authorize?${params}`;
+  }
+
+  async exchangeCodeForTokens(code: string): Promise<VideoTokens> {
+    const credentials = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString("base64");
+
+    const response = await fetch("https://zoom.us/oauth/token", {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: this.redirectUri,
+      }),
+    });
+
+    const data = await response.json();
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresAt: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+    };
+  }
+
+  async refreshAccessToken(tokens: VideoTokens): Promise<VideoTokens> {
+    const credentials = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString("base64");
+
+    const response = await fetch("https://zoom.us/oauth/token", {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: tokens.refreshToken,
+      }),
+    });
+
+    const data = await response.json();
+    return {
+      ...tokens,
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token || tokens.refreshToken,
+      expiresAt: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+    };
+  }
+
+  needsRefresh(tokens: VideoTokens): boolean {
+    const expiresAt = new Date(tokens.expiresAt);
+    return expiresAt.getTime() - Date.now() < 5 * 60 * 1000;  // 5 min buffer
+  }
+
+  async createMeeting(tokens: VideoTokens, input: VideoMeetingInput): Promise<VideoMeeting> {
+    const response = await fetch("https://api.zoom.us/v2/users/me/meetings", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        topic: input.title,
+        type: 2,  // Scheduled meeting
+        start_time: input.startTime.toISOString(),
+        duration: Math.round((input.endTime.getTime() - input.startTime.getTime()) / 60000),
+        timezone: input.timezone,
+        agenda: input.description,
+        settings: {
+          host_video: true,
+          participant_video: true,
+          join_before_host: true,
+          waiting_room: false,
+          meeting_invitees: input.attendees.map(a => ({ email: a.email })),
+        },
+      }),
+    });
+
+    const data = await response.json();
+    return {
+      id: data.id.toString(),
+      joinUrl: data.join_url,
+      hostUrl: data.start_url,
+      password: data.password,
+      dialIn: data.pstn_password,
+    };
+  }
+
+  async deleteMeeting(tokens: VideoTokens, meetingId: string): Promise<void> {
+    await fetch(`https://api.zoom.us/v2/meetings/${meetingId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${tokens.accessToken}` },
+    });
+  }
+
+  async updateMeeting(
+    tokens: VideoTokens,
+    meetingId: string,
+    input: Partial<VideoMeetingInput>
+  ): Promise<VideoMeeting> {
+    const body: Record<string, unknown> = {};
+    if (input.title) body.topic = input.title;
+    if (input.description) body.agenda = input.description;
+    if (input.startTime) body.start_time = input.startTime.toISOString();
+    if (input.startTime && input.endTime) {
+      body.duration = Math.round((input.endTime.getTime() - input.startTime.getTime()) / 60000);
+    }
+
+    const response = await fetch(`https://api.zoom.us/v2/meetings/${meetingId}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${tokens.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    // Zoom PATCH doesn't return full meeting, fetch it
+    const getResponse = await fetch(`https://api.zoom.us/v2/meetings/${meetingId}`, {
+      headers: { Authorization: `Bearer ${tokens.accessToken}` },
+    });
+    const data = await getResponse.json();
+
+    return {
+      id: data.id.toString(),
+      joinUrl: data.join_url,
+      hostUrl: data.start_url,
+      password: data.password,
+    };
+  }
+}
+```
+
+### Calendar-Native Provider (Delegates to CalendarProvider)
+
+```typescript
+// src/domain/video/providers/calendar-native.ts
+
+export class CalendarNativeProvider implements VideoCallProvider {
+  readonly type = "google_meet" as const;  // or "teams" based on calendar
+
+  requiresOrgAuth(): boolean {
+    return false;  // Uses interviewer's calendar tokens
+  }
+
+  // OAuth methods throw - not used for calendar-native
+  getAuthorizationUrl(): string {
+    throw new Error("Calendar-native provider uses interviewer calendar OAuth");
+  }
+  exchangeCodeForTokens(): Promise<VideoTokens> {
+    throw new Error("Calendar-native provider uses interviewer calendar OAuth");
+  }
+  refreshAccessToken(): Promise<VideoTokens> {
+    throw new Error("Calendar-native provider uses interviewer calendar OAuth");
+  }
+  needsRefresh(): boolean {
+    return false;
+  }
+
+  // Meeting creation handled by CalendarProvider.createEvent() with createVideoCall: true
+  async createMeeting(): Promise<VideoMeeting> {
+    throw new Error("Use CalendarProvider.createEvent() with createVideoCall: true");
+  }
+  async deleteMeeting(): Promise<void> {
+    throw new Error("Use CalendarProvider.deleteEvent()");
+  }
+  async updateMeeting(): Promise<VideoMeeting> {
+    throw new Error("Use CalendarProvider.updateEvent()");
+  }
+}
+```
+
+### VideoCallService (Orchestration)
+
+```typescript
+// src/domain/video/service.ts
+
+export class VideoCallService {
+  constructor(private env: Record<string, string>) {}
+
+  /**
+   * Create meeting based on org's video provider setting.
+   */
+  async createMeeting(
+    org: Organization,
+    interviewer: Interviewer,
+    input: VideoMeetingInput,
+    updateOrgTokens: (tokens: VideoTokens) => Promise<void>
+  ): Promise<VideoMeeting> {
+    const providerType = org.videoCallProvider || "calendar_native";
+
+    if (providerType === "calendar_native") {
+      // Use interviewer's calendar to create event with video
+      const calendarProvider = createCalendarProvider(interviewer.calendarProvider!, this.env);
+      const tokens = JSON.parse(interviewer.calendarTokens!);
+
+      const event = await calendarProvider.createEvent(tokens, interviewer.calendarId!, {
+        ...input,
+        createVideoCall: true,
+      });
+
+      return {
+        id: event.id,
+        joinUrl: event.videoCallLink!,
+      };
+    }
+
+    // Standalone provider (Zoom, etc.)
+    const provider = createVideoProvider(providerType, this.env);
+    let tokens: VideoTokens = JSON.parse(org.videoTokens!);
+
+    if (provider.needsRefresh(tokens)) {
+      tokens = await provider.refreshAccessToken(tokens);
+      await updateOrgTokens(tokens);
+    }
+
+    return provider.createMeeting(tokens, input);
+  }
+}
+```
+
+### API Endpoints for Video Provider Management
+
+```
+GET  /v1/organizations/settings                    Get org settings (includes video provider)
+PATCH /v1/organizations/settings                   Update settings (video provider preference)
+GET  /v1/organizations/video/:provider/connect     Start OAuth for video provider (Zoom, etc.)
+GET  /auth/video/:provider/callback                OAuth callback
+POST /v1/organizations/video/disconnect            Disconnect video provider
+GET  /v1/organizations/video/status                Check video provider connection status
+```
+
+#### GET /v1/organizations/settings
+
+**Response (200 OK)**
+```json
+{
+  "id": "org_abc123",
+  "name": "Acme Corp",
+  "videoCallProvider": "zoom",
+  "videoConnected": true,
+  "videoAccountId": "user@acme.com",
+  "videoConnectedAt": "2024-01-15T10:30:00Z",
+  "createdAt": "2024-01-01T00:00:00Z",
+  "updatedAt": "2024-01-15T10:30:00Z"
+}
+```
+
+#### PATCH /v1/organizations/settings
+
+**Request Body**
+```json
+{
+  "videoCallProvider": "zoom"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `videoCallProvider` | string | Yes | `"calendar_native"`, `"zoom"`, `"google_meet"`, `"teams"` |
+
+**Response (200 OK)**
+```json
+{
+  "id": "org_abc123",
+  "name": "Acme Corp",
+  "videoCallProvider": "zoom",
+  "videoConnected": false,
+  "videoAccountId": null,
+  "videoConnectedAt": null,
+  "createdAt": "2024-01-01T00:00:00Z",
+  "updatedAt": "2024-01-15T10:35:00Z"
+}
+```
+
+**Notes:**
+- Changing provider to `calendar_native` doesn't require OAuth
+- Changing to `zoom`/`teams`/etc. requires subsequent OAuth connection
+- Changing provider disconnects any existing video provider connection
+
+#### GET /v1/organizations/video/:provider/connect
+
+Initiates OAuth flow for the specified video provider.
+
+**Path Parameters**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `provider` | string | `"zoom"`, `"teams"`, `"webex"` |
+
+**Response (302 Redirect)**
+Redirects to the provider's OAuth authorization page.
+
+**Query Parameters (on redirect)**
+| Parameter | Description |
+|-----------|-------------|
+| `client_id` | Zehire's OAuth client ID for the provider |
+| `redirect_uri` | Callback URL (e.g., `https://api.zehire.com/auth/video/zoom/callback`) |
+| `response_type` | `code` |
+| `state` | Encrypted state containing `orgId` + CSRF token |
+| `scope` | Provider-specific scopes (e.g., `meeting:write` for Zoom) |
+
+#### GET /auth/video/:provider/callback
+
+OAuth callback endpoint (called by the provider after user authorization).
+
+**Query Parameters (from provider)**
+| Parameter | Description |
+|-----------|-------------|
+| `code` | Authorization code to exchange for tokens |
+| `state` | State parameter (contains encrypted `orgId`) |
+
+**Response (302 Redirect)**
+Redirects to frontend settings page with status:
+- Success: `https://app.zehire.com/settings?video=connected`
+- Error: `https://app.zehire.com/settings?video=error&reason=...`
+
+#### POST /v1/organizations/video/disconnect
+
+Disconnects the current video provider (clears tokens).
+
+**Request Body**
+```json
+{}
+```
+
+No request body required.
+
+**Response (200 OK)**
+```json
+{
+  "success": true,
+  "message": "Video provider disconnected",
+  "videoCallProvider": "calendar_native"
+}
+```
+
+**Notes:**
+- Resets `videoCallProvider` to `"calendar_native"` (default)
+- Clears stored OAuth tokens
+- Existing scheduled interviews keep their video links (not deleted)
+
+#### GET /v1/organizations/video/status
+
+Check current video provider connection status.
+
+**Response (200 OK) - Connected**
+```json
+{
+  "provider": "zoom",
+  "connected": true,
+  "accountId": "user@acme.com",
+  "connectedAt": "2024-01-15T10:30:00Z",
+  "tokenStatus": "valid",
+  "expiresAt": "2024-01-22T10:30:00Z"
+}
+```
+
+**Response (200 OK) - Not Connected**
+```json
+{
+  "provider": "calendar_native",
+  "connected": true,
+  "accountId": null,
+  "connectedAt": null,
+  "tokenStatus": null,
+  "expiresAt": null
+}
+```
+
+**Response (200 OK) - Needs Reconnection**
+```json
+{
+  "provider": "zoom",
+  "connected": false,
+  "accountId": "user@acme.com",
+  "connectedAt": "2024-01-15T10:30:00Z",
+  "tokenStatus": "expired",
+  "expiresAt": "2024-01-22T10:30:00Z",
+  "reconnectUrl": "/v1/organizations/video/zoom/connect"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `provider` | string | Current video provider setting |
+| `connected` | boolean | Whether provider is connected and usable |
+| `accountId` | string/null | Connected account identifier |
+| `connectedAt` | string/null | ISO timestamp of connection |
+| `tokenStatus` | string/null | `"valid"`, `"expiring_soon"`, `"expired"`, or `null` |
+| `expiresAt` | string/null | Token expiration time |
+| `reconnectUrl` | string | Present if reconnection needed |
+
+### Environment Variables (Video Providers)
+
+```bash
+# Zoom OAuth (org-level)
+ZOOM_CLIENT_ID=your-zoom-client-id
+ZOOM_CLIENT_SECRET=your-zoom-client-secret
+ZOOM_REDIRECT_URI=https://api.zehire.com/auth/video/zoom/callback
+
+# Webex OAuth (future, org-level)
+WEBEX_CLIENT_ID=your-webex-client-id
+WEBEX_CLIENT_SECRET=your-webex-client-secret
+WEBEX_REDIRECT_URI=https://api.zehire.com/auth/video/webex/callback
 ```
 
 ---
@@ -2328,6 +2861,9 @@ MAGIC_LINK_SECRET=your-signing-secret
 GOOGLE_CLIENT_ID=test
 GOOGLE_CLIENT_SECRET=test
 GOOGLE_REDIRECT_URI=http://localhost:8787/auth/calendar/google/callback
+ZOOM_CLIENT_ID=test
+ZOOM_CLIENT_SECRET=test
+ZOOM_REDIRECT_URI=http://localhost:8787/auth/video/zoom/callback
 CALENDAR_TOKEN_ENCRYPTION_KEY=test-key-do-not-use-in-production
 MAGIC_LINK_SECRET=dev-secret
 ```
@@ -2342,25 +2878,34 @@ Legend: `[BE]` = Backend, `[FE]` = Frontend
 
 **Backend (80%):**
 - [ ] `[BE]` Database schema migration (all new tables)
-- [ ] `[BE]` Add `videoCallProvider` to organizations table
+- [ ] `[BE]` Add `videoCallProvider`, `videoTokens`, `videoAccountId` to organizations table
 - [ ] `[BE]` Add `reminderSentAt` to scheduled_interviews table
 - [ ] `[BE]` Interviewer CRUD endpoints (`POST/GET/PATCH/DELETE /v1/interviewers`)
 - [ ] `[BE]` Magic link generation and validation
 - [ ] `[BE]` Interviewer magic link endpoints (`GET /i/:token`)
+- [ ] `[BE]` Organization settings endpoints (`GET/PATCH /v1/organizations/settings`)
 
 **Frontend (20%):**
 - [ ] `[FE]` Interviewer dashboard UI (view upcoming interviews, pending feedback)
 - [ ] `[FE]` Recruiter UI: Add/manage interviewers
 
-### Phase 9B: Calendar Provider Abstraction (Week 2-3)
+### Phase 9B: Calendar & Video Provider Abstraction (Week 2-3)
 
-**Backend (100%):**
+**Backend — Calendar (50%):**
 - [ ] `[BE]` CalendarProvider interface definition
 - [ ] `[BE]` Google Calendar provider implementation
 - [ ] `[BE]` CalendarService orchestration layer
 - [ ] `[BE]` Token encryption/decryption utilities (AES-256-GCM)
-- [ ] `[BE]` OAuth flow endpoints (`GET /i/:token/connect/:provider`, `/auth/calendar/:provider/callback`)
-- [ ] `[BE]` Video call provider abstraction (calendar-native default)
+- [ ] `[BE]` Calendar OAuth flow endpoints (`GET /i/:token/connect/:provider`, `/auth/calendar/:provider/callback`)
+
+**Backend — Video (50%):**
+- [ ] `[BE]` VideoCallProvider interface definition
+- [ ] `[BE]` Zoom provider implementation
+- [ ] `[BE]` CalendarNativeProvider (delegates to CalendarProvider)
+- [ ] `[BE]` VideoCallService orchestration layer
+- [ ] `[BE]` Video OAuth flow endpoints (`GET /v1/organizations/video/:provider/connect`, `/auth/video/:provider/callback`)
+- [ ] `[BE]` Video provider status endpoint (`GET /v1/organizations/video/status`)
+- [ ] `[BE]` Video provider disconnect endpoint (`POST /v1/organizations/video/disconnect`)
 
 **Frontend (0%):**
 - None — OAuth redirects handled by browser
@@ -2429,16 +2974,22 @@ Legend: `[BE]` = Backend, `[FE]` = Frontend
 
 ### Phase 9G: Additional Providers (Future)
 
-**Backend (80%):**
+**Backend — Calendar (40%):**
 - [ ] `[BE]` Outlook Calendar provider implementation (Microsoft Graph API)
 - [ ] `[BE]` Apple Calendar provider implementation
-- [ ] `[BE]` Zoom video provider (org-level override)
-- [ ] `[BE]` Disconnect endpoint (`POST /i/:token/disconnect`)
+- [ ] `[BE]` Calendar disconnect endpoint (`POST /i/:token/disconnect`)
+- [ ] `[BE]` Provider switching support (disconnect + reconnect)
+
+**Backend — Video (40%):**
+- [ ] `[BE]` Webex video provider implementation
+- [ ] `[BE]` Standalone Google Meet provider (org-level, not calendar-native)
+- [ ] `[BE]` Standalone Teams provider (org-level, not calendar-native)
 
 **Frontend (20%):**
-- [ ] `[FE]` Provider selection UI (during calendar connect)
+- [ ] `[FE]` Calendar provider selection UI (during connect)
 - [ ] `[FE]` Provider switching UI (disconnect + reconnect)
-- [ ] `[FE]` Org settings: video call provider preference
+- [ ] `[FE]` Org settings page: video call provider preference
+- [ ] `[FE]` Org settings: connect/disconnect video provider
 
 ---
 
@@ -2446,19 +2997,19 @@ Legend: `[BE]` = Backend, `[FE]` = Frontend
 
 | Phase | BE | FE | Notes |
 |-------|----|----|-------|
-| 9A | 80% | 20% | Core infra, mostly BE |
-| 9B | 100% | 0% | Fully BE (OAuth is browser redirect) |
+| 9A | 80% | 20% | Core infra, org settings |
+| 9B | 100% | 0% | Calendar + Video provider abstraction |
 | 9C | 70% | 30% | APIs + availability UI |
 | 9D | 50% | 50% | Balanced, recruiter configuration |
 | 9E | 50% | 50% | Balanced, candidate-facing + feedback |
 | 9F | 80% | 20% | Mostly emails/cron, some UI |
-| 9G | 80% | 20% | Provider implementations |
+| 9G | 80% | 20% | Future provider implementations |
 
 **Recommended approach:**
 1. BE implements 9A + 9B first (no FE dependency)
 2. FE can start 9A UI once endpoints are ready
 3. 9C-9F require BE/FE coordination
-4. 9G is future/optional
+4. 9G is future/optional (add providers as needed)
 
 ---
 
