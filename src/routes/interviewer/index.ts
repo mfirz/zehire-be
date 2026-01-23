@@ -30,6 +30,11 @@ import {
   UpdateAvailabilitySchema,
   BlockDateSchema,
 } from "../../domain/availability";
+import {
+  SchedulingRepository,
+  SubmitFeedbackSchema,
+  type FeedbackContent,
+} from "../../domain/scheduling";
 import type { Interviewer } from "../../db";
 import type { Env } from "../../types/bindings";
 
@@ -338,6 +343,91 @@ interviewerRoutes.post("/:token/disconnect", async (c) => {
   });
 
   return c.json({ success: true, message: "Calendar disconnected successfully" });
+});
+
+/**
+ * GET /i/:token/interviews
+ *
+ * List interviewer's upcoming interviews and pending feedback.
+ */
+interviewerRoutes.get("/:token/interviews", async (c) => {
+  const interviewer = c.get("interviewer");
+  const schedulingRepo = new SchedulingRepository(c.env.DB);
+
+  const [upcomingInterviews, pendingFeedback] = await Promise.all([
+    schedulingRepo.getUpcomingInterviews(interviewer.id),
+    schedulingRepo.getPendingFeedback(interviewer.id),
+  ]);
+
+  return c.json({
+    upcomingInterviews: upcomingInterviews.map((interview) => ({
+      id: interview.id,
+      scheduledAt: interview.scheduledAt,
+      durationMinutes: interview.durationMinutes,
+      videoCallLink: interview.videoCallLink,
+      // TODO: Add candidate and job info
+    })),
+    pendingFeedback: pendingFeedback.map((interview) => ({
+      interviewId: interview.id,
+      completedAt: interview.scheduledAt,
+      // TODO: Add candidate info
+    })),
+  });
+});
+
+/**
+ * POST /i/:token/interviews/:interviewId/feedback
+ *
+ * Submit interview feedback.
+ */
+interviewerRoutes.post("/:token/interviews/:interviewId/feedback", async (c) => {
+  const interviewer = c.get("interviewer");
+  const interviewId = c.req.param("interviewId");
+
+  // Parse and validate body
+  const body = await c.req.json();
+  const parseResult = SubmitFeedbackSchema.safeParse(body);
+
+  if (!parseResult.success) {
+    return c.json(
+      {
+        error: "Validation failed",
+        details: parseResult.error.flatten().fieldErrors,
+      },
+      400
+    );
+  }
+
+  const input = parseResult.data;
+
+  const schedulingRepo = new SchedulingRepository(c.env.DB);
+
+  // Verify interviewer is a participant in this interview
+  const participant = await schedulingRepo.getParticipant(interviewId, interviewer.id);
+
+  if (!participant) {
+    return c.json({ error: "You are not a participant in this interview" }, 403);
+  }
+
+  if (participant.feedbackStatus === "submitted") {
+    return c.json({ error: "Feedback already submitted for this interview" }, 400);
+  }
+
+  // Store feedback as JSON
+  const feedbackContent: FeedbackContent = {
+    recommendation: input.recommendation,
+    recommendationReason: input.recommendationReason,
+    observations: input.observations,
+    summary: input.summary,
+  };
+
+  await schedulingRepo.submitFeedback(
+    interviewId,
+    interviewer.id,
+    JSON.stringify(feedbackContent)
+  );
+
+  return c.json({ success: true });
 });
 
 export default interviewerRoutes;

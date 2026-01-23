@@ -4,6 +4,7 @@ import { createAuthRoutes } from "./modules/auth";
 import internal from "./routes/internal/route";
 import interviewerRoutes from "./routes/interviewer";
 import publicRoutes from "./routes/public/route";
+import scheduleRoutes from "./routes/schedule";
 import v1 from "./routes/v1";
 import type { Env } from "./types/bindings";
 
@@ -20,6 +21,9 @@ app.route("/public", publicRoutes);
 
 // Interviewer self-service routes (magic link auth)
 app.route("/i", interviewerRoutes);
+
+// Candidate scheduling routes (scheduling token auth)
+app.route("/schedule", scheduleRoutes);
 
 // Internal routes
 app.route("/internal", internal);
