@@ -28,6 +28,14 @@ import { getPipeline, resetPipeline, updatePipeline } from "./pipeline";
 import { createJob } from "./post";
 import { publishJob } from "./publish";
 import { resumeJob } from "./resume";
+import {
+  getStageConfig,
+  updateStageConfig,
+  listStageInterviewers,
+  assignStageInterviewer,
+  removeStageInterviewer,
+  previewStageAvailability,
+} from "./stages";
 import { updateJob } from "./update";
 
 const jobs = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
@@ -84,5 +92,27 @@ jobs.post("/:id/resume", resumeJob);
 
 // POST /v1/jobs/:id/close - Close job permanently
 jobs.post("/:id/close", closeJob);
+
+// ===========================================================================
+// STAGE CONFIGURATION
+// ===========================================================================
+
+// GET /v1/jobs/:id/stages/:stageId/config - Get stage config
+jobs.get("/:id/stages/:stageId/config", getStageConfig);
+
+// PUT /v1/jobs/:id/stages/:stageId/config - Update stage config
+jobs.put("/:id/stages/:stageId/config", updateStageConfig);
+
+// GET /v1/jobs/:id/stages/:stageId/interviewers - List assigned interviewers
+jobs.get("/:id/stages/:stageId/interviewers", listStageInterviewers);
+
+// POST /v1/jobs/:id/stages/:stageId/interviewers - Assign interviewer
+jobs.post("/:id/stages/:stageId/interviewers", assignStageInterviewer);
+
+// DELETE /v1/jobs/:id/stages/:stageId/interviewers/:interviewerId - Remove interviewer
+jobs.delete("/:id/stages/:stageId/interviewers/:interviewerId", removeStageInterviewer);
+
+// GET /v1/jobs/:id/stages/:stageId/availability - Preview available slots
+jobs.get("/:id/stages/:stageId/availability", previewStageAvailability);
 
 export default jobs;
