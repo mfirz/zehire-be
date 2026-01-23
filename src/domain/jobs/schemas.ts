@@ -333,6 +333,26 @@ export const CreateJobResponseSchema = z.object({
 export type CreateJobResponse = z.infer<typeof CreateJobResponseSchema>;
 
 /**
+ * Schema for stage configuration summary.
+ * Included in job response for each interview stage.
+ */
+export const StageConfigSummarySchema = z.object({
+  mode: z.enum(["any_one", "all_required"]),
+  durationMinutes: z.number(),
+  bufferMinutes: z.number(),
+  interviewerCount: z.number(),
+});
+
+export type StageConfigSummary = z.infer<typeof StageConfigSummarySchema>;
+
+/**
+ * Schema for all stage configs, keyed by stageId.
+ */
+export const StageConfigsSchema = z.record(z.string(), StageConfigSummarySchema);
+
+export type StageConfigs = z.infer<typeof StageConfigsSchema>;
+
+/**
  * Schema for job status response (polling).
  * Returned from GET /v1/jobs/:id.
  *
@@ -366,6 +386,8 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
     // Pipeline (if generated)
     pipelineRecommendation: PipelineRecommendationSchema.nullable(),
     pipeline: PipelineConfigSchema.nullable(),
+    // Stage configs (interview mode, duration, buffer per stage)
+    stageConfigs: StageConfigsSchema,
     // Error (if question generation failed)
     errorMessage: z.string().nullable(),
     errorCode: z.enum(JOB_ERROR_CODES).nullable(),
@@ -414,6 +436,8 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
     // Pipeline (always present)
     pipelineRecommendation: PipelineRecommendationSchema,
     pipeline: PipelineConfigSchema,
+    // Stage configs (interview mode, duration, buffer per stage)
+    stageConfigs: StageConfigsSchema,
     // Timestamps
     createdAt: z.string(),
     updatedAt: z.string(),
@@ -450,6 +474,8 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
     // Pipeline
     pipelineRecommendation: PipelineRecommendationSchema,
     pipeline: PipelineConfigSchema,
+    // Stage configs (interview mode, duration, buffer per stage)
+    stageConfigs: StageConfigsSchema,
     // Timestamps
     createdAt: z.string(),
     updatedAt: z.string(),
@@ -486,6 +512,8 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
     // Pipeline
     pipelineRecommendation: PipelineRecommendationSchema,
     pipeline: PipelineConfigSchema,
+    // Stage configs (interview mode, duration, buffer per stage)
+    stageConfigs: StageConfigsSchema,
     // Timestamps
     createdAt: z.string(),
     updatedAt: z.string(),

@@ -20,6 +20,7 @@ import { CustomQuestionsRepository } from "../custom-questions/repository";
 import { generateInitialConfig } from "../pipeline/advisor";
 import { PipelineConfigSchema, PipelineRecommendationSchema } from "../pipeline/types";
 import type { PipelineConfig, PipelineUpdate } from "../pipeline/types";
+import { StageConfigRepository } from "../stage-config/repository";
 import { BillingEventRepository, JobRepository, OrgRepository } from "./repository";
 import type {
   CreateJobInput,
@@ -69,6 +70,7 @@ export type JobServiceResult<T> =
 export class JobService {
   private readonly billingEventRepository: BillingEventRepository;
   private readonly customQuestionsRepository: CustomQuestionsRepository;
+  private readonly stageConfigRepository: StageConfigRepository;
 
   constructor(
     private readonly repository: JobRepository,
@@ -78,6 +80,7 @@ export class JobService {
   ) {
     this.billingEventRepository = new BillingEventRepository(db);
     this.customQuestionsRepository = new CustomQuestionsRepository(db);
+    this.stageConfigRepository = new StageConfigRepository(db);
   }
 
   // ===========================================================================
@@ -791,7 +794,14 @@ export class JobService {
       return null;
     }
 
-    return this.formatJobResponse(job);
+    // Fetch stage configs for all stages
+    const stageConfigsMap = await this.stageConfigRepository.getAllConfigsForJob(jobId);
+    const stageConfigs: Record<string, { mode: "any_one" | "all_required"; durationMinutes: number; bufferMinutes: number; interviewerCount: number }> = {};
+    for (const [stageId, config] of stageConfigsMap) {
+      stageConfigs[stageId] = config;
+    }
+
+    return this.formatJobResponse(job, stageConfigs);
   }
 
   // ===========================================================================
@@ -873,7 +883,10 @@ export class JobService {
    * Format a job row into the appropriate API response.
    * Uses discriminated union based on status.
    */
-  private formatJobResponse(job: JobRow): JobStatusResponse {
+  private formatJobResponse(
+    job: JobRow,
+    stageConfigs: Record<string, { mode: "any_one" | "all_required"; durationMinutes: number; bufferMinutes: number; interviewerCount: number }> = {}
+  ): JobStatusResponse {
     switch (job.status) {
       case "draft":
         return {
@@ -907,6 +920,8 @@ export class JobService {
             ? this.parseJson(job.pipelineRecommendation, PipelineRecommendationSchema)
             : null,
           pipeline: job.pipeline ? this.parseJson(job.pipeline, PipelineConfigSchema) : null,
+          // Stage configs (interview mode, duration, buffer per stage)
+          stageConfigs,
           // Error (if failed)
           errorMessage: job.errorMessage,
           errorCode: job.errorCode,
@@ -958,6 +973,8 @@ export class JobService {
             PipelineRecommendationSchema
           ),
           pipeline: this.parseJson(job.pipeline!, PipelineConfigSchema),
+          // Stage configs (interview mode, duration, buffer per stage)
+          stageConfigs,
           // Timestamps
           createdAt: job.createdAt,
           updatedAt: job.updatedAt,
@@ -997,6 +1014,8 @@ export class JobService {
             PipelineRecommendationSchema
           ),
           pipeline: this.parseJson(job.pipeline!, PipelineConfigSchema),
+          // Stage configs (interview mode, duration, buffer per stage)
+          stageConfigs,
           // Timestamps
           createdAt: job.createdAt,
           updatedAt: job.updatedAt,
@@ -1036,6 +1055,8 @@ export class JobService {
             PipelineRecommendationSchema
           ),
           pipeline: this.parseJson(job.pipeline!, PipelineConfigSchema),
+          // Stage configs (interview mode, duration, buffer per stage)
+          stageConfigs,
           // Timestamps
           createdAt: job.createdAt,
           updatedAt: job.updatedAt,

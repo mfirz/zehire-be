@@ -313,4 +313,49 @@ export class StageConfigRepository {
 
     return result ?? null;
   }
+
+  // ===========================================================================
+  // BULK OPERATIONS
+  // ===========================================================================
+
+  /**
+   * Get all stage configurations for a job.
+   * Returns a map of stageId -> config.
+   */
+  async getAllConfigsForJob(
+    jobId: string
+  ): Promise<Map<string, { mode: "any_one" | "all_required"; durationMinutes: number; bufferMinutes: number; interviewerCount: number }>> {
+    // Get all configs for this job
+    const configs = await this.db
+      .select()
+      .from(interviewStageConfig)
+      .where(eq(interviewStageConfig.jobId, jobId))
+      .all();
+
+    // Get interviewer counts per stage
+    const assignments = await this.db
+      .select()
+      .from(interviewStageInterviewers)
+      .where(eq(interviewStageInterviewers.jobId, jobId))
+      .all();
+
+    // Count interviewers per stage
+    const interviewerCounts = new Map<string, number>();
+    for (const a of assignments) {
+      interviewerCounts.set(a.stageId, (interviewerCounts.get(a.stageId) ?? 0) + 1);
+    }
+
+    // Build result map
+    const result = new Map<string, { mode: "any_one" | "all_required"; durationMinutes: number; bufferMinutes: number; interviewerCount: number }>();
+    for (const config of configs) {
+      result.set(config.stageId, {
+        mode: (config.mode ?? "any_one") as "any_one" | "all_required",
+        durationMinutes: config.durationMinutes ?? 45,
+        bufferMinutes: config.bufferMinutes ?? 15,
+        interviewerCount: interviewerCounts.get(config.stageId) ?? 0,
+      });
+    }
+
+    return result;
+  }
 }
