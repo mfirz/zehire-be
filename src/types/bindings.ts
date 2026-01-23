@@ -177,6 +177,28 @@ export interface Env {
   GOOGLE_REDIRECT_URI?: string;
 
   // ==========================================================================
+  // OUTLOOK CALENDAR OAUTH
+  // ==========================================================================
+
+  /**
+   * Outlook/Microsoft OAuth Client ID for calendar integration.
+   * Get from Azure Portal > App Registrations
+   */
+  OUTLOOK_CLIENT_ID?: string;
+
+  /**
+   * Outlook/Microsoft OAuth Client Secret.
+   * Set via: wrangler secret put OUTLOOK_CLIENT_SECRET
+   */
+  OUTLOOK_CLIENT_SECRET?: string;
+
+  /**
+   * Outlook OAuth redirect URI.
+   * Should be: {APP_BASE_URL}/auth/calendar/outlook/callback
+   */
+  OUTLOOK_REDIRECT_URI?: string;
+
+  // ==========================================================================
   // ZOOM VIDEO OAUTH
   // ==========================================================================
 

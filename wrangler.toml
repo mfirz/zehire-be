@@ -175,8 +175,26 @@ crons = ["0 * * * *"]  # Every hour at minute 0
 #   wrangler secret put AUTH_JWT_SECRET --env staging
 #   wrangler secret put AUTH_JWT_SECRET --env production
 #
+# TOKEN_ENCRYPTION_KEY - Key for encrypting OAuth tokens at rest
+#   wrangler secret put TOKEN_ENCRYPTION_KEY --env staging
+#   wrangler secret put TOKEN_ENCRYPTION_KEY --env production
+#
 # ANTHROPIC_API_KEY - API key for Claude LLM calls (optional if using Workers AI)
 #   wrangler secret put ANTHROPIC_API_KEY --env staging
 #   wrangler secret put ANTHROPIC_API_KEY --env production
+#
+# -----------------------------------------------------------------------------
+# CALENDAR PROVIDER SECRETS (at least one provider required for scheduling)
+# -----------------------------------------------------------------------------
+#
+# Google Calendar OAuth (from Google Cloud Console)
+#   wrangler secret put GOOGLE_CLIENT_ID --env staging
+#   wrangler secret put GOOGLE_CLIENT_SECRET --env staging
+#   wrangler secret put GOOGLE_REDIRECT_URI --env staging  # e.g., https://api.zehire.com/auth/calendar/google/callback
+#
+# Outlook Calendar OAuth (from Azure Portal - App Registration)
+#   wrangler secret put OUTLOOK_CLIENT_ID --env staging
+#   wrangler secret put OUTLOOK_CLIENT_SECRET --env staging
+#   wrangler secret put OUTLOOK_REDIRECT_URI --env staging  # e.g., https://api.zehire.com/auth/calendar/outlook/callback
 #
 # =============================================================================

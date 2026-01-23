@@ -6,6 +6,7 @@
 
 import type { CalendarProvider, CalendarProviderType } from "./types";
 import { GoogleCalendarProvider } from "./providers/google";
+import { OutlookCalendarProvider } from "./providers/outlook";
 
 /**
  * Create a calendar provider instance.
@@ -37,9 +38,23 @@ export function createCalendarProvider(
         GOOGLE_REDIRECT_URI: redirectUri,
       });
     }
-    case "outlook":
-      // Future: OutlookCalendarProvider
-      throw new Error("Outlook Calendar provider not yet implemented");
+    case "outlook": {
+      const clientId = env.OUTLOOK_CLIENT_ID;
+      const clientSecret = env.OUTLOOK_CLIENT_SECRET;
+      const redirectUri = env.OUTLOOK_REDIRECT_URI;
+
+      if (!clientId || !clientSecret || !redirectUri) {
+        throw new Error(
+          "Outlook Calendar OAuth requires OUTLOOK_CLIENT_ID, OUTLOOK_CLIENT_SECRET, and OUTLOOK_REDIRECT_URI"
+        );
+      }
+
+      return new OutlookCalendarProvider({
+        OUTLOOK_CLIENT_ID: clientId,
+        OUTLOOK_CLIENT_SECRET: clientSecret,
+        OUTLOOK_REDIRECT_URI: redirectUri,
+      });
+    }
     case "apple":
       // Future: AppleCalendarProvider
       throw new Error("Apple Calendar provider not yet implemented");
