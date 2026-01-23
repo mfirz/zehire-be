@@ -6,14 +6,16 @@
  * Base path: /i/:token
  *
  * Endpoints:
- * - GET  /i/:token                    - Interviewer dashboard data
- * - GET  /i/:token/interviews         - List upcoming interviews
- * - GET  /i/:token/availability       - Get availability windows
- * - PUT  /i/:token/availability       - Update availability windows
- * - POST /i/:token/block-date         - Block a date
- * - DELETE /i/:token/block-date/:id   - Unblock a date
- * - POST /i/:token/unavailable-today  - Mark unavailable for today
- * - GET  /i/:token/calendar-status    - Check calendar connection status
+ * - GET  /i/:token                      - Interviewer dashboard data
+ * - GET  /i/:token/interviews           - List upcoming interviews
+ * - GET  /i/:token/availability         - Get availability windows
+ * - PUT  /i/:token/availability         - Update availability windows
+ * - POST /i/:token/block-date           - Block a date
+ * - DELETE /i/:token/block-date/:id     - Unblock a date
+ * - POST /i/:token/unavailable-today    - Mark unavailable for today
+ * - GET  /i/:token/calendar-status      - Check calendar connection status
+ * - GET  /i/:token/connect/:provider    - Start OAuth flow for calendar
+ * - POST /i/:token/disconnect           - Disconnect calendar
  *
  * These routes use magic token authentication, not JWT.
  */
@@ -21,6 +23,7 @@
 import { Hono } from "hono";
 
 import { InterviewerRepository } from "../../domain/interviewers";
+import { createCalendarProvider, type CalendarProviderType } from "../../domain/calendar";
 import type { Interviewer } from "../../db";
 import type { Env } from "../../types/bindings";
 
@@ -186,6 +189,78 @@ interviewerRoutes.get("/:token/calendar-status", async (c) => {
     provider: interviewer.calendarProvider,
     connectedAt: interviewer.connectedAt,
   });
+});
+
+/**
+ * GET /i/:token/connect/:provider
+ *
+ * Start OAuth flow for calendar connection.
+ * Redirects to the provider's OAuth consent screen.
+ */
+interviewerRoutes.get("/:token/connect/:provider", async (c) => {
+  const interviewer = c.get("interviewer");
+  const providerType = c.req.param("provider") as CalendarProviderType;
+  const token = c.req.param("token");
+
+  // Validate provider type
+  const validProviders: CalendarProviderType[] = ["google", "outlook", "apple"];
+  if (!validProviders.includes(providerType)) {
+    return c.json({ error: `Invalid provider. Supported: ${validProviders.join(", ")}` }, 400);
+  }
+
+  // Check if already connected
+  if (interviewer.calendarConnected) {
+    return c.json(
+      { error: "Calendar already connected. Disconnect first to switch providers." },
+      400
+    );
+  }
+
+  try {
+    // Create provider and get authorization URL
+    const provider = createCalendarProvider(providerType, c.env as unknown as Record<string, string>);
+
+    // State contains the magic token and provider for callback verification
+    const state = JSON.stringify({ token, provider: providerType });
+    const encodedState = btoa(state);
+
+    const authUrl = provider.getAuthorizationUrl(encodedState);
+
+    // Redirect to OAuth consent screen
+    return c.redirect(authUrl);
+  } catch (error) {
+    console.error(`Failed to start OAuth flow for ${providerType}:`, error);
+    if (error instanceof Error && error.message.includes("not yet implemented")) {
+      return c.json({ error: error.message }, 501);
+    }
+    return c.json({ error: "Failed to start OAuth flow" }, 500);
+  }
+});
+
+/**
+ * POST /i/:token/disconnect
+ *
+ * Disconnect calendar from interviewer account.
+ */
+interviewerRoutes.post("/:token/disconnect", async (c) => {
+  const interviewer = c.get("interviewer");
+
+  if (!interviewer.calendarConnected) {
+    return c.json({ error: "No calendar connected" }, 400);
+  }
+
+  const repo = new InterviewerRepository(c.env.DB);
+
+  // Clear calendar connection
+  await repo.updateCalendarConnection(interviewer.id, {
+    calendarProvider: null,
+    calendarConnected: false,
+    calendarTokens: null,
+    calendarId: null,
+    connectedAt: null,
+  });
+
+  return c.json({ success: true, message: "Calendar disconnected successfully" });
 });
 
 export default interviewerRoutes;

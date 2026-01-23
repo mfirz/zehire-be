@@ -8,6 +8,8 @@
  * - GET  /auth/callback - Complete magic link authentication
  * - POST /auth/logout - Clear session (optional)
  * - GET  /auth/me     - Get current user (optional)
+ * - GET  /auth/calendar/:provider/callback - OAuth callback for calendar connection
+ * - GET  /auth/video/:provider/callback - OAuth callback for video provider
  */
 
 import { Hono } from "hono";
@@ -16,6 +18,20 @@ import type { Env } from "../../types/bindings";
 import { createEmailGatewayFromEnv } from "../email/email.gateway";
 import { AuthService } from "./auth.service";
 import { SessionService } from "./session.service";
+import {
+  createCalendarProvider,
+  type CalendarProviderType,
+  type CalendarTokens,
+} from "../../domain/calendar";
+import {
+  createVideoProvider,
+  type VideoProviderType,
+  type VideoTokens,
+} from "../../domain/video";
+import { InterviewerRepository } from "../../domain/interviewers";
+import { encryptTokens } from "../../lib/crypto";
+import { createDb, orgs } from "../../db";
+import { eq } from "drizzle-orm";
 
 // =============================================================================
 // SCHEMAS
@@ -181,6 +197,219 @@ export function createAuthRoutes(): Hono<{ Bindings: Env }> {
         orgId: user.orgId,
       },
     });
+  });
+
+  // ===========================================================================
+  // GET /auth/calendar/:provider/callback
+  // ===========================================================================
+  auth.get("/calendar/:provider/callback", async (c) => {
+    const providerType = c.req.param("provider") as CalendarProviderType;
+    const code = c.req.query("code");
+    const state = c.req.query("state");
+    const error = c.req.query("error");
+
+    // Handle OAuth error (user denied access)
+    if (error) {
+      const appBaseUrl = c.env.APP_BASE_URL || "";
+      return c.redirect(`${appBaseUrl}/i/error?error=${encodeURIComponent(error)}`);
+    }
+
+    // Validate required parameters
+    if (!code || !state) {
+      return c.json(
+        {
+          error: {
+            code: "INVALID_CALLBACK",
+            message: "Missing code or state parameter",
+          },
+        },
+        400
+      );
+    }
+
+    try {
+      // Decode and parse state
+      const stateData = JSON.parse(atob(state)) as { token: string; provider: CalendarProviderType };
+
+      // Verify provider matches
+      if (stateData.provider !== providerType) {
+        return c.json(
+          {
+            error: {
+              code: "INVALID_STATE",
+              message: "Provider mismatch in state",
+            },
+          },
+          400
+        );
+      }
+
+      // Validate interviewer token
+      const repo = new InterviewerRepository(c.env.DB);
+      const interviewer = await repo.findByMagicToken(stateData.token);
+
+      if (!interviewer) {
+        return c.json(
+          {
+            error: {
+              code: "INVALID_TOKEN",
+              message: "Invalid or expired interviewer token",
+            },
+          },
+          401
+        );
+      }
+
+      // Exchange code for tokens
+      const provider = createCalendarProvider(
+        providerType,
+        c.env as unknown as Record<string, string>
+      );
+      const tokens = await provider.exchangeCodeForTokens(code);
+
+      // Encrypt tokens for storage
+      const encryptionKey = c.env.TOKEN_ENCRYPTION_KEY;
+      if (!encryptionKey) {
+        throw new Error("TOKEN_ENCRYPTION_KEY is required");
+      }
+      const encryptedTokens = await encryptTokens(tokens as CalendarTokens, encryptionKey);
+
+      // Update interviewer with calendar connection
+      await repo.updateCalendarConnection(interviewer.id, {
+        calendarProvider: providerType,
+        calendarConnected: true,
+        calendarTokens: encryptedTokens,
+        calendarId: "primary", // Default to primary calendar
+        connectedAt: new Date().toISOString(),
+      });
+
+      // Redirect back to interviewer dashboard
+      const appBaseUrl = c.env.APP_BASE_URL || "";
+      return c.redirect(`${appBaseUrl}/i/${stateData.token}?calendar=connected`);
+    } catch (err) {
+      console.error("Calendar OAuth callback error:", err);
+
+      // Try to redirect with error, but handle case where state is invalid
+      try {
+        const stateData = JSON.parse(atob(state)) as { token: string };
+        const appBaseUrl = c.env.APP_BASE_URL || "";
+        return c.redirect(
+          `${appBaseUrl}/i/${stateData.token}?error=${encodeURIComponent("Failed to connect calendar")}`
+        );
+      } catch {
+        return c.json(
+          {
+            error: {
+              code: "OAUTH_ERROR",
+              message: err instanceof Error ? err.message : "OAuth callback failed",
+            },
+          },
+          500
+        );
+      }
+    }
+  });
+
+  // ===========================================================================
+  // GET /auth/video/:provider/callback
+  // ===========================================================================
+  auth.get("/video/:provider/callback", async (c) => {
+    const providerType = c.req.param("provider") as VideoProviderType;
+    const code = c.req.query("code");
+    const state = c.req.query("state");
+    const error = c.req.query("error");
+
+    // Handle OAuth error (user denied access)
+    if (error) {
+      const appBaseUrl = c.env.APP_BASE_URL || "";
+      return c.redirect(`${appBaseUrl}/settings?video_error=${encodeURIComponent(error)}`);
+    }
+
+    // Validate required parameters
+    if (!code || !state) {
+      return c.json(
+        {
+          error: {
+            code: "INVALID_CALLBACK",
+            message: "Missing code or state parameter",
+          },
+        },
+        400
+      );
+    }
+
+    try {
+      // Decode and parse state
+      const stateData = JSON.parse(atob(state)) as { orgId: string; provider: VideoProviderType };
+
+      // Verify provider matches
+      if (stateData.provider !== providerType) {
+        return c.json(
+          {
+            error: {
+              code: "INVALID_STATE",
+              message: "Provider mismatch in state",
+            },
+          },
+          400
+        );
+      }
+
+      // Verify org exists
+      const db = createDb(c.env.DB);
+      const org = await db.select().from(orgs).where(eq(orgs.id, stateData.orgId)).get();
+
+      if (!org) {
+        return c.json(
+          {
+            error: {
+              code: "INVALID_ORG",
+              message: "Organization not found",
+            },
+          },
+          404
+        );
+      }
+
+      // Exchange code for tokens
+      const provider = createVideoProvider(
+        providerType,
+        c.env as unknown as Record<string, string>
+      );
+      const tokens = await provider.exchangeCodeForTokens(code);
+
+      // Encrypt tokens for storage
+      const encryptionKey = c.env.TOKEN_ENCRYPTION_KEY;
+      if (!encryptionKey) {
+        throw new Error("TOKEN_ENCRYPTION_KEY is required");
+      }
+      const encryptedTokens = await encryptTokens(tokens as VideoTokens, encryptionKey);
+
+      const now = new Date().toISOString();
+
+      // Update org with video connection
+      await db
+        .update(orgs)
+        .set({
+          videoCallProvider: providerType,
+          videoTokens: encryptedTokens,
+          videoConnectedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(orgs.id, stateData.orgId));
+
+      // Redirect back to settings page
+      const appBaseUrl = c.env.APP_BASE_URL || "";
+      return c.redirect(`${appBaseUrl}/settings?video=connected`);
+    } catch (err) {
+      console.error("Video OAuth callback error:", err);
+
+      // Try to redirect with error
+      const appBaseUrl = c.env.APP_BASE_URL || "";
+      return c.redirect(
+        `${appBaseUrl}/settings?video_error=${encodeURIComponent("Failed to connect video provider")}`
+      );
+    }
   });
 
   return auth;

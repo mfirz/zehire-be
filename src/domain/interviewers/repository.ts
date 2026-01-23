@@ -157,21 +157,25 @@ export class InterviewerRepository {
    */
   async updateCalendarConnection(
     id: string,
-    provider: "google" | "outlook" | "apple",
-    tokens: string,
-    calendarId: string
+    updates: {
+      calendarProvider: "google" | "outlook" | "apple" | null;
+      calendarConnected: boolean;
+      calendarTokens: string | null;
+      calendarId: string | null;
+      connectedAt: string | null;
+    }
   ): Promise<void> {
     const now = new Date().toISOString();
 
     await this.db
       .update(interviewers)
       .set({
-        calendarProvider: provider,
-        calendarConnected: true,
-        calendarTokens: tokens,
-        calendarId,
-        connectedAt: now,
-        status: "active",
+        calendarProvider: updates.calendarProvider,
+        calendarConnected: updates.calendarConnected,
+        calendarTokens: updates.calendarTokens,
+        calendarId: updates.calendarId,
+        connectedAt: updates.connectedAt,
+        status: updates.calendarConnected ? "active" : undefined,
         updatedAt: now,
       })
       .where(eq(interviewers.id, id));

@@ -145,6 +145,59 @@ export interface Env {
   AUTH_JWT_SECRET: string;
 
   // ==========================================================================
+  // TOKEN ENCRYPTION
+  // ==========================================================================
+
+  /**
+   * AES-256-GCM encryption key for OAuth tokens at rest.
+   * Base64-encoded 256-bit key.
+   * Set via: wrangler secret put TOKEN_ENCRYPTION_KEY
+   */
+  TOKEN_ENCRYPTION_KEY?: string;
+
+  // ==========================================================================
+  // GOOGLE CALENDAR OAUTH
+  // ==========================================================================
+
+  /**
+   * Google OAuth Client ID for calendar integration.
+   */
+  GOOGLE_CLIENT_ID?: string;
+
+  /**
+   * Google OAuth Client Secret.
+   * Set via: wrangler secret put GOOGLE_CLIENT_SECRET
+   */
+  GOOGLE_CLIENT_SECRET?: string;
+
+  /**
+   * Google OAuth redirect URI.
+   * Should be: {APP_BASE_URL}/auth/calendar/google/callback
+   */
+  GOOGLE_REDIRECT_URI?: string;
+
+  // ==========================================================================
+  // ZOOM VIDEO OAUTH
+  // ==========================================================================
+
+  /**
+   * Zoom OAuth Client ID for video call integration.
+   */
+  ZOOM_CLIENT_ID?: string;
+
+  /**
+   * Zoom OAuth Client Secret.
+   * Set via: wrangler secret put ZOOM_CLIENT_SECRET
+   */
+  ZOOM_CLIENT_SECRET?: string;
+
+  /**
+   * Zoom OAuth redirect URI.
+   * Should be: {APP_BASE_URL}/auth/video/zoom/callback
+   */
+  ZOOM_REDIRECT_URI?: string;
+
+  // ==========================================================================
   // AWS SES CONFIGURATION
   // ==========================================================================
 
