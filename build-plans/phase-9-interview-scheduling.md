@@ -2152,15 +2152,28 @@ feedbackContent: text("feedback_content"),  // JSON string of InterviewFeedback
 
 ## Reminder Scheduling
 
-24-hour interview reminders using **Cloudflare Cron Triggers** — reliable and free.
+24-hour interview reminders using **Cloudflare Cron Triggers** — reliable, free, and simple.
 
 ### Why Cron Triggers?
 
-| Option | Cost | Reliability | Complexity |
-|--------|------|-------------|------------|
-| **Cron Trigger (hourly)** ✅ | Free | High | Low |
-| Queues with delay | Not supported | - | - |
-| External scheduler | $$ | High | Medium |
+| Option | Cost | Reliability | Why not? |
+|--------|------|-------------|----------|
+| **Cron Trigger (hourly)** ✅ | Free | High | Best choice |
+| Queues with delay | Free | High | Max 12h delay, need chaining for 24h |
+| External scheduler | $$ | High | Unnecessary complexity |
+
+### Scalability & Limits
+
+| Resource | Limit | At 1,000 interviews/hour |
+|----------|-------|--------------------------|
+| Cron invocations | Unlimited | 24/day (nothing) |
+| Worker CPU time | 30 seconds | ~5-10 sec with parallel |
+| D1 writes | 100K/day free | ~1,000 writes (fine) |
+| Emails (AWS SES) | $0.10/1,000 | $0.10 |
+
+**Maximum capacity with parallel batching: ~1,000 interviews/hour = 24,000/day**
+
+At 720,000 interviews/month you'd need to optimize. That's a good problem to have.
 
 ### Implementation
 
@@ -2179,9 +2192,6 @@ export default {
     const reminderWindow = new Date(now.getTime() + 25 * 60 * 60 * 1000); // 25 hours
 
     // Find interviews needing reminders
-    // - Scheduled in next 24-25 hours
-    // - Not yet reminded
-    // - Still active (not cancelled)
     const interviews = await db.select()
       .from(scheduledInterviews)
       .where(and(
@@ -2191,40 +2201,68 @@ export default {
         eq(scheduledInterviews.status, "scheduled")
       ));
 
-    for (const interview of interviews) {
-      try {
-        // Send to candidate
-        await emailGateway.sendInterviewReminder({
-          recipientEmail: interview.candidateEmail,
-          recipientType: "candidate",
-          // ... other fields
-        });
+    // Process in parallel batches for scalability
+    const BATCH_SIZE = 10;
 
-        // Send to interviewers
-        const participants = await db.select()
-          .from(interviewParticipants)
-          .where(eq(interviewParticipants.interviewId, interview.id));
+    for (let i = 0; i < interviews.length; i += BATCH_SIZE) {
+      const batch = interviews.slice(i, i + BATCH_SIZE);
 
-        for (const participant of participants) {
+      await Promise.all(batch.map(async (interview) => {
+        try {
+          // Send to candidate
           await emailGateway.sendInterviewReminder({
-            recipientEmail: participant.interviewerEmail,
-            recipientType: "interviewer",
+            recipientEmail: interview.candidateEmail,
+            recipientType: "candidate",
             // ... other fields
           });
+
+          // Send to interviewers
+          const participants = await db.select()
+            .from(interviewParticipants)
+            .where(eq(interviewParticipants.interviewId, interview.id));
+
+          await Promise.all(participants.map(participant =>
+            emailGateway.sendInterviewReminder({
+              recipientEmail: participant.interviewerEmail,
+              recipientType: "interviewer",
+              // ... other fields
+            })
+          ));
+
+          // Mark as reminded
+          await db.update(scheduledInterviews)
+            .set({ reminderSentAt: now.toISOString() })
+            .where(eq(scheduledInterviews.id, interview.id));
+
+        } catch (error) {
+          console.error(`Failed to send reminder for ${interview.id}:`, error);
+          // Will retry next hour
         }
-
-        // Mark as reminded
-        await db.update(scheduledInterviews)
-          .set({ reminderSentAt: now.toISOString() })
-          .where(eq(scheduledInterviews.id, interview.id));
-
-      } catch (error) {
-        console.error(`Failed to send reminder for ${interview.id}:`, error);
-        // Will retry next hour
-      }
+      }));
     }
   }
 };
+```
+
+### Short-Notice Bookings
+
+If interview is booked < 24 hours away, the **confirmation email** serves as the reminder:
+
+```typescript
+// In booking handler
+async function bookInterview(interview) {
+  // Always send confirmation (includes all details)
+  await emailGateway.sendInterviewConfirmation(...);
+
+  const hoursUntil = getHoursUntilInterview(interview);
+
+  if (hoursUntil < 24) {
+    // Mark as already reminded so cron skips it
+    await db.update(scheduledInterviews)
+      .set({ reminderSentAt: new Date().toISOString() })
+      .where(eq(scheduledInterviews.id, interview.id));
+  }
+}
 ```
 
 ### Schema Addition
@@ -2239,6 +2277,7 @@ reminderSentAt: text("reminder_sent_at"),  // ISO datetime, null until sent
 - We check every hour
 - If a run fails, next hour catches it
 - 25h window > 24h reminder = no missed reminders
+- Candidate receives reminder 23-24 hours before (acceptable variance)
 
 ---
 
