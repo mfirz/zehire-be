@@ -213,6 +213,29 @@ export interface SendInterviewCancellationInput {
 }
 
 /**
+ * Input for sending scheduling invite email to candidate.
+ */
+export interface SendSchedulingInviteInput {
+  /** Candidate email */
+  email: string;
+
+  /** Candidate name */
+  name: string;
+
+  /** Job title */
+  jobTitle: string;
+
+  /** Company name */
+  companyName: string;
+
+  /** Stage name (e.g., "Technical Interview") */
+  stageName: string;
+
+  /** URL to schedule interview */
+  schedulingUrl: string;
+}
+
+/**
  * Email gateway interface.
  * Implement this interface to add a new email provider.
  */
@@ -251,6 +274,11 @@ export interface EmailGateway {
    * Send interview cancellation notification.
    */
   sendInterviewCancellation(input: SendInterviewCancellationInput): Promise<void>;
+
+  /**
+   * Send scheduling invite to candidate.
+   */
+  sendSchedulingInvite(input: SendSchedulingInviteInput): Promise<void>;
 }
 
 // =============================================================================
@@ -349,6 +377,18 @@ export class ConsoleEmailGateway implements EmailGateway {
     console.log(`Job: ${input.jobTitle} at ${input.companyName}`);
     console.log(`Was Scheduled: ${input.scheduledAt} (${input.timezone})`);
     if (input.reason) console.log(`Reason: ${input.reason}`);
+    console.log("========================================");
+  }
+
+  async sendSchedulingInvite(input: SendSchedulingInviteInput): Promise<void> {
+    console.log("========================================");
+    console.log("[EmailGateway] Scheduling Invite (Console)");
+    console.log("========================================");
+    console.log(`To: ${input.email}`);
+    console.log(`Candidate: ${input.name}`);
+    console.log(`Job: ${input.jobTitle} at ${input.companyName}`);
+    console.log(`Stage: ${input.stageName}`);
+    console.log(`Scheduling URL: ${input.schedulingUrl}`);
     console.log("========================================");
   }
 }

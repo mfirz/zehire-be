@@ -19,6 +19,7 @@ import type {
   SendFeedbackReminderInput,
   SendInterviewRescheduleInput,
   SendInterviewCancellationInput,
+  SendSchedulingInviteInput,
 } from "../../email.gateway";
 import { SesClient, SesError, type SesClientConfig } from "./ses.client";
 
@@ -247,6 +248,29 @@ export class SesEmailGateway implements EmailGateway {
       });
 
       console.log("[SES] Interview cancellation notification sent", {
+        messageId: result.messageId,
+        recipient: this.redactEmail(input.email),
+      });
+    } catch (error) {
+      this.logError(error, input.email);
+    }
+  }
+
+  async sendSchedulingInvite(input: SendSchedulingInviteInput): Promise<void> {
+    const subject = `Schedule your interview: ${input.jobTitle} at ${input.companyName}`;
+    const { textBody, htmlBody } = this.buildSchedulingInviteEmail(input);
+
+    try {
+      const result = await this.client.sendEmail({
+        from: this.fromEmail,
+        to: input.email,
+        subject,
+        textBody,
+        htmlBody,
+        configurationSet: this.configurationSet,
+      });
+
+      console.log("[SES] Scheduling invite sent", {
         messageId: result.messageId,
         recipient: this.redactEmail(input.email),
       });
@@ -722,6 +746,72 @@ Zehire - Signal-First Hiring
       <p style="margin: 0 0 10px;"><strong>Was Scheduled:</strong> ${formattedDate}</p>
       ${input.reason ? `<p style="margin: 0;"><strong>Reason:</strong> ${this.escapeHtml(input.reason)}</p>` : ""}
     </div>
+  </div>
+
+  <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">
+    Zehire — Signal-First Hiring
+  </p>
+</body>
+</html>
+`.trim();
+
+    return { textBody, htmlBody };
+  }
+
+  /**
+   * Build scheduling invite email content.
+   */
+  private buildSchedulingInviteEmail(
+    input: SendSchedulingInviteInput
+  ): { textBody: string; htmlBody: string } {
+    const textBody = `
+Hi ${input.name},
+
+Great news! ${input.companyName} would like to schedule an interview with you.
+
+Position: ${input.jobTitle}
+Stage: ${input.stageName}
+
+Please choose a time that works for you:
+
+${input.schedulingUrl}
+
+This link expires in 7 days.
+
+---
+Zehire - Signal-First Hiring
+`.trim();
+
+    const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: #f8f9fa; padding: 30px; border-radius: 8px;">
+    <h1 style="color: #1a1a1a; margin-top: 0; font-size: 24px;">Schedule Your Interview</h1>
+
+    <p>Hi ${this.escapeHtml(input.name)},</p>
+
+    <p>Great news! <strong>${this.escapeHtml(input.companyName)}</strong> would like to schedule an interview with you.</p>
+
+    <div style="background: white; padding: 20px; border-radius: 6px; margin: 20px 0;">
+      <p style="margin: 0 0 10px;"><strong>Position:</strong> ${this.escapeHtml(input.jobTitle)}</p>
+      <p style="margin: 0;"><strong>Stage:</strong> ${this.escapeHtml(input.stageName)}</p>
+    </div>
+
+    <p>Please choose a time that works for you:</p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${this.escapeHtml(input.schedulingUrl)}"
+         style="display: inline-block; background: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600;">
+        Schedule Interview
+      </a>
+    </div>
+
+    <p style="color: #666; font-size: 14px;">This link expires in 7 days.</p>
   </div>
 
   <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">

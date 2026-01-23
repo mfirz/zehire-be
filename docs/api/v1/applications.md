@@ -21,6 +21,7 @@ Recruiter-facing endpoints for managing job applications.
 | GET    | `/v1/applications/:applicationId/cv`              | Download CV file                   |
 | GET    | `/v1/applications/:applicationId/cv/summary`      | Get structured CV summary          |
 | POST   | `/v1/applications/:applicationId/cv/reprocess`    | Reprocess CV extraction            |
+| POST   | `/v1/applications/:applicationId/schedule-invite` | Send scheduling invite to candidate|
 
 ---
 
@@ -1012,6 +1013,63 @@ Trigger CV reprocessing for an application. Clears existing CV data and runs ext
 | 400    | No CV uploaded for this application  |
 | 404    | Application not found                |
 | 500    | CV reprocessing failed               |
+
+---
+
+## POST /v1/applications/:applicationId/schedule-invite
+
+Send a scheduling invite to a candidate for a specific interview stage. Creates a scheduling token and sends an email with a link to self-schedule.
+
+### Path Parameters
+
+| Parameter       | Type   | Description        |
+| --------------- | ------ | ------------------ |
+| `applicationId` | string | The application ID |
+
+### Request Body
+
+```json
+{
+  "stageId": "round_1"
+}
+```
+
+| Field     | Type   | Required | Description                              |
+| --------- | ------ | -------- | ---------------------------------------- |
+| `stageId` | string | Yes      | Interview stage ID from the job pipeline |
+
+### Response (201 Created)
+
+```json
+{
+  "success": true,
+  "message": "Scheduling invite sent",
+  "schedulingLink": "http://localhost:8787/schedule/abc123xyz...",
+  "expiresAt": "2026-01-30T10:00:00Z"
+}
+```
+
+| Field           | Type   | Description                              |
+| --------------- | ------ | ---------------------------------------- |
+| `success`       | boolean| Whether the invite was created           |
+| `message`       | string | Status message                           |
+| `schedulingLink`| string | URL for candidate to schedule interview  |
+| `expiresAt`     | string | When the scheduling link expires (7 days)|
+
+**Development mode:** Response includes `_token` field with the raw scheduling token.
+
+### Side Effects
+
+- Creates a scheduling token (expires in 7 days)
+- Sends scheduling invite email to candidate
+- Logs `scheduling_invite_sent` event in timeline
+
+### Errors
+
+| Status | Message               |
+| ------ | --------------------- |
+| 400    | Stage ID is required  |
+| 404    | Application not found |
 
 ---
 

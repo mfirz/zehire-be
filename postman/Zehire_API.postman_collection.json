@@ -1060,6 +1060,29 @@
             "description": "Trigger CV reprocessing for an application.\n\nClears existing CV data and runs the extraction + summarization pipeline again.\n\n**Use cases:**\n- CV processing failed initially\n- LLM model was updated\n- CV summarization format changed\n\n**Note:** This runs synchronously and may take a few seconds."
           },
           "response": []
+        },
+        {
+          "name": "Send Scheduling Invite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stageId\": \"{{stage_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/applications/{{application_id}}/schedule-invite",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "applications", "{{application_id}}", "schedule-invite"]
+            },
+            "description": "Send a scheduling invite to the candidate.\n\nCreates a scheduling token and sends an email with a link to the candidate self-service scheduling portal.\n\n**Request body:**\n- `stageId`: The interview stage ID (e.g., \"round_1\", \"technical_interview\")\n\n**Returns:**\n- `success`: Boolean\n- `schedulingLink`: The link sent to the candidate\n- `expiresAt`: Token expiration (7 days from creation)\n- `_magicLink`: (dev only) Direct link for testing\n\n**Flow:**\n1. Creates a scheduling token for the application + stage\n2. Sends email to candidate with scheduling link\n3. Logs \"scheduling_invite_sent\" event\n4. Candidate uses /schedule/:token endpoints to book"
+          },
+          "response": []
         }
       ]
     },

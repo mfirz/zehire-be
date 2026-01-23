@@ -198,6 +198,7 @@ export const eventTypes = [
   "signals_completed",
   "signals_failed",
   "cv_uploaded",
+  "scheduling_invite_sent",
 ] as const;
 export type EventType = (typeof eventTypes)[number];
 

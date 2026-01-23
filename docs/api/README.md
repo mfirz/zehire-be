@@ -136,6 +136,7 @@ All errors follow a consistent format:
 | POST   | `/v1/applications/:id/notes`    | Required | Add note to application        |
 | DELETE | `/v1/applications/:id/notes/:nid`| Required | Delete a note                 |
 | GET    | `/v1/applications/:id/timeline` | Required | Get activity timeline          |
+| POST   | `/v1/applications/:id/schedule-invite` | Required | Send scheduling invite   |
 | GET    | `/v1/candidates/lookup`         | Required | Cross-app lookup by email      |
 | POST   | `/v1/jobs/:id/custom-questions` | Required | Create custom question         |
 | GET    | `/v1/jobs/:id/custom-questions` | Required | List custom questions          |

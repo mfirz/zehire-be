@@ -8,6 +8,12 @@ compatibility_flags = ["nodejs_compat"]
 port = 8787
 local_protocol = "http"
 
+# Local development variables
+[vars]
+ENVIRONMENT = "development"
+LOG_LEVEL = "debug"
+APP_BASE_URL = "http://localhost:8787"
+
 # =============================================================================
 # D1 DATABASE BINDINGS
 # =============================================================================

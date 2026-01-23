@@ -15,12 +15,21 @@
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 
+import { z } from "zod";
+
 import { ApplicationRepository, CvService } from "../../../domain/applications";
 import { CreateNoteSchema, UpdateApplicationSchema } from "../../../domain/applications/schemas";
 import { CustomQuestionsRepository } from "../../../domain/custom-questions/repository";
 import { JobRepository } from "../../../domain/jobs/repository";
+import { SchedulingRepository } from "../../../domain/scheduling";
+import { createEmailGatewayFromEnv } from "../../../modules/email";
 import { jwtAuth } from "../../../middleware/auth";
 import type { AuthVariables, Env } from "../../../types/bindings";
+
+// Schema for scheduling invite
+const SendSchedulingInviteSchema = z.object({
+  stageId: z.string().min(1, "Stage ID is required"),
+});
 
 const applicationsRoute = new Hono<{
   Bindings: Env;
@@ -463,6 +472,83 @@ applicationsRoute.get("/:applicationId/timeline", async (c) => {
 
   return c.json({ events });
 });
+
+// =============================================================================
+// SCHEDULING ENDPOINTS
+// =============================================================================
+
+/**
+ * POST /v1/applications/:applicationId/schedule-invite
+ *
+ * Send a scheduling invite to the candidate for a specific interview stage.
+ * Creates a scheduling token and sends an email with the scheduling link.
+ */
+applicationsRoute.post(
+  "/:applicationId/schedule-invite",
+  zValidator("json", SendSchedulingInviteSchema),
+  async (c) => {
+    const applicationId = c.req.param("applicationId")!;
+    const user = c.get("user");
+    const orgId = user.orgId;
+    const input = c.req.valid("json");
+
+    const applicationRepository = new ApplicationRepository(c.env.DB);
+    const jobRepository = new JobRepository(c.env.DB);
+    const schedulingRepo = new SchedulingRepository(c.env.DB);
+
+    // Get application
+    const application = await applicationRepository.findById(applicationId);
+
+    if (!application) {
+      return c.json({ error: "Application not found" }, 404);
+    }
+
+    // Verify user's org owns the job
+    const job = await jobRepository.findByIdAndOrg(application.jobId, orgId);
+
+    if (!job) {
+      return c.json({ error: "Application not found" }, 404);
+    }
+
+    // Create scheduling token (expires in 7 days)
+    const token = await schedulingRepo.createToken(applicationId, input.stageId, 7);
+    const schedulingLink = `${c.env.APP_BASE_URL}/schedule/${token.token}`;
+
+    // Send scheduling invite email
+    try {
+      const emailGateway = createEmailGatewayFromEnv(c.env);
+      await emailGateway.sendSchedulingInvite({
+        email: application.candidateEmail,
+        name: application.candidateName,
+        jobTitle: job.title,
+        companyName: job.companyName ?? "Company",
+        stageName: input.stageId.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
+        schedulingUrl: schedulingLink,
+      });
+    } catch (error) {
+      console.error("Failed to send scheduling invite email:", error);
+      // Don't fail - token is created, email can be resent
+    }
+
+    // Log event
+    await applicationRepository.logEvent(applicationId, "scheduling_invite_sent", {
+      actorId: user.userId,
+      actorName: user.email,
+      metadata: { stageId: input.stageId },
+    });
+
+    return c.json(
+      {
+        success: true,
+        message: "Scheduling invite sent",
+        schedulingLink,
+        expiresAt: token.expiresAt,
+        _token: c.env.ENVIRONMENT === "development" ? token.token : undefined,
+      },
+      201
+    );
+  }
+);
 
 // =============================================================================
 // CV ENDPOINTS
