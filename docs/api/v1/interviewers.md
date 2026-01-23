@@ -313,4 +313,4 @@ Authorization: Bearer <jwt>
 ## Related Endpoints
 
 - [Interviewer Self-Service Portal](../interviewer-portal.md) - Magic link authenticated endpoints for interviewers
-- [Stage Configuration](./jobs.md#stage-configuration) - Assign interviewers to interview stages
+- [Pipeline Configuration](./jobs.md#patch-v1jobsidpipeline) - Assign interviewers to interview rounds

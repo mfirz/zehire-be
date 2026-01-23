@@ -28,9 +28,7 @@ import {
   type SlotsResponse,
   type BookingResponse,
 } from "../../domain/scheduling";
-import {
-  StageConfigRepository,
-} from "../../domain/stage-config";
+import { InterviewStagesRepository } from "../../domain/interview-stages";
 import {
   AvailabilityRepository,
   calculateSlots,
@@ -83,8 +81,8 @@ scheduleRoutes.get("/:token", async (c) => {
   const ctx = c.get("schedulingContext");
 
   // Get stage config for duration and interviewers
-  const stageRepo = new StageConfigRepository(c.env.DB);
-  const stageConfig = await stageRepo.getConfigWithInterviewers(ctx.job.id, ctx.stageId);
+  const stageRepo = new InterviewStagesRepository(c.env.DB);
+  const stageConfig = await stageRepo.getStageByJobAndStageId(ctx.job.id, ctx.stageId);
 
   const response: SchedulingPageResponse = {
     job: {
@@ -133,12 +131,11 @@ scheduleRoutes.get("/:token/slots", async (c) => {
   const endDateStr = endDate.toISOString().split("T")[0]!;
 
   // Get stage config
-  const stageRepo = new StageConfigRepository(c.env.DB);
-  const stageConfig = await stageRepo.getConfigWithInterviewers(ctx.job.id, ctx.stageId);
+  const stageRepo = new InterviewStagesRepository(c.env.DB);
+  const stageConfig = await stageRepo.getStageByJobAndStageId(ctx.job.id, ctx.stageId);
 
   const mode = stageConfig?.mode ?? "any_one";
   const durationMinutes = stageConfig?.durationMinutes ?? 45;
-  const bufferMinutes = stageConfig?.bufferMinutes ?? 15;
   const interviewerList = stageConfig?.interviewers ?? [];
 
   if (interviewerList.length === 0) {
@@ -210,13 +207,12 @@ scheduleRoutes.get("/:token/slots", async (c) => {
     }
   }
 
-  // Calculate slots
+  // Calculate slots (buffer is hardcoded via INTERVIEW_BUFFER_MINUTES constant)
   const slots = calculateSlots({
     windows,
     blockedDates,
     freeBusy,
     durationMinutes,
-    bufferMinutes,
     mode,
     startDate,
     endDate,
@@ -272,8 +268,8 @@ scheduleRoutes.post("/:token/book", async (c) => {
   const input = parseResult.data;
 
   // Get stage config
-  const stageRepo = new StageConfigRepository(c.env.DB);
-  const stageConfig = await stageRepo.getConfigWithInterviewers(ctx.job.id, ctx.stageId);
+  const stageRepo = new InterviewStagesRepository(c.env.DB);
+  const stageConfig = await stageRepo.getStageByJobAndStageId(ctx.job.id, ctx.stageId);
 
   const durationMinutes = stageConfig?.durationMinutes ?? 45;
   const interviewerIds = (stageConfig?.interviewers ?? []).map((i) => i.id);
@@ -497,8 +493,8 @@ scheduleRoutes.post("/:token/reschedule", async (c) => {
   }
 
   // Get stage config
-  const stageRepo = new StageConfigRepository(c.env.DB);
-  const stageConfig = await stageRepo.getConfigWithInterviewers(ctx.job.id, ctx.stageId);
+  const stageRepo = new InterviewStagesRepository(c.env.DB);
+  const stageConfig = await stageRepo.getStageByJobAndStageId(ctx.job.id, ctx.stageId);
 
   const durationMinutes = stageConfig?.durationMinutes ?? 45;
   const interviewerIds = (stageConfig?.interviewers ?? []).map((i) => i.id);

@@ -100,6 +100,7 @@ export const InterviewRoundConfigSchema = z.object({
   duration: z.number(),
   interviewerIds: z.array(z.string()),
   focus: z.string(),
+  mode: z.enum(["any_one", "all_required"]).optional(), // Interview mode
 });
 
 export type InterviewRoundConfig = z.infer<typeof InterviewRoundConfigSchema>;

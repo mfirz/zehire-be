@@ -380,4 +380,4 @@ cancelled
 ## Related Endpoints
 
 - [Interviewer Portal](./interviewer-portal.md) - Interviewer self-service endpoints
-- [Stage Configuration](./v1/jobs.md#stage-configuration) - Configure interview stages
+- [Pipeline Configuration](./v1/jobs.md#patch-v1jobsidpipeline) - Configure interview rounds and stages

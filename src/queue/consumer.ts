@@ -130,7 +130,7 @@ export async function handleQueue(batch: MessageBatch<JobQueueMessage>, env: Env
   const repository = new JobRepository(env.DB);
   const orgRepository = new OrgRepository(env.DB);
   const llmClient = createLLMClient({ env });
-  const processor = new JobProcessor(repository, orgRepository, llmClient);
+  const processor = new JobProcessor(repository, orgRepository, llmClient, env.DB);
 
   for (const message of batch.messages) {
     const body = message.body;

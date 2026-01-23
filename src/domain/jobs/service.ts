@@ -17,10 +17,10 @@
 import { renderToHtml, type TiptapDoc } from "../../lib/tiptap";
 import type { Env } from "../../types/bindings";
 import { CustomQuestionsRepository } from "../custom-questions/repository";
+import { InterviewStagesRepository, type StageInput } from "../interview-stages";
 import { generateInitialConfig } from "../pipeline/advisor";
-import { PipelineConfigSchema, PipelineRecommendationSchema } from "../pipeline/types";
+import { PipelineRecommendationSchema } from "../pipeline/types";
 import type { PipelineConfig, PipelineUpdate } from "../pipeline/types";
-import { StageConfigRepository } from "../stage-config/repository";
 import { BillingEventRepository, JobRepository, OrgRepository } from "./repository";
 import type {
   CreateJobInput,
@@ -70,7 +70,7 @@ export type JobServiceResult<T> =
 export class JobService {
   private readonly billingEventRepository: BillingEventRepository;
   private readonly customQuestionsRepository: CustomQuestionsRepository;
-  private readonly stageConfigRepository: StageConfigRepository;
+  private readonly interviewStagesRepository: InterviewStagesRepository;
 
   constructor(
     private readonly repository: JobRepository,
@@ -80,7 +80,7 @@ export class JobService {
   ) {
     this.billingEventRepository = new BillingEventRepository(db);
     this.customQuestionsRepository = new CustomQuestionsRepository(db);
-    this.stageConfigRepository = new StageConfigRepository(db);
+    this.interviewStagesRepository = new InterviewStagesRepository(db);
   }
 
   // ===========================================================================
@@ -148,7 +148,7 @@ export class JobService {
 
     if (!result.updated) {
       // No changes made
-      return { success: true, data: this.formatJobResponse(job) };
+      return { success: true, data: await this.formatJobResponse(job) };
     }
 
     // Fetch updated job
@@ -165,7 +165,7 @@ export class JobService {
       await this.orgRepository.incrementJobsListVersion(job.orgId);
     }
 
-    return { success: true, data: this.formatJobResponse(updatedJob) };
+    return { success: true, data: await this.formatJobResponse(updatedJob) };
   }
 
   // ===========================================================================
@@ -325,6 +325,8 @@ export class JobService {
    * Update pipeline configuration (recruiter edits).
    *
    * Only allowed for draft jobs with completed pipeline generation.
+   * Updates both the JSON column (for backwards compatibility) and
+   * the interview_stages table (source of truth).
    *
    * @param jobId - Job ID
    * @param orgId - Organization ID for authorization
@@ -370,8 +372,27 @@ export class JobService {
       interviewRounds: update.interviewRounds ?? currentConfig.interviewRounds,
     };
 
-    // Save updated config
+    // Save updated config to JSON column (backwards compatibility)
     await this.repository.updatePipelineConfig(jobId, updatedConfig);
+
+    // Also update interview_stages table (source of truth)
+    if (update.interviewRounds) {
+      const stageInputs: StageInput[] = update.interviewRounds.map((round) => {
+        const input: StageInput = {
+          id: round.id,
+          name: round.name,
+          focus: round.focus,
+          duration: round.duration,
+          interviewerIds: round.interviewerIds,
+        };
+        if (round.mode) {
+          input.mode = round.mode;
+        }
+        return input;
+      });
+
+      await this.interviewStagesRepository.updateStages(jobId, stageInputs);
+    }
 
     // Invalidate cache
     if (job.orgId) {
@@ -389,7 +410,7 @@ export class JobService {
 
     console.log(`[Service] Job ${jobId} pipeline config updated`);
 
-    return { success: true, data: this.formatJobResponse(updatedJob) };
+    return { success: true, data: await this.formatJobResponse(updatedJob) };
   }
 
   // ===========================================================================
@@ -442,8 +463,20 @@ export class JobService {
     // Regenerate initial config from recommendation (no LLM call)
     const resetConfig = generateInitialConfig(recommendation);
 
-    // Save reset config
+    // Save reset config to JSON column
     await this.repository.updatePipelineConfig(jobId, resetConfig);
+
+    // Also reset interview_stages table
+    // Delete existing stages and create fresh ones from recommendation
+    await this.interviewStagesRepository.deleteAllStagesForJob(jobId);
+    await this.interviewStagesRepository.createStagesFromRecommendation(
+      jobId,
+      recommendation.interviewPanel.rounds.map((round) => ({
+        name: round.name,
+        duration: round.duration,
+        focus: round.focus,
+      }))
+    );
 
     // Invalidate cache
     if (job.orgId) {
@@ -461,7 +494,7 @@ export class JobService {
 
     console.log(`[Service] Job ${jobId} pipeline config reset to recommendation`);
 
-    return { success: true, data: this.formatJobResponse(updatedJob) };
+    return { success: true, data: await this.formatJobResponse(updatedJob) };
   }
 
   // ===========================================================================
@@ -559,7 +592,7 @@ export class JobService {
 
     console.log(`[Service] Job ${jobId} published with slug: ${slug}`);
 
-    return { success: true, data: this.formatJobResponse(publishedJob) };
+    return { success: true, data: await this.formatJobResponse(publishedJob) };
   }
 
   // ===========================================================================
@@ -611,7 +644,7 @@ export class JobService {
 
     console.log(`[Service] Job ${jobId} paused`);
 
-    return { success: true, data: this.formatJobResponse(pausedJob) };
+    return { success: true, data: await this.formatJobResponse(pausedJob) };
   }
 
   // ===========================================================================
@@ -670,7 +703,7 @@ export class JobService {
 
     console.log(`[Service] Job ${jobId} resumed`);
 
-    return { success: true, data: this.formatJobResponse(resumedJob) };
+    return { success: true, data: await this.formatJobResponse(resumedJob) };
   }
 
   // ===========================================================================
@@ -723,7 +756,7 @@ export class JobService {
 
     console.log(`[Service] Job ${jobId} closed`);
 
-    return { success: true, data: this.formatJobResponse(closedJob) };
+    return { success: true, data: await this.formatJobResponse(closedJob) };
   }
 
   // ===========================================================================
@@ -794,14 +827,7 @@ export class JobService {
       return null;
     }
 
-    // Fetch stage configs for all stages
-    const stageConfigsMap = await this.stageConfigRepository.getAllConfigsForJob(jobId);
-    const stageConfigs: Record<string, { mode: "any_one" | "all_required"; durationMinutes: number; bufferMinutes: number; interviewerCount: number }> = {};
-    for (const [stageId, config] of stageConfigsMap) {
-      stageConfigs[stageId] = config;
-    }
-
-    return this.formatJobResponse(job, stageConfigs);
+    return await this.formatJobResponse(job);
   }
 
   // ===========================================================================
@@ -882,11 +908,30 @@ export class JobService {
   /**
    * Format a job row into the appropriate API response.
    * Uses discriminated union based on status.
+   * Builds pipeline from interview_stages table.
    */
-  private formatJobResponse(
-    job: JobRow,
-    stageConfigs: Record<string, { mode: "any_one" | "all_required"; durationMinutes: number; bufferMinutes: number; interviewerCount: number }> = {}
-  ): JobStatusResponse {
+  private async formatJobResponse(job: JobRow): Promise<JobStatusResponse> {
+    // Build pipeline from interview_stages table
+    const stages = await this.interviewStagesRepository.getStagesForJob(job.id);
+
+    // Build pipeline config from interview_stages table (source of truth)
+    // Assessment config comes from jobs.pipeline JSON (1:1 with job)
+    const pipelineFromStages: PipelineConfig | null =
+      stages.length > 0
+        ? {
+            assessment: job.pipeline
+              ? (JSON.parse(job.pipeline) as PipelineConfig).assessment
+              : { enabled: false, providerId: null, config: null },
+            interviewRounds: stages.map((stage) => ({
+              id: stage.id,
+              name: stage.name,
+              duration: stage.durationMinutes,
+              interviewerIds: stage.interviewers.map((i) => i.id),
+              focus: stage.focus,
+              mode: stage.mode,
+            })),
+          }
+        : null; // No stages = pipeline not generated yet
     switch (job.status) {
       case "draft":
         return {
@@ -915,13 +960,11 @@ export class JobService {
           questions: job.questions
             ? this.parseJsonArray(job.questions, RenderedQuestionSchema)
             : null,
-          // Pipeline (if generated)
+          // Pipeline (built from interview_stages table)
           pipelineRecommendation: job.pipelineRecommendation
             ? this.parseJson(job.pipelineRecommendation, PipelineRecommendationSchema)
             : null,
-          pipeline: job.pipeline ? this.parseJson(job.pipeline, PipelineConfigSchema) : null,
-          // Stage configs (interview mode, duration, buffer per stage)
-          stageConfigs,
+          pipeline: pipelineFromStages,
           // Error (if failed)
           errorMessage: job.errorMessage,
           errorCode: job.errorCode,
@@ -967,14 +1010,12 @@ export class JobService {
           archetypes: this.parseJsonArray(job.archetypes!, ResolvedArchetypeSchema),
           questions: this.parseJsonArray(job.questions!, RenderedQuestionSchema),
           processingDurationMs: job.processingDurationMs!,
-          // Pipeline (always present)
+          // Pipeline (built from interview_stages table)
           pipelineRecommendation: this.parseJson(
             job.pipelineRecommendation!,
             PipelineRecommendationSchema
           ),
-          pipeline: this.parseJson(job.pipeline!, PipelineConfigSchema),
-          // Stage configs (interview mode, duration, buffer per stage)
-          stageConfigs,
+          pipeline: pipelineFromStages!,
           // Timestamps
           createdAt: job.createdAt,
           updatedAt: job.updatedAt,
@@ -1008,14 +1049,12 @@ export class JobService {
           archetypes: this.parseJsonArray(job.archetypes!, ResolvedArchetypeSchema),
           questions: this.parseJsonArray(job.questions!, RenderedQuestionSchema),
           processingDurationMs: job.processingDurationMs!,
-          // Pipeline
+          // Pipeline (built from interview_stages table)
           pipelineRecommendation: this.parseJson(
             job.pipelineRecommendation!,
             PipelineRecommendationSchema
           ),
-          pipeline: this.parseJson(job.pipeline!, PipelineConfigSchema),
-          // Stage configs (interview mode, duration, buffer per stage)
-          stageConfigs,
+          pipeline: pipelineFromStages!,
           // Timestamps
           createdAt: job.createdAt,
           updatedAt: job.updatedAt,
@@ -1049,14 +1088,12 @@ export class JobService {
           archetypes: this.parseJsonArray(job.archetypes!, ResolvedArchetypeSchema),
           questions: this.parseJsonArray(job.questions!, RenderedQuestionSchema),
           processingDurationMs: job.processingDurationMs!,
-          // Pipeline
+          // Pipeline (built from interview_stages table)
           pipelineRecommendation: this.parseJson(
             job.pipelineRecommendation!,
             PipelineRecommendationSchema
           ),
-          pipeline: this.parseJson(job.pipeline!, PipelineConfigSchema),
-          // Stage configs (interview mode, duration, buffer per stage)
-          stageConfigs,
+          pipeline: pipelineFromStages!,
           // Timestamps
           createdAt: job.createdAt,
           updatedAt: job.updatedAt,

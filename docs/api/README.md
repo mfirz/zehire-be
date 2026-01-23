@@ -157,12 +157,11 @@ All errors follow a consistent format:
 | PATCH  | `/v1/interviewers/:id`          | Required | Update interviewer             |
 | DELETE | `/v1/interviewers/:id`          | Required | Remove interviewer             |
 | POST   | `/v1/interviewers/:id/resend`   | Required | Resend invite email            |
-| GET    | `/v1/jobs/:id/stages/:stageId/config` | Required | Get stage configuration  |
-| PUT    | `/v1/jobs/:id/stages/:stageId/config` | Required | Update stage configuration |
-| GET    | `/v1/jobs/:id/stages/:stageId/interviewers` | Required | List stage interviewers |
-| POST   | `/v1/jobs/:id/stages/:stageId/interviewers` | Required | Assign interviewer to stage |
-| DELETE | `/v1/jobs/:id/stages/:stageId/interviewers/:interviewerId` | Required | Remove interviewer from stage |
-| GET    | `/v1/jobs/:id/stages/:stageId/availability` | Required | Preview stage availability |
+| GET    | `/v1/organizations/settings`    | Required | Get organization settings      |
+| PATCH  | `/v1/organizations/settings`    | Required | Update organization settings   |
+| GET    | `/v1/organizations/video/status`| Required | Check video connection status  |
+| GET    | `/v1/organizations/video/:provider/connect` | Required | Start video OAuth flow |
+| POST   | `/v1/organizations/video/disconnect` | Required | Disconnect video provider |
 
 ### Public (No Auth)
 
@@ -183,7 +182,7 @@ See [Candidates API](./v1/candidates.md) for cross-application lookup.
 
 See [Interviewers API](./v1/interviewers.md) for interviewer management.
 
-See [Stage Configuration](./v1/jobs.md#stage-configuration) for interview stage setup.
+See [Pipeline Configuration](./v1/jobs.md#patch-v1jobsidpipeline) for interview round setup.
 
 ### Interviewer Self-Service (Magic Link Auth)
 

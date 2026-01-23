@@ -141,8 +141,10 @@ export {
   type NewInterviewerAvailability,
   type InterviewerBlockedDate,
   type NewInterviewerBlockedDate,
-  type InterviewStageConfigRecord,
-  type NewInterviewStageConfig,
+  type InterviewStageRecord,
+  type NewInterviewStage,
+  type InterviewStageConfigRecord, // Legacy alias
+  type NewInterviewStageConfig, // Legacy alias
   type InterviewMode,
   type InterviewStageInterviewer,
   type NewInterviewStageInterviewer,

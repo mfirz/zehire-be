@@ -4,7 +4,7 @@
  * Tables for interviewer management, availability, and scheduling.
  */
 
-import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { orgs } from "./orgs";
 import { jobs } from "./jobs";
 import { applications } from "./applications";
@@ -140,12 +140,23 @@ export type InterviewerBlockedDate = typeof interviewerBlockedDates.$inferSelect
 export type NewInterviewerBlockedDate = typeof interviewerBlockedDates.$inferInsert;
 
 // =============================================================================
-// INTERVIEW STAGE CONFIG
+// INTERVIEW STAGES
 // =============================================================================
 
 /**
- * Interview Stage Configuration
- * Settings for each interview stage in a job's pipeline.
+ * Interview Stages
+ * Configuration for each interview stage in a job's pipeline.
+ *
+ * This table consolidates data previously split between:
+ * - jobs.pipeline JSON (name, focus, duration)
+ * - interview_stage_config table (mode, duration)
+ *
+ * Now all stage data lives here:
+ * - name: Stage name (e.g., "Technical Screen")
+ * - focus: What this stage evaluates (e.g., "coding skills")
+ * - durationMinutes: Interview length
+ * - mode: "any_one" (any interviewer) or "all_required" (all interviewers)
+ * - orderIndex: Stage order in pipeline (0, 1, 2...)
  */
 export const interviewStageConfig = sqliteTable(
   "interview_stage_config",
@@ -154,20 +165,33 @@ export const interviewStageConfig = sqliteTable(
     jobId: text("job_id")
       .notNull()
       .references(() => jobs.id, { onDelete: "cascade" }),
-    stageId: text("stage_id").notNull(),
+    stageId: text("stage_id").notNull(), // Legacy: same as id for new stages
 
-    mode: text("mode", { enum: interviewModes }).default("any_one"),
-    durationMinutes: integer("duration_minutes").default(45),
-    bufferMinutes: integer("buffer_minutes").default(15),
+    // Stage details (previously in jobs.pipeline JSON)
+    name: text("name").notNull().default(""),
+    focus: text("focus").notNull().default(""),
+    orderIndex: integer("order_index").notNull().default(0),
+
+    // Interview configuration
+    mode: text("mode", { enum: interviewModes }).notNull().default("any_one"),
+    durationMinutes: integer("duration_minutes").notNull().default(45),
+    bufferMinutes: integer("buffer_minutes").default(15), // Deprecated: ignored in code
 
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (table) => [uniqueIndex("idx_stage_config_job_stage").on(table.jobId, table.stageId)]
+  (table) => [
+    uniqueIndex("idx_stage_config_job_stage").on(table.jobId, table.stageId),
+    index("idx_stage_config_job_order").on(table.jobId, table.orderIndex),
+  ]
 );
 
-export type InterviewStageConfigRecord = typeof interviewStageConfig.$inferSelect;
-export type NewInterviewStageConfig = typeof interviewStageConfig.$inferInsert;
+export type InterviewStageRecord = typeof interviewStageConfig.$inferSelect;
+export type NewInterviewStage = typeof interviewStageConfig.$inferInsert;
+
+// Legacy type aliases for backwards compatibility
+export type InterviewStageConfigRecord = InterviewStageRecord;
+export type NewInterviewStageConfig = NewInterviewStage;
 
 // =============================================================================
 // INTERVIEW STAGE INTERVIEWERS

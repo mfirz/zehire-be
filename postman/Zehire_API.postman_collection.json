@@ -434,14 +434,14 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"assessment\": {\n    \"enabled\": true,\n    \"providerId\": \"hackerrank\",\n    \"config\": {\n      \"testId\": \"test-123\",\n      \"timeLimit\": 90\n    }\n  },\n  \"interviewRounds\": [\n    {\n      \"id\": \"round-1\",\n      \"name\": \"Technical Screen\",\n      \"duration\": 45,\n      \"interviewerIds\": [\"user-123\"],\n      \"focus\": \"Technical fundamentals\"\n    },\n    {\n      \"id\": \"round-2\",\n      \"name\": \"System Design\",\n      \"duration\": 60,\n      \"interviewerIds\": [\"user-456\"],\n      \"focus\": \"Architecture and scalability\"\n    }\n  ]\n}"
+                  "raw": "{\n  \"assessment\": {\n    \"enabled\": true,\n    \"providerId\": \"hackerrank\",\n    \"config\": {\n      \"testId\": \"test-123\",\n      \"timeLimit\": 90\n    }\n  },\n  \"interviewRounds\": [\n    {\n      \"id\": \"stage_abc123\",\n      \"name\": \"Technical Screen\",\n      \"duration\": 45,\n      \"focus\": \"Technical fundamentals\",\n      \"mode\": \"any_one\",\n      \"interviewerIds\": [\"int_user123\"]\n    },\n    {\n      \"id\": \"stage_def456\",\n      \"name\": \"System Design\",\n      \"duration\": 60,\n      \"focus\": \"Architecture and scalability\",\n      \"mode\": \"all_required\",\n      \"interviewerIds\": [\"int_user123\", \"int_user456\"]\n    }\n  ]\n}"
                 },
                 "url": {
                   "raw": "{{base_url}}/v1/jobs/{{job_id}}/pipeline",
                   "host": ["{{base_url}}"],
                   "path": ["v1", "jobs", "{{job_id}}", "pipeline"]
                 },
-                "description": "Update pipeline configuration.\n\nRecruiter can customize:\n- Assessment provider and settings\n- Interview rounds and interviewers\n\n**Prerequisites:**\n- Job must be in `draft` status\n- Pipeline must be `completed`\n\nAll fields are optional for partial updates."
+                "description": "Update pipeline configuration.\n\nRecruiter can customize:\n- Assessment provider and settings\n- Interview rounds (name, duration, focus, mode, interviewers)\n\n**Interview Modes:**\n- `any_one`: Any one assigned interviewer must be available (default)\n- `all_required`: All assigned interviewers must be available\n\n**Prerequisites:**\n- Job must be in `draft` status\n- Pipeline must be `completed`\n\nAll fields are optional for partial updates."
               },
               "response": []
             },
@@ -1509,114 +1509,6 @@
       ]
     },
     {
-      "name": "Stage Configuration",
-      "description": "Configure interview stages for jobs.\n\n**Interview Modes:**\n- `any_one`: Any one assigned interviewer must be available (default)\n- `all`: All assigned interviewers must be available\n- `round_robin`: Rotate through interviewers",
-      "item": [
-        {
-          "name": "Get Stage Config",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/v1/jobs/{{job_id}}/stages/{{stage_id}}/config",
-              "host": ["{{base_url}}"],
-              "path": ["v1", "jobs", "{{job_id}}", "stages", "{{stage_id}}", "config"]
-            },
-            "description": "Get stage configuration with assigned interviewers."
-          },
-          "response": []
-        },
-        {
-          "name": "Update Stage Config",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"mode\": \"any_one\",\n  \"durationMinutes\": 60,\n  \"bufferMinutes\": 15\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/v1/jobs/{{job_id}}/stages/{{stage_id}}/config",
-              "host": ["{{base_url}}"],
-              "path": ["v1", "jobs", "{{job_id}}", "stages", "{{stage_id}}", "config"]
-            },
-            "description": "Update stage configuration.\n\n**Mode options:**\n- `any_one`: Any one interviewer available\n- `all`: All interviewers must be available\n- `round_robin`: Rotate through interviewers"
-          },
-          "response": []
-        },
-        {
-          "name": "List Stage Interviewers",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/v1/jobs/{{job_id}}/stages/{{stage_id}}/interviewers",
-              "host": ["{{base_url}}"],
-              "path": ["v1", "jobs", "{{job_id}}", "stages", "{{stage_id}}", "interviewers"]
-            },
-            "description": "List interviewers assigned to a stage."
-          },
-          "response": []
-        },
-        {
-          "name": "Assign Interviewer to Stage",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"interviewerId\": \"{{interviewer_id}}\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/v1/jobs/{{job_id}}/stages/{{stage_id}}/interviewers",
-              "host": ["{{base_url}}"],
-              "path": ["v1", "jobs", "{{job_id}}", "stages", "{{stage_id}}", "interviewers"]
-            },
-            "description": "Assign an interviewer to a stage."
-          },
-          "response": []
-        },
-        {
-          "name": "Remove Interviewer from Stage",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/v1/jobs/{{job_id}}/stages/{{stage_id}}/interviewers/{{interviewer_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["v1", "jobs", "{{job_id}}", "stages", "{{stage_id}}", "interviewers", "{{interviewer_id}}"]
-            },
-            "description": "Remove an interviewer from a stage."
-          },
-          "response": []
-        },
-        {
-          "name": "Preview Stage Availability",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/v1/jobs/{{job_id}}/stages/{{stage_id}}/availability",
-              "host": ["{{base_url}}"],
-              "path": ["v1", "jobs", "{{job_id}}", "stages", "{{stage_id}}", "availability"]
-            },
-            "description": "Preview available interview slots for a stage.\n\nShows next 2 weeks of availability based on:\n- Interviewer availability windows\n- Blocked dates\n- Calendar free/busy (if connected)"
-          },
-          "response": []
-        }
-      ]
-    },
-    {
       "name": "Interviewer Portal",
       "description": "Interviewer self-service endpoints.\n\nThese endpoints use **magic token authentication** (included in URL path).\n\n**No JWT required.**\n\nMagic tokens are obtained from the invite email.",
       "item": [
@@ -1806,14 +1698,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"recommendation\": \"strong_yes\",\n  \"recommendationReason\": \"Excellent technical skills and clear communication\",\n  \"observations\": [\n    {\n      \"signalId\": \"technical_depth\",\n      \"observed\": \"clear\",\n      \"notes\": \"Deep knowledge of distributed systems\"\n    },\n    {\n      \"signalId\": \"communication_clarity\",\n      \"observed\": \"clear\",\n      \"notes\": \"Explained complex concepts clearly\"\n    }\n  ],\n  \"summary\": \"Strong candidate with excellent technical background. Recommend moving forward.\"\n}"
+              "raw": "{\n  \"recommendation\": \"advance\",\n  \"recommendationReason\": \"Strong technical skills demonstrated through clear system design discussion\",\n  \"observations\": [\n    {\n      \"signal\": \"technical_depth\",\n      \"observation\": \"clear\",\n      \"evidence\": \"Demonstrated deep knowledge of distributed systems, explained CAP theorem tradeoffs\"\n    },\n    {\n      \"signal\": \"communication_clarity\",\n      \"observation\": \"clear\",\n      \"evidence\": \"Explained complex architectural concepts clearly with good use of diagrams\"\n    }\n  ],\n  \"summary\": \"Strong candidate with excellent technical background. Recommend advancing to next round.\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/i/{{interviewer_token}}/interviews/{{interview_id}}/feedback",
               "host": ["{{base_url}}"],
               "path": ["i", "{{interviewer_token}}", "interviews", "{{interview_id}}", "feedback"]
             },
-            "description": "Submit interview feedback.\n\n**Recommendations:**\n- strong_yes, yes, neutral, no, strong_no\n\n**Observed values:**\n- clear, partial, absent, unclear\n\n**Signal IDs:** decision_under_uncertainty, tradeoff_awareness, risk_reasoning, ethical_awareness, technical_depth, system_thinking, communication_clarity, stakeholder_management, accountability, learning_from_failure"
+            "description": "Submit interview feedback.\n\n**Recommendations:**\n- `advance`: Move candidate to next stage\n- `hold`: Need more information\n- `pass`: Do not continue with candidate\n\n**Observation values:**\n- clear, partial, absent, unclear\n\n**Signals:** decision_under_uncertainty, tradeoff_awareness, risk_reasoning, ethical_awareness, technical_depth, system_thinking, communication_clarity, stakeholder_management, accountability, learning_from_failure\n\n**Note:** `evidence` field is required (min 10 chars)"
           },
           "response": []
         }

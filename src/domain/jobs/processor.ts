@@ -16,7 +16,10 @@
  * - Direct processing via waitUntil (fallback/testing)
  */
 
+import type { D1Database } from "@cloudflare/workers-types";
+
 import type { JobErrorCode } from "../../types/bindings";
+import { InterviewStagesRepository } from "../interview-stages";
 import { generatePipelineRecommendation } from "../pipeline/advisor";
 import type { LLMClient } from "./archetypes/inference";
 import { generateQuestionsForJob } from "./archetypes/renderer";
@@ -28,11 +31,16 @@ import type { JobContextOutput, RenderedQuestionOutput, ResolvedArchetypeOutput 
 // =============================================================================
 
 export class JobProcessor {
+  private readonly interviewStagesRepository: InterviewStagesRepository;
+
   constructor(
     private readonly repository: JobRepository,
     private readonly orgRepository: OrgRepository,
-    private readonly llmClient: LLMClient
-  ) {}
+    private readonly llmClient: LLMClient,
+    d1: D1Database
+  ) {
+    this.interviewStagesRepository = new InterviewStagesRepository(d1);
+  }
 
   /**
    * Process a job by ID.
@@ -209,7 +217,18 @@ export class JobProcessor {
 
       const processingDurationMs = Date.now() - startTime;
 
+      // Create interview stages in the database table (source of truth)
+      await this.interviewStagesRepository.createStagesFromRecommendation(
+        jobId,
+        result.recommendation.interviewPanel.rounds.map((round) => ({
+          name: round.name,
+          duration: round.duration,
+          focus: round.focus,
+        }))
+      );
+
       // Mark pipeline as completed with results
+      // Note: config JSON is kept for assessment config only
       await this.repository.markPipelineCompleted(jobId, {
         recommendation: result.recommendation,
         config: result.config,

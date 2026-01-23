@@ -149,7 +149,8 @@ Get interviewer's availability windows and blocked dates.
     {
       "id": "blk_456",
       "date": "2026-01-25",
-      "reason": "Doctor appointment"
+      "reason": "Doctor appointment",
+      "createdAt": "2026-01-20T10:00:00Z"
     }
   ]
 }
@@ -257,7 +258,8 @@ Block a specific date.
 {
   "id": "blk_789",
   "date": "2026-01-25",
-  "reason": "Personal day"
+  "reason": "Personal day",
+  "createdAt": "2026-01-23T14:30:00Z"
 }
 ```
 
@@ -305,7 +307,8 @@ Quick action to mark interviewer unavailable for today.
   "blockedDate": {
     "id": "blk_today",
     "date": "2026-01-23",
-    "reason": "Marked unavailable"
+    "reason": "Marked unavailable",
+    "createdAt": "2026-01-23T09:15:00Z"
   }
 }
 ```
@@ -405,45 +408,53 @@ Submit interview feedback.
 
 ```json
 {
-  "recommendation": "strong_yes",
-  "recommendationReason": "Excellent technical skills and communication",
+  "recommendation": "advance",
+  "recommendationReason": "Strong technical skills demonstrated through clear system design discussion",
   "observations": [
     {
-      "signalId": "technical_depth",
-      "observed": "clear",
-      "notes": "Demonstrated deep knowledge of distributed systems"
+      "signal": "technical_depth",
+      "observation": "clear",
+      "evidence": "Demonstrated deep knowledge of distributed systems, explained CAP theorem tradeoffs"
     },
     {
-      "signalId": "communication_clarity",
-      "observed": "clear",
-      "notes": "Explained complex concepts clearly"
+      "signal": "communication_clarity",
+      "observation": "clear",
+      "evidence": "Explained complex architectural concepts clearly with good use of diagrams"
     },
     {
-      "signalId": "stakeholder_management",
-      "observed": "partial",
-      "notes": "Some experience but room for growth"
+      "signal": "stakeholder_management",
+      "observation": "partial",
+      "evidence": "Mentioned cross-team collaboration but limited concrete examples provided"
     }
   ],
-  "summary": "Strong candidate with excellent technical background. Recommend moving forward."
+  "summary": "Strong candidate with excellent technical background. Recommend advancing to next round."
 }
 ```
 
 | Field                  | Type   | Required | Description                              |
 |------------------------|--------|----------|------------------------------------------|
-| `recommendation`       | enum   | Yes      | `strong_yes`, `yes`, `neutral`, `no`, `strong_no` |
-| `recommendationReason` | string | Yes      | Explanation for recommendation           |
-| `observations`         | array  | Yes      | Signal observations from interview       |
-| `summary`              | string | Yes      | Overall interview summary                |
+| `recommendation`       | enum   | Yes      | `advance`, `hold`, `pass`                |
+| `recommendationReason` | string | Yes      | Explanation for recommendation (min 10 chars) |
+| `observations`         | array  | Yes      | Signal observations from interview (min 1) |
+| `summary`              | string | No       | Overall interview summary (max 1000 chars) |
+
+**Recommendation values:**
+
+| Value     | Description                                              |
+|-----------|----------------------------------------------------------|
+| `advance` | Candidate should move forward to the next stage          |
+| `hold`    | Need more information or another interview               |
+| `pass`    | Candidate should not continue in the process             |
 
 **Observation object:**
 
-| Field      | Type   | Required | Description                              |
-|------------|--------|----------|------------------------------------------|
-| `signalId` | string | Yes      | Signal being evaluated                   |
-| `observed` | enum   | Yes      | `clear`, `partial`, `absent`, `unclear`  |
-| `notes`    | string | No       | Supporting notes                         |
+| Field         | Type   | Required | Description                              |
+|---------------|--------|----------|------------------------------------------|
+| `signal`      | enum   | Yes      | Signal being evaluated (see list below)  |
+| `observation` | enum   | Yes      | `clear`, `partial`, `absent`, `unclear`  |
+| `evidence`    | string | Yes      | Supporting evidence (min 10 chars)       |
 
-**Valid signal IDs:**
+**Valid signal values:**
 - `decision_under_uncertainty`
 - `tradeoff_awareness`
 - `risk_reasoning`
@@ -471,7 +482,16 @@ Submit interview feedback.
 {
   "error": "Validation failed",
   "details": {
-    "recommendation": ["Invalid recommendation value"]
+    "recommendation": ["Invalid enum value. Expected 'advance' | 'hold' | 'pass'"]
+  }
+}
+```
+
+```json
+{
+  "error": "Validation failed",
+  "details": {
+    "observations": ["At least one signal observation is required"]
   }
 }
 ```

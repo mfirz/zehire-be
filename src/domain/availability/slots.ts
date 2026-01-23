@@ -5,12 +5,13 @@
  * - Interviewer availability windows
  * - Blocked dates
  * - Calendar free/busy data
- * - Interview duration and buffer time
+ * - Interview duration
  * - Mode (any_one vs all_required)
  */
 
 import type { BusyPeriod } from "../calendar";
 import type { InterviewerAvailabilityRecord, InterviewerBlockedDate } from "../../db";
+import { INTERVIEW_BUFFER_MINUTES } from "../scheduling/constants";
 
 // =============================================================================
 // TYPES
@@ -46,8 +47,6 @@ export interface SlotCalculationOptions {
   freeBusy: InterviewerFreeBusy[];
   /** Interview duration in minutes */
   durationMinutes: number;
-  /** Buffer time between interviews in minutes */
-  bufferMinutes: number;
   /** Mode: any_one = at least one interviewer, all_required = all must be free */
   mode: "any_one" | "all_required";
   /** Start date for slot generation */
@@ -71,7 +70,6 @@ export function calculateSlots(options: SlotCalculationOptions): TimeSlot[] {
     blockedDates,
     freeBusy,
     durationMinutes,
-    bufferMinutes,
     mode,
     startDate,
     endDate,
@@ -79,7 +77,7 @@ export function calculateSlots(options: SlotCalculationOptions): TimeSlot[] {
   } = options;
 
   const slots: TimeSlot[] = [];
-  const slotDuration = durationMinutes + bufferMinutes;
+  const slotDuration = durationMinutes + INTERVIEW_BUFFER_MINUTES;
 
   // Group windows by interviewer
   const windowsByInterviewer = groupBy(windows, "interviewerId");
