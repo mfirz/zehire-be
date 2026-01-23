@@ -1431,3 +1431,222 @@ If you need to hire for the same role again, creating a new job ensures:
 - Clear temporal boundaries for decision-making
 
 **What to do instead:** Create a new job posting. The previous job remains in your records for reference.
+
+---
+
+## Stage Configuration
+
+Configure interview stages for a job, including duration, interviewer assignment, and scheduling mode.
+
+### Interview Modes
+
+| Mode     | Description                                              |
+|----------|----------------------------------------------------------|
+| `any_one`| Any one assigned interviewer must be available (default) |
+| `all`    | All assigned interviewers must be available              |
+| `round_robin` | Rotate through interviewers                         |
+
+---
+
+## GET /v1/jobs/:id/stages/:stageId/config
+
+Get stage configuration with assigned interviewers.
+
+### Request
+
+```
+GET /v1/jobs/:id/stages/:stageId/config
+Authorization: Bearer <jwt>
+```
+
+### Response
+
+#### 200 OK
+
+```json
+{
+  "stageId": "technical_interview",
+  "mode": "any_one",
+  "durationMinutes": 60,
+  "bufferMinutes": 15,
+  "interviewers": [
+    {
+      "id": "int_abc123",
+      "email": "john@company.com",
+      "name": "John Smith",
+      "calendarConnected": true
+    },
+    {
+      "id": "int_def456",
+      "email": "jane@company.com",
+      "name": "Jane Doe",
+      "calendarConnected": false
+    }
+  ]
+}
+```
+
+| Field            | Type    | Description                              |
+|------------------|---------|------------------------------------------|
+| `stageId`        | string  | Stage identifier from pipeline           |
+| `mode`           | enum    | `any_one`, `all`, or `round_robin`       |
+| `durationMinutes`| number  | Interview duration in minutes            |
+| `bufferMinutes`  | number  | Buffer time between interviews           |
+| `interviewers`   | array   | Assigned interviewers                    |
+
+---
+
+## PUT /v1/jobs/:id/stages/:stageId/config
+
+Update stage configuration.
+
+### Request
+
+```json
+{
+  "mode": "all",
+  "durationMinutes": 45,
+  "bufferMinutes": 10
+}
+```
+
+| Field            | Type   | Required | Description                    |
+|------------------|--------|----------|--------------------------------|
+| `mode`           | enum   | No       | `any_one`, `all`, `round_robin`|
+| `durationMinutes`| number | No       | Interview duration (15-480)    |
+| `bufferMinutes`  | number | No       | Buffer time (0-60)             |
+
+### Response
+
+#### 200 OK
+
+Returns updated stage config (same format as GET).
+
+---
+
+## GET /v1/jobs/:id/stages/:stageId/interviewers
+
+List interviewers assigned to a stage.
+
+### Response
+
+#### 200 OK
+
+```json
+{
+  "interviewers": [
+    {
+      "id": "int_abc123",
+      "email": "john@company.com",
+      "name": "John Smith",
+      "calendarConnected": true
+    }
+  ]
+}
+```
+
+---
+
+## POST /v1/jobs/:id/stages/:stageId/interviewers
+
+Assign an interviewer to a stage.
+
+### Request
+
+```json
+{
+  "interviewerId": "int_abc123"
+}
+```
+
+### Response
+
+#### 201 Created
+
+```json
+{
+  "id": "assign_xyz789",
+  "interviewerId": "int_abc123",
+  "email": "john@company.com",
+  "name": "John Smith",
+  "calendarConnected": true
+}
+```
+
+#### 404 Not Found
+
+```json
+{
+  "error": "Interviewer not found"
+}
+```
+
+---
+
+## DELETE /v1/jobs/:id/stages/:stageId/interviewers/:interviewerId
+
+Remove an interviewer from a stage.
+
+### Response
+
+#### 204 No Content
+
+Empty response on success.
+
+#### 404 Not Found
+
+```json
+{
+  "error": "Interviewer not assigned to this stage"
+}
+```
+
+---
+
+## GET /v1/jobs/:id/stages/:stageId/availability
+
+Preview available interview slots for a stage. Shows next 2 weeks of availability.
+
+### Response
+
+#### 200 OK
+
+```json
+{
+  "stageId": "technical_interview",
+  "mode": "any_one",
+  "durationMinutes": 60,
+  "startDate": "2026-01-23",
+  "endDate": "2026-02-06",
+  "slotsPerDay": {
+    "2026-01-24": 8,
+    "2026-01-25": 6,
+    "2026-01-27": 10,
+    "2026-01-28": 8
+  },
+  "totalSlots": 32,
+  "interviewerAvailability": [
+    {
+      "id": "int_abc123",
+      "name": "John Smith",
+      "slotsContributed": 20,
+      "calendarConnected": true
+    },
+    {
+      "id": "int_def456",
+      "name": "Jane Doe",
+      "slotsContributed": 18,
+      "calendarConnected": false
+    }
+  ]
+}
+```
+
+| Field                     | Type   | Description                              |
+|---------------------------|--------|------------------------------------------|
+| `slotsPerDay`             | object | Number of available slots per date       |
+| `totalSlots`              | number | Total available slots in the period      |
+| `interviewerAvailability` | array  | Breakdown by interviewer                 |
+| `slotsContributed`        | number | Slots this interviewer contributes       |
+
+**Note:** If interviewers have connected calendars, their free/busy data is factored into slot availability.

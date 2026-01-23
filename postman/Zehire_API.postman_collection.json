@@ -55,6 +55,31 @@
       "key": "custom_question_id",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "interviewer_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "stage_id",
+      "value": "technical_interview",
+      "type": "string"
+    },
+    {
+      "key": "interviewer_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "scheduling_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "interview_id",
+      "value": "",
+      "type": "string"
     }
   ],
   "auth": {
@@ -1322,6 +1347,621 @@
               "path": ["v1", "assessment-providers"]
             },
             "description": "List all available assessment providers.\n\nReturns provider details including:\n- id: Provider identifier (used in pipeline config)\n- name: Display name\n- type: external or internal\n- description: Provider description\n- bestFor: Role categories this provider suits"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Interviewers",
+      "description": "Interviewer management endpoints.\n\nInterviewers are team members who participate in interviews and provide feedback.\n\n**Interviewer Status:**\n- `invited`: Initial state, waiting for first access\n- `active`: Has accessed portal, available for interviews\n- `inactive`: Temporarily unavailable",
+      "item": [
+        {
+          "name": "Create Interviewer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const jsonData = pm.response.json();",
+                  "    if (jsonData.id) {",
+                  "        pm.collectionVariables.set('interviewer_id', jsonData.id);",
+                  "        console.log('Interviewer ID saved:', jsonData.id);",
+                  "    }",
+                  "    if (jsonData._magicLink) {",
+                  "        // Extract token from magic link for testing",
+                  "        const match = jsonData._magicLink.match(/\\/i\\/([^/]+)$/);",
+                  "        if (match) {",
+                  "            pm.collectionVariables.set('interviewer_token', match[1]);",
+                  "            console.log('Interviewer token saved');",
+                  "        }",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"interviewer@example.com\",\n  \"name\": \"John Smith\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/interviewers",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "interviewers"]
+            },
+            "description": "Create and invite a new interviewer.\n\nSends invite email with magic link.\n\n**Note:** In development mode, the magic link is returned in the response."
+          },
+          "response": []
+        },
+        {
+          "name": "List Interviewers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/interviewers",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "interviewers"]
+            },
+            "description": "List all interviewers for the organization."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Interviewer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/interviewers/{{interviewer_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "interviewers", "{{interviewer_id}}"]
+            },
+            "description": "Get interviewer details."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Interviewer",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John D. Smith\",\n  \"timezone\": \"America/New_York\",\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/interviewers/{{interviewer_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "interviewers", "{{interviewer_id}}"]
+            },
+            "description": "Update an interviewer's information.\n\nAll fields are optional."
+          },
+          "response": []
+        },
+        {
+          "name": "Resend Invite",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/interviewers/{{interviewer_id}}/resend",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "interviewers", "{{interviewer_id}}", "resend"]
+            },
+            "description": "Resend invite email with a new magic link.\n\nInvalidates the previous magic link."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Interviewer",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/interviewers/{{interviewer_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "interviewers", "{{interviewer_id}}"]
+            },
+            "description": "Remove an interviewer from the organization.\n\n**Warning:** This removes them from all stage assignments."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Stage Configuration",
+      "description": "Configure interview stages for jobs.\n\n**Interview Modes:**\n- `any_one`: Any one assigned interviewer must be available (default)\n- `all`: All assigned interviewers must be available\n- `round_robin`: Rotate through interviewers",
+      "item": [
+        {
+          "name": "Get Stage Config",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/jobs/{{job_id}}/stages/{{stage_id}}/config",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "jobs", "{{job_id}}", "stages", "{{stage_id}}", "config"]
+            },
+            "description": "Get stage configuration with assigned interviewers."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Stage Config",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"any_one\",\n  \"durationMinutes\": 60,\n  \"bufferMinutes\": 15\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/jobs/{{job_id}}/stages/{{stage_id}}/config",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "jobs", "{{job_id}}", "stages", "{{stage_id}}", "config"]
+            },
+            "description": "Update stage configuration.\n\n**Mode options:**\n- `any_one`: Any one interviewer available\n- `all`: All interviewers must be available\n- `round_robin`: Rotate through interviewers"
+          },
+          "response": []
+        },
+        {
+          "name": "List Stage Interviewers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/jobs/{{job_id}}/stages/{{stage_id}}/interviewers",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "jobs", "{{job_id}}", "stages", "{{stage_id}}", "interviewers"]
+            },
+            "description": "List interviewers assigned to a stage."
+          },
+          "response": []
+        },
+        {
+          "name": "Assign Interviewer to Stage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"interviewerId\": \"{{interviewer_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/jobs/{{job_id}}/stages/{{stage_id}}/interviewers",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "jobs", "{{job_id}}", "stages", "{{stage_id}}", "interviewers"]
+            },
+            "description": "Assign an interviewer to a stage."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Interviewer from Stage",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/jobs/{{job_id}}/stages/{{stage_id}}/interviewers/{{interviewer_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "jobs", "{{job_id}}", "stages", "{{stage_id}}", "interviewers", "{{interviewer_id}}"]
+            },
+            "description": "Remove an interviewer from a stage."
+          },
+          "response": []
+        },
+        {
+          "name": "Preview Stage Availability",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/jobs/{{job_id}}/stages/{{stage_id}}/availability",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "jobs", "{{job_id}}", "stages", "{{stage_id}}", "availability"]
+            },
+            "description": "Preview available interview slots for a stage.\n\nShows next 2 weeks of availability based on:\n- Interviewer availability windows\n- Blocked dates\n- Calendar free/busy (if connected)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Interviewer Portal",
+      "description": "Interviewer self-service endpoints.\n\nThese endpoints use **magic token authentication** (included in URL path).\n\n**No JWT required.**\n\nMagic tokens are obtained from the invite email.",
+      "item": [
+        {
+          "name": "Dashboard",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/i/{{interviewer_token}}",
+              "host": ["{{base_url}}"],
+              "path": ["i", "{{interviewer_token}}"]
+            },
+            "description": "Get interviewer dashboard data.\n\nIncludes upcoming interviews and pending feedback."
+          },
+          "response": []
+        },
+        {
+          "name": "List Interviews",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/i/{{interviewer_token}}/interviews",
+              "host": ["{{base_url}}"],
+              "path": ["i", "{{interviewer_token}}", "interviews"]
+            },
+            "description": "List upcoming interviews and pending feedback."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Availability",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/i/{{interviewer_token}}/availability",
+              "host": ["{{base_url}}"],
+              "path": ["i", "{{interviewer_token}}", "availability"]
+            },
+            "description": "Get availability windows and blocked dates."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Availability",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"timezone\": \"America/New_York\",\n  \"windows\": [\n    { \"dayOfWeek\": 1, \"startTime\": \"09:00\", \"endTime\": \"17:00\" },\n    { \"dayOfWeek\": 2, \"startTime\": \"09:00\", \"endTime\": \"17:00\" },\n    { \"dayOfWeek\": 3, \"startTime\": \"09:00\", \"endTime\": \"17:00\" },\n    { \"dayOfWeek\": 4, \"startTime\": \"09:00\", \"endTime\": \"17:00\" },\n    { \"dayOfWeek\": 5, \"startTime\": \"09:00\", \"endTime\": \"17:00\" }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/i/{{interviewer_token}}/availability",
+              "host": ["{{base_url}}"],
+              "path": ["i", "{{interviewer_token}}", "availability"]
+            },
+            "description": "Update availability windows.\n\nReplaces all existing windows.\n\n**dayOfWeek:** 0=Sunday, 1=Monday, ..., 6=Saturday"
+          },
+          "response": []
+        },
+        {
+          "name": "Block Date",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-01-25\",\n  \"reason\": \"Personal day\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/i/{{interviewer_token}}/block-date",
+              "host": ["{{base_url}}"],
+              "path": ["i", "{{interviewer_token}}", "block-date"]
+            },
+            "description": "Block a specific date.\n\nCannot block dates in the past."
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Unavailable Today",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/i/{{interviewer_token}}/unavailable-today",
+              "host": ["{{base_url}}"],
+              "path": ["i", "{{interviewer_token}}", "unavailable-today"]
+            },
+            "description": "Quick action to mark unavailable for today."
+          },
+          "response": []
+        },
+        {
+          "name": "Calendar Status",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/i/{{interviewer_token}}/calendar-status",
+              "host": ["{{base_url}}"],
+              "path": ["i", "{{interviewer_token}}", "calendar-status"]
+            },
+            "description": "Check calendar connection status."
+          },
+          "response": []
+        },
+        {
+          "name": "Connect Calendar (Google)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/i/{{interviewer_token}}/connect/google",
+              "host": ["{{base_url}}"],
+              "path": ["i", "{{interviewer_token}}", "connect", "google"]
+            },
+            "description": "Start OAuth flow to connect Google Calendar.\n\nRedirects to Google consent screen.\n\n**Providers:** google, outlook, apple"
+          },
+          "response": []
+        },
+        {
+          "name": "Disconnect Calendar",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/i/{{interviewer_token}}/disconnect",
+              "host": ["{{base_url}}"],
+              "path": ["i", "{{interviewer_token}}", "disconnect"]
+            },
+            "description": "Disconnect calendar from account."
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Feedback",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recommendation\": \"strong_yes\",\n  \"recommendationReason\": \"Excellent technical skills and clear communication\",\n  \"observations\": [\n    {\n      \"signalId\": \"technical_depth\",\n      \"observed\": \"clear\",\n      \"notes\": \"Deep knowledge of distributed systems\"\n    },\n    {\n      \"signalId\": \"communication_clarity\",\n      \"observed\": \"clear\",\n      \"notes\": \"Explained complex concepts clearly\"\n    }\n  ],\n  \"summary\": \"Strong candidate with excellent technical background. Recommend moving forward.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/i/{{interviewer_token}}/interviews/{{interview_id}}/feedback",
+              "host": ["{{base_url}}"],
+              "path": ["i", "{{interviewer_token}}", "interviews", "{{interview_id}}", "feedback"]
+            },
+            "description": "Submit interview feedback.\n\n**Recommendations:**\n- strong_yes, yes, neutral, no, strong_no\n\n**Observed values:**\n- clear, partial, absent, unclear\n\n**Signal IDs:** decision_under_uncertainty, tradeoff_awareness, risk_reasoning, ethical_awareness, technical_depth, system_thinking, communication_clarity, stakeholder_management, accountability, learning_from_failure"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Candidate Scheduling",
+      "description": "Candidate self-scheduling endpoints.\n\nThese endpoints use **scheduling token authentication** (included in URL path).\n\n**No JWT required.**\n\nScheduling tokens are sent to candidates via email.",
+      "item": [
+        {
+          "name": "Get Scheduling Page",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/schedule/{{scheduling_token}}",
+              "host": ["{{base_url}}"],
+              "path": ["schedule", "{{scheduling_token}}"]
+            },
+            "description": "Get scheduling page data.\n\nIncludes job info, stage details, and interviewer names."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Available Slots",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/schedule/{{scheduling_token}}/slots?timezone=America/New_York",
+              "host": ["{{base_url}}"],
+              "path": ["schedule", "{{scheduling_token}}", "slots"],
+              "query": [
+                {
+                  "key": "timezone",
+                  "value": "America/New_York",
+                  "description": "IANA timezone for slot display"
+                },
+                {
+                  "key": "startDate",
+                  "value": "",
+                  "description": "Start date (YYYY-MM-DD)",
+                  "disabled": true
+                },
+                {
+                  "key": "endDate",
+                  "value": "",
+                  "description": "End date (YYYY-MM-DD)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Get available time slots.\n\nSlots account for:\n- Interviewer availability\n- Blocked dates\n- Calendar free/busy\n- Buffer time"
+          },
+          "response": []
+        },
+        {
+          "name": "Book Interview",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const jsonData = pm.response.json();",
+                  "    if (jsonData.interview && jsonData.interview.id) {",
+                  "        pm.collectionVariables.set('interview_id', jsonData.interview.id);",
+                  "        console.log('Interview ID saved:', jsonData.interview.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-01-24\",\n  \"time\": \"14:00\",\n  \"timezone\": \"America/New_York\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/schedule/{{scheduling_token}}/book",
+              "host": ["{{base_url}}"],
+              "path": ["schedule", "{{scheduling_token}}", "book"]
+            },
+            "description": "Book an interview slot.\n\nCreates the interview and sends confirmation emails."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Confirmation",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/schedule/{{scheduling_token}}/confirmation",
+              "host": ["{{base_url}}"],
+              "path": ["schedule", "{{scheduling_token}}", "confirmation"]
+            },
+            "description": "Get booking confirmation details."
+          },
+          "response": []
+        },
+        {
+          "name": "Reschedule Interview",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-01-27\",\n  \"time\": \"10:00\",\n  \"timezone\": \"America/New_York\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/schedule/{{scheduling_token}}/reschedule",
+              "host": ["{{base_url}}"],
+              "path": ["schedule", "{{scheduling_token}}", "reschedule"]
+            },
+            "description": "Reschedule an existing interview.\n\nMarks old interview as rescheduled and creates new one."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Interview",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Accepted another position\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/schedule/{{scheduling_token}}/cancel",
+              "host": ["{{base_url}}"],
+              "path": ["schedule", "{{scheduling_token}}", "cancel"]
+            },
+            "description": "Cancel a scheduled interview.\n\nReason is optional."
           },
           "response": []
         }

@@ -150,6 +150,18 @@ All errors follow a consistent format:
 | GET    | `/v1/billing/preview`           | Required | Preview current charges        |
 | GET    | `/v1/billing/:year/:month`      | Required | Usage for specific month       |
 | GET    | `/v1/billing/:year/:month/invoice` | Required | Invoice for specific month  |
+| POST   | `/v1/interviewers`              | Required | Create/invite interviewer      |
+| GET    | `/v1/interviewers`              | Required | List org's interviewers        |
+| GET    | `/v1/interviewers/:id`          | Required | Get interviewer details        |
+| PATCH  | `/v1/interviewers/:id`          | Required | Update interviewer             |
+| DELETE | `/v1/interviewers/:id`          | Required | Remove interviewer             |
+| POST   | `/v1/interviewers/:id/resend`   | Required | Resend invite email            |
+| GET    | `/v1/jobs/:id/stages/:stageId/config` | Required | Get stage configuration  |
+| PUT    | `/v1/jobs/:id/stages/:stageId/config` | Required | Update stage configuration |
+| GET    | `/v1/jobs/:id/stages/:stageId/interviewers` | Required | List stage interviewers |
+| POST   | `/v1/jobs/:id/stages/:stageId/interviewers` | Required | Assign interviewer to stage |
+| DELETE | `/v1/jobs/:id/stages/:stageId/interviewers/:interviewerId` | Required | Remove interviewer from stage |
+| GET    | `/v1/jobs/:id/stages/:stageId/availability` | Required | Preview stage availability |
 
 ### Public (No Auth)
 
@@ -162,11 +174,46 @@ All errors follow a consistent format:
 
 See [Public Applications API](./public-applications.md) for candidate-facing application endpoints.
 
-See [Applications Management API](./applications.md) for recruiter-facing application management.
+See [Applications Management API](./v1/applications.md) for recruiter-facing application management.
 
-See [Custom Questions API](./custom-questions.md) for custom questions CRUD and signal suggestion.
+See [Custom Questions API](./v1/custom-questions.md) for custom questions CRUD and signal suggestion.
 
-See [Candidates API](./candidates.md) for cross-application lookup.
+See [Candidates API](./v1/candidates.md) for cross-application lookup.
+
+See [Interviewers API](./v1/interviewers.md) for interviewer management.
+
+See [Stage Configuration](./v1/jobs.md#stage-configuration) for interview stage setup.
+
+### Interviewer Self-Service (Magic Link Auth)
+
+| Method | Path                                    | Description                           |
+| ------ | --------------------------------------- | ------------------------------------- |
+| GET    | `/i/:token`                             | Interviewer dashboard                 |
+| GET    | `/i/:token/interviews`                  | List upcoming interviews              |
+| GET    | `/i/:token/availability`                | Get availability windows              |
+| PUT    | `/i/:token/availability`                | Update availability windows           |
+| POST   | `/i/:token/block-date`                  | Block a date                          |
+| DELETE | `/i/:token/block-date/:dateId`          | Unblock a date                        |
+| POST   | `/i/:token/unavailable-today`           | Mark unavailable for today            |
+| GET    | `/i/:token/calendar-status`             | Check calendar connection             |
+| GET    | `/i/:token/connect/:provider`           | Start calendar OAuth flow             |
+| POST   | `/i/:token/disconnect`                  | Disconnect calendar                   |
+| POST   | `/i/:token/interviews/:id/feedback`     | Submit interview feedback             |
+
+See [Interviewer Portal API](./interviewer-portal.md) for complete documentation.
+
+### Candidate Scheduling (Scheduling Token Auth)
+
+| Method | Path                           | Description                           |
+| ------ | ------------------------------ | ------------------------------------- |
+| GET    | `/schedule/:token`             | Get scheduling page data              |
+| GET    | `/schedule/:token/slots`       | Get available time slots              |
+| POST   | `/schedule/:token/book`        | Book an interview slot                |
+| GET    | `/schedule/:token/confirmation`| Get booking confirmation              |
+| POST   | `/schedule/:token/reschedule`  | Reschedule interview                  |
+| POST   | `/schedule/:token/cancel`      | Cancel interview                      |
+
+See [Candidate Scheduling API](./candidate-scheduling.md) for complete documentation.
 
 ### Internal (Public)
 
