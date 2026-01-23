@@ -81,6 +81,10 @@ export const applications = sqliteTable(
     // Source tracking (organic, referral, etc.)
     source: text("source").default("organic"),
 
+    // Interview pipeline tracking (Phase 9)
+    currentStageId: text("current_stage_id"),
+    stageUpdatedAt: text("stage_updated_at"),
+
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
     signalsComputedAt: text("signals_computed_at"),

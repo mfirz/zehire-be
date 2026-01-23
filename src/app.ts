@@ -2,6 +2,7 @@ import { Hono } from "hono";
 
 import { createAuthRoutes } from "./modules/auth";
 import internal from "./routes/internal/route";
+import interviewerRoutes from "./routes/interviewer";
 import publicRoutes from "./routes/public/route";
 import v1 from "./routes/v1";
 import type { Env } from "./types/bindings";
@@ -16,6 +17,9 @@ app.route("/auth", createAuthRoutes());
 
 // Public routes (no auth required)
 app.route("/public", publicRoutes);
+
+// Interviewer self-service routes (magic link auth)
+app.route("/i", interviewerRoutes);
 
 // Internal routes
 app.route("/internal", internal);

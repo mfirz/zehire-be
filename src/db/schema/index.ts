@@ -113,3 +113,46 @@ export {
   type CVExtractionStatus,
   type SkillCategory,
 } from "./custom-questions";
+
+// Interviews & Scheduling (Phase 9)
+export {
+  // Tables
+  interviewers,
+  interviewerAvailability,
+  interviewerBlockedDates,
+  interviewStageConfig,
+  interviewStageInterviewers,
+  scheduledInterviews,
+  interviewParticipants,
+  schedulingTokens,
+  // Enums
+  interviewerStatuses,
+  calendarProviders,
+  interviewModes,
+  interviewStatuses,
+  feedbackStatuses,
+  videoCallProviders,
+  // Types
+  type Interviewer,
+  type NewInterviewer,
+  type InterviewerStatus,
+  type CalendarProvider,
+  type InterviewerAvailabilityRecord,
+  type NewInterviewerAvailability,
+  type InterviewerBlockedDate,
+  type NewInterviewerBlockedDate,
+  type InterviewStageConfigRecord,
+  type NewInterviewStageConfig,
+  type InterviewMode,
+  type InterviewStageInterviewer,
+  type NewInterviewStageInterviewer,
+  type ScheduledInterview,
+  type NewScheduledInterview,
+  type InterviewStatus,
+  type InterviewParticipant,
+  type NewInterviewParticipant,
+  type FeedbackStatus,
+  type VideoCallProvider,
+  type SchedulingToken,
+  type NewSchedulingToken,
+} from "./interviews";

@@ -8,9 +8,11 @@ import billing from "./billing/route";
 import candidatesLookup from "./candidates/lookup";
 import capacity from "./capacity";
 import customQuestionsSuggest from "./custom-questions/suggest-signals";
+import interviewers from "./interviewers/route";
 import jobApplications from "./jobs/applications";
 import jobCustomQuestions from "./jobs/custom-questions";
 import jobs from "./jobs/route";
+import organizationsSettings from "./organizations/settings";
 import root from "./root/route";
 
 const v1 = new Hono<{ Bindings: Env }>();
@@ -26,5 +28,7 @@ v1.route("/billing", billing);
 v1.route("/capacity", capacity);
 v1.route("/assessment-providers", assessmentProviders);
 v1.route("/custom-questions", customQuestionsSuggest); // Mounts at /custom-questions/suggest-signals
+v1.route("/interviewers", interviewers); // Phase 9: Interviewer management
+v1.route("/organizations/settings", organizationsSettings); // Phase 9: Organization settings
 
 export default v1;
