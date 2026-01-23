@@ -20,10 +20,16 @@
  * These routes use magic token authentication, not JWT.
  */
 
+import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 
 import { InterviewerRepository } from "../../domain/interviewers";
 import { createCalendarProvider, type CalendarProviderType } from "../../domain/calendar";
+import {
+  AvailabilityRepository,
+  UpdateAvailabilitySchema,
+  BlockDateSchema,
+} from "../../domain/availability";
 import type { Interviewer } from "../../db";
 import type { Env } from "../../types/bindings";
 
@@ -117,42 +123,98 @@ interviewerRoutes.get("/:token/interviews", async (c) => {
 /**
  * GET /i/:token/availability
  *
- * Get interviewer's availability windows.
+ * Get interviewer's availability windows and blocked dates.
  */
 interviewerRoutes.get("/:token/availability", async (c) => {
   const interviewer = c.get("interviewer");
+  const repo = new AvailabilityRepository(c.env.DB);
 
-  // TODO: Query interviewer_availability table
-  // For now, return empty windows
+  const [windows, blockedDates] = await Promise.all([
+    repo.getWindows(interviewer.id),
+    repo.getBlockedDates(interviewer.id),
+  ]);
 
   return c.json({
     timezone: interviewer.timezone ?? "UTC",
-    windows: [],
-    blockedDates: [],
+    windows: windows.map((w) => ({
+      id: w.id,
+      dayOfWeek: w.dayOfWeek,
+      startTime: w.startTime,
+      endTime: w.endTime,
+    })),
+    blockedDates: blockedDates.map((d) => repo.toBlockedDateResponse(d)),
   });
 });
 
 /**
  * PUT /i/:token/availability
  *
- * Update interviewer's availability windows.
+ * Update interviewer's availability windows (replaces all existing).
  */
-interviewerRoutes.put("/:token/availability", async (c) => {
-  // TODO: Implement availability update (Phase 9C)
-  // const interviewer = c.get("interviewer");
-  return c.json({ error: "Not implemented yet" }, 501);
-});
+interviewerRoutes.put(
+  "/:token/availability",
+  zValidator("json", UpdateAvailabilitySchema),
+  async (c) => {
+    const interviewer = c.get("interviewer");
+    const input = c.req.valid("json");
+    const repo = new AvailabilityRepository(c.env.DB);
+
+    // Validate time windows (start < end)
+    for (const window of input.windows) {
+      if (window.startTime >= window.endTime) {
+        return c.json(
+          { error: `Invalid window: startTime must be before endTime (${window.startTime} >= ${window.endTime})` },
+          400
+        );
+      }
+    }
+
+    // Update timezone if provided
+    if (input.timezone) {
+      await repo.updateTimezone(interviewer.id, input.timezone);
+    }
+
+    // Replace all windows
+    const windows = await repo.replaceWindows(interviewer.id, input.windows);
+    const blockedDates = await repo.getBlockedDates(interviewer.id);
+
+    return c.json({
+      timezone: input.timezone ?? interviewer.timezone ?? "UTC",
+      windows: windows.map((w) => ({
+        id: w.id,
+        dayOfWeek: w.dayOfWeek,
+        startTime: w.startTime,
+        endTime: w.endTime,
+      })),
+      blockedDates: blockedDates.map((d) => repo.toBlockedDateResponse(d)),
+    });
+  }
+);
 
 /**
  * POST /i/:token/block-date
  *
  * Block a specific date.
  */
-interviewerRoutes.post("/:token/block-date", async (c) => {
-  // TODO: Implement date blocking (Phase 9C)
-  // const interviewer = c.get("interviewer");
-  return c.json({ error: "Not implemented yet" }, 501);
-});
+interviewerRoutes.post(
+  "/:token/block-date",
+  zValidator("json", BlockDateSchema),
+  async (c) => {
+    const interviewer = c.get("interviewer");
+    const input = c.req.valid("json");
+    const repo = new AvailabilityRepository(c.env.DB);
+
+    // Validate date is not in the past
+    const today = new Date().toISOString().split("T")[0]!;
+    if (input.date < today) {
+      return c.json({ error: "Cannot block dates in the past" }, 400);
+    }
+
+    const blockedDate = await repo.blockDate(interviewer.id, input.date, input.reason);
+
+    return c.json(repo.toBlockedDateResponse(blockedDate), 201);
+  }
+);
 
 /**
  * DELETE /i/:token/block-date/:dateId
@@ -160,9 +222,17 @@ interviewerRoutes.post("/:token/block-date", async (c) => {
  * Unblock a specific date.
  */
 interviewerRoutes.delete("/:token/block-date/:dateId", async (c) => {
-  // TODO: Implement date unblocking (Phase 9C)
-  // const interviewer = c.get("interviewer");
-  return c.json({ error: "Not implemented yet" }, 501);
+  const interviewer = c.get("interviewer");
+  const dateId = c.req.param("dateId");
+  const repo = new AvailabilityRepository(c.env.DB);
+
+  const deleted = await repo.unblockDate(interviewer.id, dateId);
+
+  if (!deleted) {
+    return c.json({ error: "Blocked date not found" }, 404);
+  }
+
+  return c.body(null, 204);
 });
 
 /**
@@ -171,9 +241,16 @@ interviewerRoutes.delete("/:token/block-date/:dateId", async (c) => {
  * Quick action to mark interviewer unavailable for today.
  */
 interviewerRoutes.post("/:token/unavailable-today", async (c) => {
-  // TODO: Implement "unavailable today" feature (Phase 9C)
-  // const interviewer = c.get("interviewer");
-  return c.json({ error: "Not implemented yet" }, 501);
+  const interviewer = c.get("interviewer");
+  const repo = new AvailabilityRepository(c.env.DB);
+
+  const timezone = interviewer.timezone ?? "UTC";
+  const blockedDate = await repo.blockToday(interviewer.id, timezone);
+
+  return c.json({
+    success: true,
+    blockedDate: repo.toBlockedDateResponse(blockedDate),
+  });
 });
 
 /**
