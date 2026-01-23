@@ -2336,60 +2336,129 @@ MAGIC_LINK_SECRET=dev-secret
 
 ## Implementation Phases
 
+Legend: `[BE]` = Backend, `[FE]` = Frontend
+
 ### Phase 9A: Core Infrastructure (Week 1-2)
-- [ ] Database schema migration (all new tables)
-- [ ] Add `videoCallProvider` to organizations table
-- [ ] Add `reminderSentAt` to scheduled_interviews table
-- [ ] Interviewer CRUD endpoints
-- [ ] Magic link generation and validation
-- [ ] Basic interviewer dashboard
+
+**Backend (80%):**
+- [ ] `[BE]` Database schema migration (all new tables)
+- [ ] `[BE]` Add `videoCallProvider` to organizations table
+- [ ] `[BE]` Add `reminderSentAt` to scheduled_interviews table
+- [ ] `[BE]` Interviewer CRUD endpoints (`POST/GET/PATCH/DELETE /v1/interviewers`)
+- [ ] `[BE]` Magic link generation and validation
+- [ ] `[BE]` Interviewer magic link endpoints (`GET /i/:token`)
+
+**Frontend (20%):**
+- [ ] `[FE]` Interviewer dashboard UI (view upcoming interviews, pending feedback)
+- [ ] `[FE]` Recruiter UI: Add/manage interviewers
 
 ### Phase 9B: Calendar Provider Abstraction (Week 2-3)
-- [ ] CalendarProvider interface definition
-- [ ] Google Calendar provider implementation
-- [ ] CalendarService orchestration layer
-- [ ] Token encryption/decryption utilities
-- [ ] OAuth flow (provider-agnostic callback)
-- [ ] Video call provider abstraction (calendar-native default)
+
+**Backend (100%):**
+- [ ] `[BE]` CalendarProvider interface definition
+- [ ] `[BE]` Google Calendar provider implementation
+- [ ] `[BE]` CalendarService orchestration layer
+- [ ] `[BE]` Token encryption/decryption utilities (AES-256-GCM)
+- [ ] `[BE]` OAuth flow endpoints (`GET /i/:token/connect/:provider`, `/auth/calendar/:provider/callback`)
+- [ ] `[BE]` Video call provider abstraction (calendar-native default)
+
+**Frontend (0%):**
+- None — OAuth redirects handled by browser
 
 ### Phase 9C: Availability Management (Week 3-4)
-- [ ] Availability windows CRUD
-- [ ] Blocked dates management
-- [ ] "I'm unavailable today" quick action
-- [ ] Slot calculation engine (uses CalendarService)
+
+**Backend (70%):**
+- [ ] `[BE]` Availability windows CRUD (`GET/PUT /i/:token/availability`)
+- [ ] `[BE]` Blocked dates management (`POST/DELETE /i/:token/block-date`)
+- [ ] `[BE]` "I'm unavailable today" endpoint (`POST /i/:token/unavailable-today`)
+- [ ] `[BE]` Slot calculation engine (availability ∩ calendar free/busy)
+
+**Frontend (30%):**
+- [ ] `[FE]` Availability picker UI (day/time grid)
+- [ ] `[FE]` Blocked dates calendar UI
+- [ ] `[FE]` "I'm unavailable today" button
 
 ### Phase 9D: Stage Configuration (Week 4)
-- [ ] Stage config endpoints
-- [ ] Interviewer assignment to stages
-- [ ] "Any one" vs "All required" modes
-- [ ] Availability preview for recruiters
+
+**Backend (50%):**
+- [ ] `[BE]` Stage config endpoints (`GET/PUT /v1/jobs/:jobId/stages/:stageId/config`)
+- [ ] `[BE]` Interviewer assignment endpoints (`POST/DELETE /v1/jobs/:jobId/stages/:stageId/interviewers`)
+- [ ] `[BE]` "Any one" vs "All required" mode logic
+- [ ] `[BE]` Availability preview endpoint (`GET /v1/jobs/:jobId/stages/:stageId/availability`)
+
+**Frontend (50%):**
+- [ ] `[FE]` Stage configuration UI in job pipeline
+- [ ] `[FE]` Interviewer assignment dropdown/list
+- [ ] `[FE]` Mode toggle (any one / all required)
+- [ ] `[FE]` Availability preview display (slots per week)
 
 ### Phase 9E: Candidate Scheduling & Feedback (Week 5)
-- [ ] Scheduling token generation
-- [ ] Public scheduling page
-- [ ] Slot listing with real-time availability
-- [ ] Booking flow with confirmation
-- [ ] Interview feedback schema (signal-based, no scores)
-- [ ] Feedback submission endpoint
-- [ ] Feedback display in recruiter dashboard
+
+**Backend (50%):**
+- [ ] `[BE]` Scheduling token generation (when candidate advances to interview stage)
+- [ ] `[BE]` Slot listing endpoint (`GET /schedule/:token/slots`)
+- [ ] `[BE]` Booking endpoint (`POST /schedule/:token/book`)
+- [ ] `[BE]` Interview feedback schema (signal-based, no scores)
+- [ ] `[BE]` Feedback submission endpoint (`POST /i/:token/interviews/:id/feedback`)
+
+**Frontend (50%):**
+- [ ] `[FE]` Public scheduling page (calendar picker)
+- [ ] `[FE]` Time slot selection UI
+- [ ] `[FE]` Booking confirmation page
+- [ ] `[FE]` Feedback form (signal observations, recommendation)
+- [ ] `[FE]` Feedback display in recruiter application view
 
 ### Phase 9F: Notifications & Reminders (Week 6)
-- [ ] Extend EmailGateway interface with new email types
-- [ ] Implement interviewer invite email
-- [ ] Implement interview confirmation email (with calendar .ics)
-- [ ] Implement reschedule/cancellation emails
-- [ ] Cloudflare Cron Trigger for 24h reminders
-- [ ] Implement interview reminder email
-- [ ] Implement feedback reminder email (2h after interview)
-- [ ] Conflict resolution flows
-- [ ] Rescheduling and cancellation
-- [ ] Race condition handling
+
+**Backend (80%):**
+- [ ] `[BE]` Extend EmailGateway interface with new email types
+- [ ] `[BE]` Implement interviewer invite email
+- [ ] `[BE]` Implement interview confirmation email (with calendar .ics attachment)
+- [ ] `[BE]` Implement interview reminder email (24h before)
+- [ ] `[BE]` Implement feedback reminder email (2h after interview)
+- [ ] `[BE]` Implement reschedule/cancellation emails
+- [ ] `[BE]` Cloudflare Cron Trigger for reminders
+- [ ] `[BE]` Race condition handling (double-booking prevention)
+- [ ] `[BE]` Rescheduling endpoint (`POST /schedule/:token/reschedule`)
+- [ ] `[BE]` Cancellation endpoint (`POST /schedule/:token/cancel`)
+
+**Frontend (20%):**
+- [ ] `[FE]` Reschedule flow UI
+- [ ] `[FE]` Cancel interview UI
+- [ ] `[FE]` Conflict resolution UI (when interviewer becomes unavailable)
 
 ### Phase 9G: Additional Providers (Future)
-- [ ] Outlook Calendar provider implementation
-- [ ] Apple Calendar provider implementation
-- [ ] Zoom video provider (org-level override)
-- [ ] Provider switching support (disconnect + reconnect)
+
+**Backend (80%):**
+- [ ] `[BE]` Outlook Calendar provider implementation (Microsoft Graph API)
+- [ ] `[BE]` Apple Calendar provider implementation
+- [ ] `[BE]` Zoom video provider (org-level override)
+- [ ] `[BE]` Disconnect endpoint (`POST /i/:token/disconnect`)
+
+**Frontend (20%):**
+- [ ] `[FE]` Provider selection UI (during calendar connect)
+- [ ] `[FE]` Provider switching UI (disconnect + reconnect)
+- [ ] `[FE]` Org settings: video call provider preference
+
+---
+
+### Summary
+
+| Phase | BE | FE | Notes |
+|-------|----|----|-------|
+| 9A | 80% | 20% | Core infra, mostly BE |
+| 9B | 100% | 0% | Fully BE (OAuth is browser redirect) |
+| 9C | 70% | 30% | APIs + availability UI |
+| 9D | 50% | 50% | Balanced, recruiter configuration |
+| 9E | 50% | 50% | Balanced, candidate-facing + feedback |
+| 9F | 80% | 20% | Mostly emails/cron, some UI |
+| 9G | 80% | 20% | Provider implementations |
+
+**Recommended approach:**
+1. BE implements 9A + 9B first (no FE dependency)
+2. FE can start 9A UI once endpoints are ready
+3. 9C-9F require BE/FE coordination
+4. 9G is future/optional
 
 ---
 
