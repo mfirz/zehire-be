@@ -660,9 +660,15 @@ POST   /i/:token/unavailable-today         Quick "I'm out today"
 ```
 GET    /auth/calendar/:provider/callback   OAuth callback (google, outlook, apple)
 GET    /i/:token/connect/:provider         Start OAuth flow for provider
-POST   /i/:token/disconnect                Disconnect calendar
+POST   /i/:token/disconnect                Disconnect calendar (for switching providers or cleanup)
 GET    /i/:token/calendar-status           Check calendar connection status
 ```
+
+**Note on disconnect**: When an interviewer disconnects their calendar:
+- Their OAuth tokens are deleted
+- They stop appearing as "available" for new bookings
+- Existing scheduled interviews remain (recruiter is notified)
+- They can reconnect with same or different provider
 
 ### Interview Stage Configuration (Recruiter)
 
@@ -1860,6 +1866,148 @@ async function handleCalendarDisconnect(interviewerId: string) {
 
 ---
 
+## Timezone Handling
+
+Accurate timezone handling is critical for interview scheduling. Different sources are used depending on the context:
+
+| User | Context | Timezone Source | Why |
+|------|---------|-----------------|-----|
+| **Candidate** | Applying for job | Cloudflare `cf-timezone` header | Informational only, no booking involved |
+| **Candidate** | Scheduling interview | Browser `Intl.DateTimeFormat()` + user confirmation | Accuracy matters, user can correct |
+| **Interviewer** | Setting availability | Browser `Intl.DateTimeFormat()` + user confirmation | Accuracy matters, stored in DB |
+
+### Frontend Detection
+
+```typescript
+// Frontend detects timezone via browser API (more accurate than IP-based)
+const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+// Returns: "Asia/Jakarta", "America/New_York", etc.
+```
+
+### Why Not Cloudflare Everywhere?
+
+Cloudflare's `cf-timezone` is based on IP geolocation, which can be inaccurate when:
+- User is on VPN
+- User is traveling
+- IP geolocation database is outdated
+
+For interview scheduling, a missed timezone = missed interview. We use browser detection + explicit user confirmation.
+
+### Storage
+
+- Interviewer timezone stored in `interviewers.timezone` column
+- Set during first availability setup, can be changed later
+- All availability windows interpreted in interviewer's timezone
+- Candidate timezone passed with booking request, used for confirmation emails
+
+---
+
+## Email Requirements
+
+Phase 9 requires several new email types. The existing `EmailGateway` abstraction supports this - we just need to add new methods.
+
+### Existing Infrastructure
+
+```typescript
+// src/modules/email/email.gateway.ts
+export interface EmailGateway {
+  sendMagicLink(input: SendMagicLinkInput): Promise<void>;
+  // ... new methods to be added
+}
+
+// Implementations:
+// - ConsoleEmailGateway (development - logs to console)
+// - SesEmailGateway (production - AWS SES)
+```
+
+### New Email Types for Phase 9
+
+| Email Type | Recipient | Trigger | Content |
+|------------|-----------|---------|---------|
+| **Interviewer Invite** | Interviewer | Recruiter adds interviewer | Magic link to connect calendar |
+| **Interview Confirmation** | Candidate + Interviewers | Candidate books slot | Date, time, video link, calendar invite |
+| **Interview Reminder** | Candidate + Interviewers | 24h before interview | Same as confirmation |
+| **Reschedule Request** | Candidate | Interviewer becomes unavailable | New scheduling link |
+| **Reschedule Confirmation** | Candidate + Interviewers | Candidate reschedules | Updated date, time |
+| **Cancellation Notice** | Candidate + Interviewers | Interview cancelled | Reason, next steps |
+| **Feedback Reminder** | Interviewer | 2h after interview | Link to submit feedback |
+
+### Extended Interface
+
+```typescript
+export interface EmailGateway {
+  // Existing
+  sendMagicLink(input: SendMagicLinkInput): Promise<void>;
+
+  // Phase 9 additions
+  sendInterviewerInvite(input: {
+    email: string;
+    name?: string;
+    inviterName: string;
+    orgName: string;
+    magicLinkUrl: string;
+  }): Promise<void>;
+
+  sendInterviewConfirmation(input: {
+    recipientEmail: string;
+    recipientName: string;
+    recipientType: "candidate" | "interviewer";
+    jobTitle: string;
+    companyName: string;
+    stageName: string;
+    scheduledAt: Date;
+    durationMinutes: number;
+    timezone: string;
+    videoCallLink?: string;
+    interviewerNames: string[];
+    candidateName: string;
+    calendarLinks: {
+      google: string;
+      outlook: string;
+      ical: string;
+    };
+  }): Promise<void>;
+
+  sendInterviewReminder(input: {
+    // Same as confirmation
+  }): Promise<void>;
+
+  sendRescheduleRequest(input: {
+    candidateEmail: string;
+    candidateName: string;
+    jobTitle: string;
+    reason: string;
+    rescheduleUrl: string;
+    expiresAt: Date;
+  }): Promise<void>;
+
+  sendInterviewCancellation(input: {
+    recipientEmail: string;
+    recipientName: string;
+    jobTitle: string;
+    originalTime: Date;
+    reason?: string;
+  }): Promise<void>;
+
+  sendFeedbackReminder(input: {
+    interviewerEmail: string;
+    interviewerName: string;
+    candidateName: string;
+    jobTitle: string;
+    feedbackUrl: string;
+  }): Promise<void>;
+}
+```
+
+### Implementation Notes
+
+- All email templates should include timezone-aware formatting
+- Calendar invite attachments (.ics) should be included where applicable
+- Unsubscribe links for reminder emails (per CAN-SPAM)
+- Email sending is async (queued via Cloudflare Queues for reliability)
+
+---
+
 ## Implementation Phases
 
 ### Phase 9A: Core Infrastructure (Week 1-2)
@@ -1894,7 +2042,12 @@ async function handleCalendarDisconnect(interviewerId: string) {
 - [ ] Booking flow with confirmation
 
 ### Phase 9F: Notifications & Edge Cases (Week 6)
-- [ ] Email notifications (invite, confirmation, reminder)
+- [ ] Extend EmailGateway interface with new email types
+- [ ] Implement interviewer invite email
+- [ ] Implement interview confirmation email (with calendar .ics)
+- [ ] Implement interview reminder email (24h before)
+- [ ] Implement reschedule/cancellation emails
+- [ ] Implement feedback reminder email
 - [ ] Conflict resolution flows
 - [ ] Rescheduling and cancellation
 - [ ] Race condition handling
