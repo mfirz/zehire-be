@@ -166,19 +166,22 @@ export function parsePipelineResponse(response: string): PipelineRecommendation 
  * This creates the editable config that recruiters can customize.
  */
 export function generateInitialConfig(recommendation: PipelineRecommendation): PipelineConfig {
+  const interviewRounds = recommendation.interviewPanel.rounds.map((round, index) => ({
+    id: `round-${index + 1}`,
+    name: round.name,
+    duration: round.duration,
+    interviewerIds: [], // Recruiter assigns specific interviewers
+    focus: round.focus,
+  }));
+
   return {
     assessment: {
       enabled: recommendation.assessment.recommended,
       providerId: recommendation.assessment.suggestedProviders[0] ?? null,
       config: null, // Recruiter fills in provider-specific config
     },
-    interviewRounds: recommendation.interviewPanel.rounds.map((round, index) => ({
-      id: `round-${index + 1}`,
-      name: round.name,
-      duration: round.duration,
-      interviewerIds: [], // Recruiter assigns specific interviewers
-      focus: round.focus,
-    })),
+    interviewRounds,
+    totalDurationMinutes: interviewRounds.reduce((sum, round) => sum + round.duration, 0),
   };
 }
 

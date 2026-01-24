@@ -393,7 +393,8 @@ Draft jobs return `description` as a Tiptap JSON object for the editor.
         "focus": "Leadership and collaboration",
         "mode": "any_one"
       }
-    ]
+    ],
+    "totalDurationMinutes": 105
   },
   "errorMessage": null,
   "errorCode": null,
@@ -767,7 +768,8 @@ When `pipelineStatus` is `completed`:
         "focus": "Leadership and collaboration",
         "mode": "any_one"
       }
-    ]
+    ],
+    "totalDurationMinutes": 105
   },
   "generatedAt": "2026-01-07T10:35:00Z"
 }
@@ -778,9 +780,12 @@ When `pipelineStatus` is `completed`:
 | `pipelineStatus` | enum | `none`, `pending`, `processing`, `completed`, or `failed` |
 | `recommendation` | object/null | AI-generated pipeline recommendation (null if not completed) |
 | `config` | object/null | Editable pipeline configuration (null if not completed) |
+| `config.totalDurationMinutes` | number | Total interview duration (calculated from rounds) |
 | `generatedAt` | string/null | ISO 8601 timestamp when pipeline was generated |
 | `error` | string | Error message (only present when failed) |
 | `errorCode` | string | Error code (only present when failed) |
+
+**Note:** `config.totalDurationMinutes` is automatically calculated by the backend whenever interview rounds are updated. Frontend does not need to calculate this.
 
 #### 404 Not Found
 

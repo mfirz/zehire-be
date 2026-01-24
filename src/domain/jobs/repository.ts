@@ -27,7 +27,7 @@ import {
 } from "../../db";
 import { extractPlainText, type TiptapDoc } from "../../lib/tiptap";
 import type { JobErrorCode } from "../../types/bindings";
-import type { PipelineConfig, PipelineRecommendation } from "../pipeline/types";
+import type { AssessmentConfig, PipelineConfig, PipelineRecommendation } from "../pipeline/types";
 import type {
   CreateJobInput,
   JobContextOutput,
@@ -554,13 +554,13 @@ export class JobRepository {
    * Update assessment configuration (recruiter edits).
    * Allowed for draft, published, and paused jobs.
    */
-  async updateAssessmentConfig(id: string, config: PipelineConfig): Promise<void> {
+  async updateAssessmentConfig(id: string, assessment: AssessmentConfig): Promise<void> {
     const now = new Date().toISOString();
 
     await this.db
       .update(jobs)
       .set({
-        assessmentConfig: JSON.stringify(config.assessment),
+        assessmentConfig: JSON.stringify(assessment),
         updatedAt: now,
       })
       .where(eq(jobs.id, id));

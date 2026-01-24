@@ -112,6 +112,7 @@ export type InterviewRoundConfig = z.infer<typeof InterviewRoundConfigSchema>;
 export const PipelineConfigSchema = z.object({
   assessment: AssessmentConfigSchema,
   interviewRounds: z.array(InterviewRoundConfigSchema),
+  totalDurationMinutes: z.number(), // Calculated from interviewRounds
 });
 
 export type PipelineConfig = z.infer<typeof PipelineConfigSchema>;

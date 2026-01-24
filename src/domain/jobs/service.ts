@@ -405,11 +405,7 @@ export class JobService {
 
       // Update assessment config
       if (update.assessment) {
-        const updatedConfig: PipelineConfig = {
-          assessment: update.assessment,
-          interviewRounds: [], // Not used for assessment update
-        };
-        await this.repository.updateAssessmentConfig(jobId, updatedConfig);
+        await this.repository.updateAssessmentConfig(jobId, update.assessment);
       }
 
       // Update stage structure (name, duration, focus) - no interviewers, no mode
@@ -609,7 +605,7 @@ export class JobService {
     const resetConfig = generateInitialConfig(recommendation);
 
     // Save reset assessment config to dedicated column
-    await this.repository.updateAssessmentConfig(jobId, resetConfig);
+    await this.repository.updateAssessmentConfig(jobId, resetConfig.assessment);
 
     // Also reset interview_stages table
     // Delete existing stages and create fresh ones from recommendation
@@ -1061,6 +1057,7 @@ export class JobService {
 
     // Build pipeline config from interview_stages table (source of truth)
     // Assessment config comes from dedicated assessmentConfig column
+    const totalDurationMinutes = stages.reduce((sum, stage) => sum + stage.durationMinutes, 0);
     const pipelineFromStages: PipelineConfig | null =
       stages.length > 0
         ? {
@@ -1075,6 +1072,7 @@ export class JobService {
               focus: stage.focus,
               mode: stage.mode,
             })),
+            totalDurationMinutes,
           }
         : null; // No stages = pipeline not generated yet
     switch (job.status) {

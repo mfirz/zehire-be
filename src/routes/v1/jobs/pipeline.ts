@@ -87,6 +87,7 @@ export async function getPipeline(
   const stagesRepository = new InterviewStagesRepository(c.env.DB);
   const stages = await stagesRepository.getStagesForJob(jobId);
 
+  const totalDurationMinutes = stages.reduce((sum, stage) => sum + stage.durationMinutes, 0);
   const config: PipelineConfig | null =
     stages.length > 0
       ? {
@@ -101,6 +102,7 @@ export async function getPipeline(
             focus: stage.focus,
             mode: stage.mode,
           })),
+          totalDurationMinutes,
         }
       : null;
 
