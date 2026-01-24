@@ -832,12 +832,27 @@ All fields are optional. Only provided fields are updated.
 
 | Field            | Type   | Required | Description                                    |
 |------------------|--------|----------|------------------------------------------------|
-| `id`             | string | Yes*     | Stage ID (required for updates, omit for new)  |
-| `name`           | string | Yes      | Round name (e.g., "Technical Screen")          |
-| `duration`       | number | Yes      | Interview duration in minutes                  |
-| `focus`          | string | Yes      | What this round evaluates                      |
+| `id`             | string | No       | Stage ID. See "Stage Operations" below         |
+| `name`           | string | Draft    | Round name (e.g., "Technical Screen")          |
+| `duration`       | number | Draft    | Interview duration in minutes                  |
+| `focus`          | string | Draft    | What this round evaluates                      |
 | `interviewerIds` | array  | No       | Array of interviewer IDs to assign             |
 | `mode`           | enum   | No       | `any_one` (default) or `all_required`          |
+
+### Stage Operations (Draft Only)
+
+When updating `interviewRounds` on a draft job, the array **replaces** all existing stages:
+
+| `id` Field | Behavior |
+|------------|----------|
+| **With valid ID** | Update that stage (ID must exist) |
+| **Omitted** | Create a new stage |
+| **Stage not in request** | Delete that stage (unless it has active interviews) |
+
+For published/paused jobs, only partial updates are allowed:
+- All stages must have an `id` (no new stages)
+- Only `interviewerIds` and `mode` can be changed
+- Omitting a stage doesn't delete it
 
 ### Interview Modes
 
@@ -921,7 +936,7 @@ If trying to delete stages with active interviews (draft only):
 }
 ```
 
-If stage ID doesn't exist (published/paused):
+If stage ID doesn't exist (when `id` is provided, it must be valid):
 
 ```json
 {
@@ -932,7 +947,7 @@ If stage ID doesn't exist (published/paused):
 }
 ```
 
-If missing required fields for draft stage update:
+If missing required fields for draft stage update (name, duration, focus required):
 
 ```json
 {

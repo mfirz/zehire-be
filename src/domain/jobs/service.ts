@@ -417,7 +417,7 @@ export class JobService {
         // Validate required fields for draft stage updates
         const missingFields = update.interviewRounds
           .filter((r) => !r.name || !r.focus || r.duration === undefined)
-          .map((r) => r.id);
+          .map((r) => r.id ?? "(new stage)");
 
         if (missingFields.length > 0) {
           return {
@@ -429,13 +429,38 @@ export class JobService {
           };
         }
 
-        const stageInputs: StageInput[] = update.interviewRounds.map((round) => ({
-          id: round.id,
-          name: round.name!,
-          focus: round.focus!,
-          duration: round.duration!,
-          // interviewerIds and mode intentionally omitted for draft
-        }));
+        // Validate: stages with IDs must exist in database
+        const stagesWithIds = update.interviewRounds.filter((r) => r.id);
+        if (stagesWithIds.length > 0) {
+          const currentStages = await this.interviewStagesRepository.getStagesForJob(jobId);
+          const currentStageIds = new Set(currentStages.map((s) => s.id));
+
+          const invalidIds = stagesWithIds.filter((r) => !currentStageIds.has(r.id!)).map((r) => r.id!);
+
+          if (invalidIds.length > 0) {
+            const validIds = currentStages.length > 0 ? currentStages.map((s) => s.id).join(", ") : "(none)";
+            return {
+              success: false,
+              error: {
+                code: "STAGE_NOT_FOUND",
+                message: `Stage ID(s) not found: ${invalidIds.join(", ")}. Valid IDs: ${validIds}`,
+              },
+            };
+          }
+        }
+
+        const stageInputs: StageInput[] = update.interviewRounds.map((round) => {
+          const input: StageInput = {
+            name: round.name!,
+            focus: round.focus!,
+            duration: round.duration!,
+            // interviewerIds and mode intentionally omitted for draft
+          };
+          if (round.id) {
+            input.id = round.id;
+          }
+          return input;
+        });
 
         const stageResult = await this.interviewStagesRepository.updateStages(jobId, stageInputs);
 

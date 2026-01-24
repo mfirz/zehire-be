@@ -122,12 +122,15 @@ export type PipelineConfig = z.infer<typeof PipelineConfigSchema>;
 
 /**
  * Interview round update schema (for PATCH requests).
- * Only `id` is required. Other fields depend on job state:
+ * - With ID: update existing stage (ID must exist)
+ * - Without ID: create new stage
+ *
+ * Field requirements by job state:
  * - Draft: name, duration, focus (structure)
  * - Published/Paused: interviewerIds, mode (operations)
  */
 export const InterviewRoundUpdateSchema = z.object({
-  id: z.string(),
+  id: z.string().optional(), // Optional: omit to create new stage
   name: z.string().optional(),
   duration: z.number().optional(),
   focus: z.string().optional(),

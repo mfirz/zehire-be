@@ -434,14 +434,14 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"assessment\": {\n    \"enabled\": true,\n    \"providerId\": \"hackerrank\",\n    \"config\": {\n      \"testId\": \"test-123\",\n      \"timeLimit\": 90\n    }\n  },\n  \"interviewRounds\": [\n    {\n      \"id\": \"stage_abc123\",\n      \"name\": \"Technical Screen\",\n      \"duration\": 45,\n      \"focus\": \"Technical fundamentals\",\n      \"mode\": \"any_one\",\n      \"interviewerIds\": [\"int_user123\"]\n    },\n    {\n      \"id\": \"stage_def456\",\n      \"name\": \"System Design\",\n      \"duration\": 60,\n      \"focus\": \"Architecture and scalability\",\n      \"mode\": \"all_required\",\n      \"interviewerIds\": [\"int_user123\", \"int_user456\"]\n    }\n  ]\n}"
+                  "raw": "{\n  \"assessment\": {\n    \"enabled\": true,\n    \"providerId\": \"hackerrank\",\n    \"config\": {\n      \"testId\": \"test-123\",\n      \"timeLimit\": 90\n    }\n  },\n  \"interviewRounds\": [\n    {\n      \"id\": \"stage_abc123\",\n      \"name\": \"Technical Screen\",\n      \"duration\": 45,\n      \"focus\": \"Technical fundamentals\"\n    },\n    {\n      \"name\": \"New Stage (no id = create)\",\n      \"duration\": 30,\n      \"focus\": \"New stage without id will be created (draft only)\"\n    }\n  ]\n}"
                 },
                 "url": {
                   "raw": "{{base_url}}/v1/jobs/{{job_id}}/pipeline",
                   "host": ["{{base_url}}"],
                   "path": ["v1", "jobs", "{{job_id}}", "pipeline"]
                 },
-                "description": "Update pipeline configuration.\n\n**Editing by Job Status:**\n- `draft`: Structure only (assessment, stages name/duration/focus)\n- `published`/`paused`: Operations only (interviewerIds, mode)\n- `closed`: No edits allowed\n\n**Interview Modes (published/paused only):**\n- `any_one`: Any one assigned interviewer must be available (default)\n- `all_required`: All assigned interviewers must be available\n\n**Why this separation?**\n- Draft = design the interview process\n- Published = assign real people to conduct interviews\n\n**Prerequisites:**\n- Pipeline must be `completed`\n\nAll fields are optional for partial updates."
+                "description": "Update pipeline configuration.\n\n**Editing by Job Status:**\n- `draft`: Structure only (assessment, stages name/duration/focus)\n- `published`/`paused`: Operations only (interviewerIds, mode)\n- `closed`: No edits allowed\n\n**Stage Operations (Draft Only):**\n- With `id`: Update existing stage (ID must exist)\n- Without `id`: Create new stage\n- Stage not in request: Delete that stage\n\n**Interview Modes (published/paused only):**\n- `any_one`: Any one assigned interviewer must be available (default)\n- `all_required`: All assigned interviewers must be available\n\n**Why this separation?**\n- Draft = design the interview process\n- Published = assign real people to conduct interviews\n\n**Prerequisites:**\n- Pipeline must be `completed`\n\nAll fields are optional for partial updates."
               },
               "response": []
             },
