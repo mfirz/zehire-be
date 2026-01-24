@@ -213,7 +213,8 @@ export const JobRowSchema = z.object({
 
   // Pipeline generation results (JSON strings)
   pipelineRecommendation: z.string().nullable(),
-  pipeline: z.string().nullable(),
+  pipeline: z.string().nullable(), // DEPRECATED: Use interview_stages table + assessmentConfig
+  assessmentConfig: z.string().nullable(), // JSON: { enabled, providerId, config }
 
   // Error details (for failed question generation)
   errorMessage: z.string().nullable(),

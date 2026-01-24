@@ -9,11 +9,13 @@
  */
 
 import type { Context } from "hono";
+import { InterviewStagesRepository } from "../../../domain/interview-stages";
 import { JobRepository, JobService, OrgRepository } from "../../../domain/jobs";
 import {
-  PipelineConfigSchema,
+  AssessmentConfigSchema,
   PipelineRecommendationSchema,
   PipelineUpdateSchema,
+  type PipelineConfig,
 } from "../../../domain/pipeline/types";
 import type { AuthVariables, Env } from "../../../types/bindings";
 
@@ -76,12 +78,31 @@ export async function getPipeline(
     );
   }
 
-  // Pipeline is completed - parse and return data
+  // Pipeline is completed - build config from tables
   const recommendation = job.pipelineRecommendation
     ? PipelineRecommendationSchema.parse(JSON.parse(job.pipelineRecommendation))
     : null;
 
-  const config = job.pipeline ? PipelineConfigSchema.parse(JSON.parse(job.pipeline)) : null;
+  // Build config from interview_stages table and assessmentConfig column
+  const stagesRepository = new InterviewStagesRepository(c.env.DB);
+  const stages = await stagesRepository.getStagesForJob(jobId);
+
+  const config: PipelineConfig | null =
+    stages.length > 0
+      ? {
+          assessment: job.assessmentConfig
+            ? AssessmentConfigSchema.parse(JSON.parse(job.assessmentConfig))
+            : { enabled: false, providerId: null, config: null },
+          interviewRounds: stages.map((stage) => ({
+            id: stage.id,
+            name: stage.name,
+            duration: stage.durationMinutes,
+            interviewerIds: stage.interviewers.map((i) => i.id),
+            focus: stage.focus,
+            mode: stage.mode,
+          })),
+        }
+      : null;
 
   return c.json(
     {

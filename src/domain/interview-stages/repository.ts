@@ -20,6 +20,7 @@ import {
   interviewStageConfig,
   interviewStageInterviewers,
   interviewers,
+  scheduledInterviews,
   type Database,
   type InterviewStageRecord,
   type NewInterviewStage,
@@ -71,6 +72,13 @@ export interface RecommendationRound {
   duration: number;
   focus: string;
 }
+
+/**
+ * Result of stage update operation.
+ */
+export type UpdateStagesResult =
+  | { success: true; stages: StageWithInterviewers[] }
+  | { success: false; error: { code: string; message: string; stageIds?: string[] } };
 
 // =============================================================================
 // REPOSITORY
@@ -291,12 +299,12 @@ export class InterviewStagesRepository {
    *
    * - Stages with id that exists: update
    * - Stages without id or with new id: create
-   * - Existing stages not in input: delete
+   * - Existing stages not in input: delete (blocked if active interviews exist)
    */
   async updateStages(
     jobId: string,
     stageInputs: StageInput[]
-  ): Promise<StageWithInterviewers[]> {
+  ): Promise<UpdateStagesResult> {
     const now = new Date().toISOString();
 
     // Get existing stages
@@ -327,6 +335,28 @@ export class InterviewStagesRepository {
     for (const existing of existingStages) {
       if (!inputIds.has(existing.id)) {
         toDelete.push(existing.id);
+      }
+    }
+
+    // Check for active interviews on stages being deleted
+    if (toDelete.length > 0) {
+      const stagesWithActiveInterviews = await this.getStagesWithActiveInterviews(
+        jobId,
+        toDelete
+      );
+
+      if (stagesWithActiveInterviews.length > 0) {
+        const stageNames = stagesWithActiveInterviews
+          .map((s) => `"${s.name}"`)
+          .join(", ");
+        return {
+          success: false,
+          error: {
+            code: "ACTIVE_INTERVIEWS_EXIST",
+            message: `Cannot delete stages with scheduled interviews. Please cancel the interviews first or wait for them to complete: ${stageNames}`,
+            stageIds: stagesWithActiveInterviews.map((s) => s.id),
+          },
+        };
       }
     }
 
@@ -401,7 +431,52 @@ export class InterviewStagesRepository {
     await this.syncInterviewerAssignments(jobId, stageInputs);
 
     // Return updated stages
-    return this.getStagesForJob(jobId);
+    return { success: true, stages: await this.getStagesForJob(jobId) };
+  }
+
+  /**
+   * Check which stages have active (scheduled) interviews.
+   * Returns stage info for stages that cannot be deleted.
+   */
+  private async getStagesWithActiveInterviews(
+    jobId: string,
+    stageIds: string[]
+  ): Promise<Array<{ id: string; name: string }>> {
+    // Get stages with their names
+    const stages = await this.db
+      .select({ id: interviewStageConfig.id, name: interviewStageConfig.name, stageId: interviewStageConfig.stageId })
+      .from(interviewStageConfig)
+      .where(
+        and(
+          eq(interviewStageConfig.jobId, jobId),
+          inArray(interviewStageConfig.id, stageIds)
+        )
+      )
+      .all();
+
+    if (stages.length === 0) {
+      return [];
+    }
+
+    // Check for active interviews (status = 'scheduled')
+    const stageIdStrings = stages.map((s) => s.stageId);
+    const activeInterviews = await this.db
+      .select({ stageId: scheduledInterviews.stageId })
+      .from(scheduledInterviews)
+      .where(
+        and(
+          eq(scheduledInterviews.jobId, jobId),
+          inArray(scheduledInterviews.stageId, stageIdStrings),
+          eq(scheduledInterviews.status, "scheduled")
+        )
+      )
+      .all();
+
+    const stagesWithInterviews = new Set(activeInterviews.map((i) => i.stageId));
+
+    return stages
+      .filter((s) => stagesWithInterviews.has(s.stageId))
+      .map((s) => ({ id: s.id, name: s.name }));
   }
 
   /**
@@ -475,6 +550,92 @@ export class InterviewStagesRepository {
       }
 
       await Promise.all(operations);
+    }
+  }
+
+  /**
+   * Update only operational fields for stages (interviewerIds, mode).
+   * Used for published/paused jobs where structure is locked.
+   */
+  async updateOperationalFields(
+    jobId: string,
+    updates: Array<{
+      id: string;
+      interviewerIds?: string[];
+      mode?: InterviewMode;
+    }>
+  ): Promise<void> {
+    const now = new Date().toISOString();
+
+    // Get current stages to map id -> stageId
+    const stages = await this.db
+      .select({ id: interviewStageConfig.id, stageId: interviewStageConfig.stageId })
+      .from(interviewStageConfig)
+      .where(eq(interviewStageConfig.jobId, jobId))
+      .all();
+
+    const stageIdMap = new Map(stages.map((s) => [s.id, s.stageId]));
+
+    for (const update of updates) {
+      const stageId = stageIdMap.get(update.id);
+      if (!stageId) continue;
+
+      // Update mode if provided
+      if (update.mode) {
+        await this.db
+          .update(interviewStageConfig)
+          .set({ mode: update.mode, updatedAt: now })
+          .where(eq(interviewStageConfig.id, update.id));
+      }
+
+      // Update interviewer assignments if provided
+      if (update.interviewerIds !== undefined) {
+        // Get current assignments
+        const currentAssignments = await this.db
+          .select()
+          .from(interviewStageInterviewers)
+          .where(
+            and(
+              eq(interviewStageInterviewers.jobId, jobId),
+              eq(interviewStageInterviewers.stageId, stageId)
+            )
+          )
+          .all();
+
+        const currentIds = new Set(currentAssignments.map((a) => a.interviewerId));
+        const desiredIds = new Set(update.interviewerIds);
+
+        // Find assignments to add and remove
+        const toAdd = update.interviewerIds.filter((id) => !currentIds.has(id));
+        const toRemove = currentAssignments
+          .filter((a) => !desiredIds.has(a.interviewerId))
+          .map((a) => a.id);
+
+        const operations: Promise<unknown>[] = [];
+
+        // Remove extra assignments
+        if (toRemove.length > 0) {
+          operations.push(
+            this.db
+              .delete(interviewStageInterviewers)
+              .where(inArray(interviewStageInterviewers.id, toRemove))
+          );
+        }
+
+        // Add missing assignments
+        if (toAdd.length > 0) {
+          const newAssignments: NewInterviewStageInterviewer[] = toAdd.map((interviewerId) => ({
+            id: alphanumericId(),
+            jobId,
+            stageId,
+            interviewerId,
+            createdAt: now,
+          }));
+          operations.push(this.db.insert(interviewStageInterviewers).values(newAssignments));
+        }
+
+        await Promise.all(operations);
+      }
     }
   }
 

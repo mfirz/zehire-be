@@ -324,7 +324,10 @@ export class JobService {
   /**
    * Update pipeline configuration (recruiter edits).
    *
-   * Only allowed for draft jobs with completed pipeline generation.
+   * Access control:
+   * - Draft/Published/Paused jobs: All changes allowed
+   * - Closed jobs: No changes allowed
+   *
    * Updates both the JSON column (for backwards compatibility) and
    * the interview_stages table (source of truth).
    *
@@ -344,10 +347,11 @@ export class JobService {
       return { success: false, error: { code: "NOT_FOUND", message: "Job not found" } };
     }
 
-    if (job.status !== "draft") {
+    // Closed jobs cannot be edited
+    if (job.status === "closed") {
       return {
         success: false,
-        error: { code: "INVALID_STATE", message: "Only draft jobs can update pipeline" },
+        error: { code: "INVALID_STATE", message: "Closed jobs cannot be edited" },
       };
     }
 
@@ -361,19 +365,31 @@ export class JobService {
       };
     }
 
-    // Parse current config
-    const currentConfig: PipelineConfig = job.pipeline
-      ? JSON.parse(job.pipeline)
-      : { assessment: { enabled: false, providerId: null, config: null }, interviewRounds: [] };
+    // Parse current assessment config from dedicated column
+    const currentAssessment = job.assessmentConfig
+      ? JSON.parse(job.assessmentConfig)
+      : { enabled: false, providerId: null, config: null };
+
+    // Get current stages from table
+    const currentStages = await this.interviewStagesRepository.getStagesForJob(jobId);
 
     // Merge updates
     const updatedConfig: PipelineConfig = {
-      assessment: update.assessment ?? currentConfig.assessment,
-      interviewRounds: update.interviewRounds ?? currentConfig.interviewRounds,
+      assessment: update.assessment ?? currentAssessment,
+      interviewRounds:
+        update.interviewRounds ??
+        currentStages.map((stage) => ({
+          id: stage.id,
+          name: stage.name,
+          duration: stage.durationMinutes,
+          interviewerIds: stage.interviewers.map((i) => i.id),
+          focus: stage.focus,
+          mode: stage.mode,
+        })),
     };
 
-    // Save updated config to JSON column (backwards compatibility)
-    await this.repository.updatePipelineConfig(jobId, updatedConfig);
+    // Save updated assessment config to dedicated column
+    await this.repository.updateAssessmentConfig(jobId, updatedConfig);
 
     // Also update interview_stages table (source of truth)
     if (update.interviewRounds) {
@@ -391,7 +407,17 @@ export class JobService {
         return input;
       });
 
-      await this.interviewStagesRepository.updateStages(jobId, stageInputs);
+      const stageResult = await this.interviewStagesRepository.updateStages(jobId, stageInputs);
+
+      if (!stageResult.success) {
+        return {
+          success: false,
+          error: {
+            code: stageResult.error.code as "INVALID_STATE",
+            message: stageResult.error.message,
+          },
+        };
+      }
     }
 
     // Invalidate cache
@@ -463,8 +489,8 @@ export class JobService {
     // Regenerate initial config from recommendation (no LLM call)
     const resetConfig = generateInitialConfig(recommendation);
 
-    // Save reset config to JSON column
-    await this.repository.updatePipelineConfig(jobId, resetConfig);
+    // Save reset assessment config to dedicated column
+    await this.repository.updateAssessmentConfig(jobId, resetConfig);
 
     // Also reset interview_stages table
     // Delete existing stages and create fresh ones from recommendation
@@ -915,12 +941,12 @@ export class JobService {
     const stages = await this.interviewStagesRepository.getStagesForJob(job.id);
 
     // Build pipeline config from interview_stages table (source of truth)
-    // Assessment config comes from jobs.pipeline JSON (1:1 with job)
+    // Assessment config comes from dedicated assessmentConfig column
     const pipelineFromStages: PipelineConfig | null =
       stages.length > 0
         ? {
-            assessment: job.pipeline
-              ? (JSON.parse(job.pipeline) as PipelineConfig).assessment
+            assessment: job.assessmentConfig
+              ? JSON.parse(job.assessmentConfig)
               : { enabled: false, providerId: null, config: null },
             interviewRounds: stages.map((stage) => ({
               id: stage.id,

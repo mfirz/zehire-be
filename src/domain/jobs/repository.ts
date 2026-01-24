@@ -291,7 +291,8 @@ export class JobRepository {
       // Reset pipeline
       updates.pipelineStatus = "none";
       updates.pipelineRecommendation = null;
-      updates.pipeline = null;
+      updates.pipeline = null; // DEPRECATED: keeping for cleanup
+      updates.assessmentConfig = null;
       updates.pipelineError = null;
       updates.pipelineErrorCode = null;
       updates.pipelineRegenerationCount = 0;
@@ -496,7 +497,7 @@ export class JobRepository {
         .set({
           pipelineStatus: "completed",
           pipelineRecommendation: JSON.stringify(results.recommendation),
-          pipeline: JSON.stringify(results.config),
+          assessmentConfig: JSON.stringify(results.config.assessment),
           pipelineProcessingDurationMs: results.processingDurationMs,
           pipelineGeneratedAt: now,
           updatedAt: now,
@@ -556,19 +557,19 @@ export class JobRepository {
   }
 
   /**
-   * Update pipeline configuration (recruiter edits).
-   * Only allowed for draft jobs.
+   * Update assessment configuration (recruiter edits).
+   * Allowed for draft, published, and paused jobs.
    */
-  async updatePipelineConfig(id: string, config: PipelineConfig): Promise<void> {
+  async updateAssessmentConfig(id: string, config: PipelineConfig): Promise<void> {
     const now = new Date().toISOString();
 
     await this.db
       .update(jobs)
       .set({
-        pipeline: JSON.stringify(config),
+        assessmentConfig: JSON.stringify(config.assessment),
         updatedAt: now,
       })
-      .where(and(eq(jobs.id, id), eq(jobs.status, "draft")));
+      .where(eq(jobs.id, id));
   }
 
   // ===========================================================================

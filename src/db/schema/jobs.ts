@@ -97,7 +97,8 @@ export const jobs = sqliteTable(
 
     // Pipeline fields
     pipelineRecommendation: text("pipeline_recommendation"),
-    pipeline: text("pipeline"),
+    pipeline: text("pipeline"), // DEPRECATED: Use interview_stages table + assessmentConfig
+    assessmentConfig: text("assessment_config"), // JSON: { enabled, providerId, config }
     pipelineGeneratedAt: text("pipeline_generated_at"),
     pipelineError: text("pipeline_error"),
     pipelineErrorCode: text("pipeline_error_code", { enum: jobErrorCodes }),

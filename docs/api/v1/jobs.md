@@ -41,6 +41,14 @@ Separate from job status, tracks hiring pipeline generation:
 
 The pipeline recommends assessment types and interview rounds based on job details.
 
+#### Data Storage
+
+Pipeline data is stored in relational tables for optimal querying:
+- **Interview stages**: `interview_stages` table (name, focus, duration, mode)
+- **Interviewer assignments**: `interview_stage_interviewers` table
+- **Assessment config**: `jobs.assessment_config` column (JSON)
+- **LLM recommendation**: `jobs.pipeline_recommendation` column (JSON, read-only)
+
 ---
 
 ## POST /v1/jobs
@@ -766,13 +774,22 @@ When `pipelineStatus` is `completed`:
 
 ## PATCH /v1/jobs/:id/pipeline
 
-Update the pipeline configuration for a draft job. This is the **single endpoint** for all pipeline edits including:
+Update the pipeline configuration for a job. This is the **single endpoint** for all pipeline edits including:
 - Assessment configuration
 - Interview rounds (name, duration, focus)
 - Interviewer assignments
 - Interview mode per round
 
-**Note**: Only draft jobs can have their pipeline updated.
+### Editing by Job Status
+
+| Job Status | Allowed Edits |
+|------------|---------------|
+| `draft` | All fields (structure, interviewers, mode, assessment) |
+| `published` | Operational fields only (interviewerIds, mode) |
+| `paused` | Operational fields only (interviewerIds, mode) |
+| `closed` | No edits allowed |
+
+**Note**: For published/paused jobs, structural changes (adding/removing stages, changing name/duration/focus) are not allowed to maintain consistency with existing interviews.
 
 ### Request
 
@@ -835,11 +852,24 @@ Returns the updated job (same format as GET /v1/jobs/:id for draft status).
 
 #### 400 Bad Request
 
+If trying to make structural changes on published/paused jobs:
+
+```json
+{
+  "error": {
+    "code": "STRUCTURAL_CHANGES_NOT_ALLOWED",
+    "message": "Published jobs only allow operational updates (interviewerIds, mode)"
+  }
+}
+```
+
+Or if trying to edit a closed job:
+
 ```json
 {
   "error": {
     "code": "INVALID_STATE",
-    "message": "Only draft jobs can update pipeline"
+    "message": "Closed jobs cannot be updated"
   }
 }
 ```
@@ -851,6 +881,18 @@ Or if pipeline hasn't been generated yet:
   "error": {
     "code": "PIPELINE_NOT_READY",
     "message": "Pipeline must be generated before editing"
+  }
+}
+```
+
+Or if trying to delete stages with active interviews:
+
+```json
+{
+  "error": {
+    "code": "ACTIVE_INTERVIEWS_EXIST",
+    "message": "Cannot delete stages with scheduled interviews. Please cancel the interviews first: \"Technical Deep Dive\"",
+    "stageIds": ["abc123xyz"]
   }
 }
 ```

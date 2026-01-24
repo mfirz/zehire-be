@@ -20,6 +20,7 @@ import { z } from "zod";
 import { ApplicationRepository, CvService } from "../../../domain/applications";
 import { CreateNoteSchema, UpdateApplicationSchema } from "../../../domain/applications/schemas";
 import { CustomQuestionsRepository } from "../../../domain/custom-questions/repository";
+import { InterviewStagesRepository } from "../../../domain/interview-stages";
 import { JobRepository } from "../../../domain/jobs/repository";
 import { SchedulingRepository } from "../../../domain/scheduling";
 import { createEmailGatewayFromEnv } from "../../../modules/email";
@@ -495,6 +496,7 @@ applicationsRoute.post(
     const applicationRepository = new ApplicationRepository(c.env.DB);
     const jobRepository = new JobRepository(c.env.DB);
     const schedulingRepo = new SchedulingRepository(c.env.DB);
+    const stagesRepo = new InterviewStagesRepository(c.env.DB);
 
     // Get application
     const application = await applicationRepository.findById(applicationId);
@@ -508,6 +510,33 @@ applicationsRoute.post(
 
     if (!job) {
       return c.json({ error: "Application not found" }, 404);
+    }
+
+    // Validate stage exists and has interviewers assigned
+    const stage = await stagesRepo.getStageByJobAndStageId(application.jobId, input.stageId);
+
+    if (!stage) {
+      return c.json(
+        {
+          error: {
+            code: "STAGE_NOT_FOUND",
+            message: `Interview stage "${input.stageId}" not found for this job`,
+          },
+        },
+        404
+      );
+    }
+
+    if (stage.interviewers.length === 0) {
+      return c.json(
+        {
+          error: {
+            code: "NO_INTERVIEWERS",
+            message: `No interviewers assigned to stage "${stage.name}". Please assign at least one interviewer before sending the scheduling invite.`,
+          },
+        },
+        400
+      );
     }
 
     // Create scheduling token (expires in 7 days)

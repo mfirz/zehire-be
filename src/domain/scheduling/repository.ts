@@ -16,6 +16,7 @@ import {
   applications,
   jobs,
   interviewers,
+  interviewStageConfig,
   type Database,
   type SchedulingToken,
   type NewSchedulingToken,
@@ -148,13 +149,12 @@ export class SchedulingRepository {
       return null;
     }
 
-    // Get job details including pipeline for stage name
+    // Get job details
     const job = await this.db
       .select({
         id: jobs.id,
         title: jobs.title,
         companyName: jobs.companyName,
-        pipeline: jobs.pipeline,
       })
       .from(jobs)
       .innerJoin(applications, eq(applications.jobId, jobs.id))
@@ -164,6 +164,18 @@ export class SchedulingRepository {
     if (!job) {
       return null;
     }
+
+    // Look up stage name from interview_stages table
+    const stage = await this.db
+      .select({ name: interviewStageConfig.name })
+      .from(interviewStageConfig)
+      .where(
+        and(
+          eq(interviewStageConfig.jobId, job.id),
+          eq(interviewStageConfig.stageId, tokenRecord.stageId)
+        )
+      )
+      .get();
 
     return {
       token: tokenRecord,
@@ -176,10 +188,10 @@ export class SchedulingRepository {
         id: job.id,
         title: job.title,
         companyName: job.companyName,
-        pipeline: job.pipeline,
+        pipeline: null, // DEPRECATED: no longer used
       },
       stageId: tokenRecord.stageId,
-      stageName: getStageName(job.pipeline, tokenRecord.stageId),
+      stageName: stage?.name ?? tokenRecord.stageId,
     };
   }
 
@@ -543,10 +555,10 @@ export class SchedulingRepository {
         durationMinutes: scheduledInterviews.durationMinutes,
         videoCallLink: scheduledInterviews.videoCallLink,
         stageId: scheduledInterviews.stageId,
+        jobId: scheduledInterviews.jobId,
         candidateName: applications.candidateName,
         jobTitle: jobs.title,
         companyName: jobs.companyName,
-        pipeline: jobs.pipeline,
       })
       .from(scheduledInterviews)
       .innerJoin(
@@ -565,13 +577,31 @@ export class SchedulingRepository {
       .orderBy(scheduledInterviews.scheduledAt)
       .all();
 
+    // Look up stage names from interview_stages table
+    const stageIds = [...new Set(results.map((r) => r.stageId))];
+    const jobIds = [...new Set(results.map((r) => r.jobId))];
+
+    const stageRecords =
+      stageIds.length > 0 && jobIds.length > 0
+        ? await this.db
+            .select({
+              stageId: interviewStageConfig.stageId,
+              name: interviewStageConfig.name,
+            })
+            .from(interviewStageConfig)
+            .where(inArray(interviewStageConfig.stageId, stageIds))
+            .all()
+        : [];
+
+    const stageNameMap = new Map(stageRecords.map((s) => [s.stageId, s.name]));
+
     return results.map((r) => ({
       id: r.id,
       scheduledAt: r.scheduledAt,
       durationMinutes: r.durationMinutes,
       videoCallLink: r.videoCallLink,
       stageId: r.stageId,
-      stageName: getStageName(r.pipeline, r.stageId),
+      stageName: stageNameMap.get(r.stageId) ?? r.stageId,
       candidateName: r.candidateName,
       jobTitle: r.jobTitle,
       companyName: r.companyName,
@@ -596,7 +626,6 @@ export class SchedulingRepository {
         candidateName: applications.candidateName,
         jobTitle: jobs.title,
         companyName: jobs.companyName,
-        pipeline: jobs.pipeline,
       })
       .from(scheduledInterviews)
       .innerJoin(
@@ -614,24 +643,42 @@ export class SchedulingRepository {
       )
       .all();
 
-    // Filter to past interviews (interview has ended) and map to include stage name
-    return results
-      .filter((r) => {
-        const endTime = new Date(r.scheduledAt);
-        endTime.setMinutes(endTime.getMinutes() + r.durationMinutes);
-        return endTime.toISOString() < now;
+    // Filter to past interviews (interview has ended)
+    const pastInterviews = results.filter((r) => {
+      const endTime = new Date(r.scheduledAt);
+      endTime.setMinutes(endTime.getMinutes() + r.durationMinutes);
+      return endTime.toISOString() < now;
+    });
+
+    if (pastInterviews.length === 0) {
+      return [];
+    }
+
+    // Look up stage names from interview_stages table
+    const stageIds = [...new Set(pastInterviews.map((r) => r.stageId))];
+
+    const stageRecords = await this.db
+      .select({
+        stageId: interviewStageConfig.stageId,
+        name: interviewStageConfig.name,
       })
-      .map((r) => ({
-        id: r.id,
-        scheduledAt: r.scheduledAt,
-        durationMinutes: r.durationMinutes,
-        videoCallLink: r.videoCallLink,
-        stageId: r.stageId,
-        stageName: getStageName(r.pipeline, r.stageId),
-        candidateName: r.candidateName,
-        jobTitle: r.jobTitle,
-        companyName: r.companyName,
-      }));
+      .from(interviewStageConfig)
+      .where(inArray(interviewStageConfig.stageId, stageIds))
+      .all();
+
+    const stageNameMap = new Map(stageRecords.map((s) => [s.stageId, s.name]));
+
+    return pastInterviews.map((r) => ({
+      id: r.id,
+      scheduledAt: r.scheduledAt,
+      durationMinutes: r.durationMinutes,
+      videoCallLink: r.videoCallLink,
+      stageId: r.stageId,
+      stageName: stageNameMap.get(r.stageId) ?? r.stageId,
+      candidateName: r.candidateName,
+      jobTitle: r.jobTitle,
+      companyName: r.companyName,
+    }));
   }
 
   // ===========================================================================
@@ -825,18 +872,3 @@ export interface InterviewWithDetails {
   companyName: string | null;
 }
 
-/**
- * Helper to extract stage name from pipeline JSON.
- */
-function getStageName(pipelineJson: string | null, stageId: string): string {
-  if (!pipelineJson) {
-    return stageId;
-  }
-  try {
-    const pipeline = JSON.parse(pipelineJson);
-    const round = pipeline.interviewRounds?.find((r: { id: string }) => r.id === stageId);
-    return round?.name ?? stageId;
-  } catch {
-    return stageId;
-  }
-}
