@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { createAuthRoutes } from "./modules/auth";
 import internal from "./routes/internal/route";
 import interviewerRoutes from "./routes/interviewer";
+import oauthRoutes from "./routes/oauth";
 import publicRoutes from "./routes/public/route";
 import scheduleRoutes from "./routes/schedule";
 import v1 from "./routes/v1";
@@ -15,6 +16,9 @@ app.route("/v1", v1);
 
 // Auth routes (not versioned - stable contract)
 app.route("/auth", createAuthRoutes());
+
+// OAuth callback routes (for external providers)
+app.route("/oauth", oauthRoutes);
 
 // Public routes (no auth required)
 app.route("/public", publicRoutes);
