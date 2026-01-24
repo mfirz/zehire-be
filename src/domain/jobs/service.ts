@@ -52,6 +52,8 @@ export type JobServiceError =
   | { code: "ALREADY_PROCESSING"; message: string }
   | { code: "QUESTIONS_NOT_READY"; message: string }
   | { code: "PIPELINE_NOT_READY"; message: string }
+  | { code: "VALIDATION_ERROR"; message: string }
+  | { code: "STAGE_NOT_FOUND"; message: string }
   | {
       code: "CAPACITY_EXCEEDED";
       message: string;
@@ -412,11 +414,26 @@ export class JobService {
 
       // Update stage structure (name, duration, focus) - no interviewers, no mode
       if (update.interviewRounds) {
+        // Validate required fields for draft stage updates
+        const missingFields = update.interviewRounds
+          .filter((r) => !r.name || !r.focus || r.duration === undefined)
+          .map((r) => r.id);
+
+        if (missingFields.length > 0) {
+          return {
+            success: false,
+            error: {
+              code: "VALIDATION_ERROR",
+              message: `Stage updates require name, duration, and focus. Missing fields for: ${missingFields.join(", ")}`,
+            },
+          };
+        }
+
         const stageInputs: StageInput[] = update.interviewRounds.map((round) => ({
           id: round.id,
-          name: round.name,
-          focus: round.focus,
-          duration: round.duration,
+          name: round.name!,
+          focus: round.focus!,
+          duration: round.duration!,
           // interviewerIds and mode intentionally omitted for draft
         }));
 
@@ -449,47 +466,29 @@ export class JobService {
         };
       }
 
-      // Block structural changes to stages
+      // Partial update: only update stages you send (interviewerIds, mode only)
       if (update.interviewRounds) {
         const currentStages = await this.interviewStagesRepository.getStagesForJob(jobId);
         const currentStageIds = new Set(currentStages.map((s) => s.id));
 
-        // Check for new stages or removed stages
-        const updateStageIds = new Set(update.interviewRounds.map((r) => r.id));
-        const hasNewStages = update.interviewRounds.some((r) => !r.id || !currentStageIds.has(r.id));
-        const hasRemovedStages = currentStages.some((s) => !updateStageIds.has(s.id));
+        // Validate all provided stage IDs exist
+        const invalidIds = update.interviewRounds
+          .filter((r) => !r.id || !currentStageIds.has(r.id))
+          .map((r) => r.id ?? "(missing id)");
 
-        if (hasNewStages || hasRemovedStages) {
+        if (invalidIds.length > 0) {
+          const validIds = currentStages.map((s) => s.id).join(", ");
           return {
             success: false,
             error: {
-              code: "INVALID_STATE",
-              message: "Cannot add or remove stages after publishing. Only interviewer assignments can be changed.",
+              code: "STAGE_NOT_FOUND",
+              message: `Stage ID(s) not found: ${invalidIds.join(", ")}. Valid IDs: ${validIds}`,
             },
           };
         }
 
-        // Check for structural changes (name, duration, focus)
-        for (const round of update.interviewRounds) {
-          const currentStage = currentStages.find((s) => s.id === round.id);
-          if (currentStage) {
-            if (
-              round.name !== currentStage.name ||
-              round.duration !== currentStage.durationMinutes ||
-              round.focus !== currentStage.focus
-            ) {
-              return {
-                success: false,
-                error: {
-                  code: "INVALID_STATE",
-                  message: "Cannot modify stage structure after publishing. Only interviewer assignments and mode can be changed.",
-                },
-              };
-            }
-          }
-        }
-
         // Only update operational fields (interviewerIds, mode)
+        // Structural fields (name, duration, focus) are ignored for published jobs
         const operationalUpdates: Array<{
           id: string;
           interviewerIds?: string[];
@@ -497,16 +496,16 @@ export class JobService {
         }> = update.interviewRounds
           .filter((r) => r.id && (r.interviewerIds !== undefined || r.mode !== undefined))
           .map((r) => {
-            const update: { id: string; interviewerIds?: string[]; mode?: "any_one" | "all_required" } = {
+            const op: { id: string; interviewerIds?: string[]; mode?: "any_one" | "all_required" } = {
               id: r.id!,
             };
             if (r.interviewerIds !== undefined) {
-              update.interviewerIds = r.interviewerIds;
+              op.interviewerIds = r.interviewerIds;
             }
             if (r.mode !== undefined) {
-              update.mode = r.mode;
+              op.mode = r.mode;
             }
-            return update;
+            return op;
           });
 
         if (operationalUpdates.length > 0) {

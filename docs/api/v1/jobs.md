@@ -921,6 +921,28 @@ If trying to delete stages with active interviews (draft only):
 }
 ```
 
+If stage ID doesn't exist (published/paused):
+
+```json
+{
+  "error": {
+    "code": "STAGE_NOT_FOUND",
+    "message": "Stage ID(s) not found: stage_xyz123. Valid IDs: stage_abc, stage_def"
+  }
+}
+```
+
+If missing required fields for draft stage update:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Stage updates require name, duration, and focus. Missing fields for: stage_abc123"
+  }
+}
+```
+
 ---
 
 ## POST /v1/jobs/:id/pipeline/reset

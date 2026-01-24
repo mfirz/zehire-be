@@ -121,12 +121,29 @@ export type PipelineConfig = z.infer<typeof PipelineConfigSchema>;
 // =============================================================================
 
 /**
+ * Interview round update schema (for PATCH requests).
+ * Only `id` is required. Other fields depend on job state:
+ * - Draft: name, duration, focus (structure)
+ * - Published/Paused: interviewerIds, mode (operations)
+ */
+export const InterviewRoundUpdateSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  duration: z.number().optional(),
+  focus: z.string().optional(),
+  interviewerIds: z.array(z.string()).optional(),
+  mode: z.enum(["any_one", "all_required"]).optional(),
+});
+
+export type InterviewRoundUpdate = z.infer<typeof InterviewRoundUpdateSchema>;
+
+/**
  * Schema for PATCH /v1/jobs/:id/pipeline request body.
  * All fields are optional for partial updates.
  */
 export const PipelineUpdateSchema = z.object({
   assessment: AssessmentConfigSchema.optional(),
-  interviewRounds: z.array(InterviewRoundConfigSchema).optional(),
+  interviewRounds: z.array(InterviewRoundUpdateSchema).optional(),
 });
 
 export type PipelineUpdate = z.infer<typeof PipelineUpdateSchema>;
