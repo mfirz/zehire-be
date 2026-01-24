@@ -365,58 +365,153 @@ export class JobService {
       };
     }
 
-    // Parse current assessment config from dedicated column
-    const currentAssessment = job.assessmentConfig
-      ? JSON.parse(job.assessmentConfig)
-      : { enabled: false, providerId: null, config: null };
+    const isDraft = job.status === "draft";
 
-    // Get current stages from table
-    const currentStages = await this.interviewStagesRepository.getStagesForJob(jobId);
+    // ==========================================================================
+    // DRAFT: Structure only (assessment, stages) - NO interviewerIds, NO mode
+    // ==========================================================================
+    if (isDraft) {
+      // Block interviewerIds and mode in draft
+      if (update.interviewRounds) {
+        const hasInterviewerIds = update.interviewRounds.some(
+          (r) => r.interviewerIds && r.interviewerIds.length > 0
+        );
+        const hasMode = update.interviewRounds.some((r) => r.mode !== undefined);
 
-    // Merge updates
-    const updatedConfig: PipelineConfig = {
-      assessment: update.assessment ?? currentAssessment,
-      interviewRounds:
-        update.interviewRounds ??
-        currentStages.map((stage) => ({
-          id: stage.id,
-          name: stage.name,
-          duration: stage.durationMinutes,
-          interviewerIds: stage.interviewers.map((i) => i.id),
-          focus: stage.focus,
-          mode: stage.mode,
-        })),
-    };
+        if (hasInterviewerIds) {
+          return {
+            success: false,
+            error: {
+              code: "INVALID_STATE",
+              message:
+                "Cannot assign interviewers in draft state. Publish the job first, then assign interviewers.",
+            },
+          };
+        }
 
-    // Save updated assessment config to dedicated column
-    await this.repository.updateAssessmentConfig(jobId, updatedConfig);
+        if (hasMode) {
+          return {
+            success: false,
+            error: {
+              code: "INVALID_STATE",
+              message:
+                "Cannot set interview mode in draft state. Publish the job first, then configure mode.",
+            },
+          };
+        }
+      }
 
-    // Also update interview_stages table (source of truth)
-    if (update.interviewRounds) {
-      const stageInputs: StageInput[] = update.interviewRounds.map((round) => {
-        const input: StageInput = {
+      // Update assessment config
+      if (update.assessment) {
+        const updatedConfig: PipelineConfig = {
+          assessment: update.assessment,
+          interviewRounds: [], // Not used for assessment update
+        };
+        await this.repository.updateAssessmentConfig(jobId, updatedConfig);
+      }
+
+      // Update stage structure (name, duration, focus) - no interviewers, no mode
+      if (update.interviewRounds) {
+        const stageInputs: StageInput[] = update.interviewRounds.map((round) => ({
           id: round.id,
           name: round.name,
           focus: round.focus,
           duration: round.duration,
-          interviewerIds: round.interviewerIds,
-        };
-        if (round.mode) {
-          input.mode = round.mode;
+          // interviewerIds and mode intentionally omitted for draft
+        }));
+
+        const stageResult = await this.interviewStagesRepository.updateStages(jobId, stageInputs);
+
+        if (!stageResult.success) {
+          return {
+            success: false,
+            error: {
+              code: stageResult.error.code as "INVALID_STATE",
+              message: stageResult.error.message,
+            },
+          };
         }
-        return input;
-      });
+      }
+    }
 
-      const stageResult = await this.interviewStagesRepository.updateStages(jobId, stageInputs);
-
-      if (!stageResult.success) {
+    // ==========================================================================
+    // PUBLISHED/PAUSED: Operations only (interviewerIds, mode) - NO structure
+    // ==========================================================================
+    if (!isDraft) {
+      // Block assessment changes
+      if (update.assessment) {
         return {
           success: false,
           error: {
-            code: stageResult.error.code as "INVALID_STATE",
-            message: stageResult.error.message,
+            code: "INVALID_STATE",
+            message: "Cannot modify assessment after publishing. Only interviewer assignments can be changed.",
           },
         };
+      }
+
+      // Block structural changes to stages
+      if (update.interviewRounds) {
+        const currentStages = await this.interviewStagesRepository.getStagesForJob(jobId);
+        const currentStageIds = new Set(currentStages.map((s) => s.id));
+
+        // Check for new stages or removed stages
+        const updateStageIds = new Set(update.interviewRounds.map((r) => r.id));
+        const hasNewStages = update.interviewRounds.some((r) => !r.id || !currentStageIds.has(r.id));
+        const hasRemovedStages = currentStages.some((s) => !updateStageIds.has(s.id));
+
+        if (hasNewStages || hasRemovedStages) {
+          return {
+            success: false,
+            error: {
+              code: "INVALID_STATE",
+              message: "Cannot add or remove stages after publishing. Only interviewer assignments can be changed.",
+            },
+          };
+        }
+
+        // Check for structural changes (name, duration, focus)
+        for (const round of update.interviewRounds) {
+          const currentStage = currentStages.find((s) => s.id === round.id);
+          if (currentStage) {
+            if (
+              round.name !== currentStage.name ||
+              round.duration !== currentStage.durationMinutes ||
+              round.focus !== currentStage.focus
+            ) {
+              return {
+                success: false,
+                error: {
+                  code: "INVALID_STATE",
+                  message: "Cannot modify stage structure after publishing. Only interviewer assignments and mode can be changed.",
+                },
+              };
+            }
+          }
+        }
+
+        // Only update operational fields (interviewerIds, mode)
+        const operationalUpdates: Array<{
+          id: string;
+          interviewerIds?: string[];
+          mode?: "any_one" | "all_required";
+        }> = update.interviewRounds
+          .filter((r) => r.id && (r.interviewerIds !== undefined || r.mode !== undefined))
+          .map((r) => {
+            const update: { id: string; interviewerIds?: string[]; mode?: "any_one" | "all_required" } = {
+              id: r.id!,
+            };
+            if (r.interviewerIds !== undefined) {
+              update.interviewerIds = r.interviewerIds;
+            }
+            if (r.mode !== undefined) {
+              update.mode = r.mode;
+            }
+            return update;
+          });
+
+        if (operationalUpdates.length > 0) {
+          await this.interviewStagesRepository.updateOperationalFields(jobId, operationalUpdates);
+        }
       }
     }
 

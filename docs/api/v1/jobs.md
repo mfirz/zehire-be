@@ -774,22 +774,24 @@ When `pipelineStatus` is `completed`:
 
 ## PATCH /v1/jobs/:id/pipeline
 
-Update the pipeline configuration for a job. This is the **single endpoint** for all pipeline edits including:
-- Assessment configuration
-- Interview rounds (name, duration, focus)
-- Interviewer assignments
-- Interview mode per round
+Update the pipeline configuration for a job. This is the **single endpoint** for all pipeline edits.
 
 ### Editing by Job Status
 
-| Job Status | Allowed Edits |
-|------------|---------------|
-| `draft` | All fields (structure, interviewers, mode, assessment) |
-| `published` | Operational fields only (interviewerIds, mode) |
-| `paused` | Operational fields only (interviewerIds, mode) |
-| `closed` | No edits allowed |
+The editing model separates **process design** (draft) from **operations** (published):
 
-**Note**: For published/paused jobs, structural changes (adding/removing stages, changing name/duration/focus) are not allowed to maintain consistency with existing interviews.
+| Job Status | Allowed Edits | Purpose |
+|------------|---------------|---------|
+| `draft` | Assessment, stages (name, duration, focus) | Design the interview process |
+| `published` | `interviewerIds`, `mode` per stage | Assign people to conduct interviews |
+| `paused` | `interviewerIds`, `mode` per stage | Assign people to conduct interviews |
+| `closed` | Nothing | Archived |
+
+**Why this separation?**
+
+- **Draft phase**: Focus on designing the *ideal* interview process without worrying about who will conduct it
+- **Published phase**: Assign *real people* to stages. Interviewers can change anytime (vacations, turnover, workload balancing)
+- Structural changes after publishing would break consistency with existing interviews
 
 ### Request
 
@@ -852,29 +854,51 @@ Returns the updated job (same format as GET /v1/jobs/:id for draft status).
 
 #### 400 Bad Request
 
-If trying to make structural changes on published/paused jobs:
-
-```json
-{
-  "error": {
-    "code": "STRUCTURAL_CHANGES_NOT_ALLOWED",
-    "message": "Published jobs only allow operational updates (interviewerIds, mode)"
-  }
-}
-```
-
-Or if trying to edit a closed job:
+If trying to assign interviewers or set mode on a draft job:
 
 ```json
 {
   "error": {
     "code": "INVALID_STATE",
-    "message": "Closed jobs cannot be updated"
+    "message": "Cannot assign interviewers in draft state. Publish the job first, then assign interviewers."
   }
 }
 ```
 
-Or if pipeline hasn't been generated yet:
+If trying to make structural changes on published/paused jobs:
+
+```json
+{
+  "error": {
+    "code": "INVALID_STATE",
+    "message": "Cannot modify stage structure after publishing. Only interviewer assignments and mode can be changed."
+  }
+}
+```
+
+If trying to modify assessment after publishing:
+
+```json
+{
+  "error": {
+    "code": "INVALID_STATE",
+    "message": "Cannot modify assessment after publishing. Only interviewer assignments can be changed."
+  }
+}
+```
+
+If trying to edit a closed job:
+
+```json
+{
+  "error": {
+    "code": "INVALID_STATE",
+    "message": "Closed jobs cannot be edited"
+  }
+}
+```
+
+If pipeline hasn't been generated yet:
 
 ```json
 {
@@ -885,7 +909,7 @@ Or if pipeline hasn't been generated yet:
 }
 ```
 
-Or if trying to delete stages with active interviews:
+If trying to delete stages with active interviews (draft only):
 
 ```json
 {
