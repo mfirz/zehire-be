@@ -100,6 +100,7 @@ export const jobs = sqliteTable(
     pipeline: text("pipeline"), // DEPRECATED: Use interview_stages table + assessmentConfig
     assessmentConfig: text("assessment_config"), // JSON: { enabled, providerId, config }
     pipelineGeneratedAt: text("pipeline_generated_at"),
+    pipelineStaleAt: text("pipeline_stale_at"), // Set when title/description changes after pipeline generated
     pipelineError: text("pipeline_error"),
     pipelineErrorCode: text("pipeline_error_code", { enum: jobErrorCodes }),
     pipelineRegenerationCount: integer("pipeline_regeneration_count").default(0),

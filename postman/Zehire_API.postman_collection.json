@@ -356,7 +356,7 @@
                   "host": ["{{base_url}}"],
                   "path": ["v1", "jobs", "{{job_id}}"]
                 },
-                "description": "Update a draft job's content.\n\n**Note:** If `title` or `description` changes, questions and pipeline are reset to `none` and must be regenerated.\n\nOnly draft jobs can be updated.\n\n**All fields are optional.**\n\n**Description Format:** Tiptap JSON document with allowed nodes: doc, paragraph, text, heading, bulletList, orderedList, listItem, blockquote, codeBlock, hardBreak, horizontalRule. Allowed marks: bold, italic, underline, strike, code, link."
+                "description": "Update a draft job's content.\n\n**Content Change Behavior** (when `title` or `description` changes):\n- **Questions**: Reset to `none` and must be regenerated\n- **Pipeline**: Marked as stale (`pipelineStaleAt` set) but preserved (recruiter customizations kept)\n\nCheck `pipelineStaleAt` in response - if set, prompt user to regenerate pipeline.\n\nOnly draft jobs can be updated.\n\n**All fields are optional.**\n\n**Description Format:** Tiptap JSON document with allowed nodes: doc, paragraph, text, heading, bulletList, orderedList, listItem, blockquote, codeBlock, hardBreak, horizontalRule. Allowed marks: bold, italic, underline, strike, code, link."
               },
               "response": []
             },

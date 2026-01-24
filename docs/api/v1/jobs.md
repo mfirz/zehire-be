@@ -41,6 +41,17 @@ Separate from job status, tracks hiring pipeline generation:
 
 The pipeline recommends assessment types and interview rounds based on job details.
 
+#### Pipeline Staleness
+
+When a job's **title or description** is edited after the pipeline has been generated, the pipeline is marked as "stale" via the `pipelineStaleAt` timestamp. This indicates the pipeline was created from older job content.
+
+**Important**: The pipeline and recruiter customizations are **preserved** (not deleted). Frontend should:
+1. Check if `pipelineStaleAt` is set
+2. Show a warning: "Pipeline was created before recent job edits"
+3. Offer option to regenerate via `POST /v1/jobs/:id/generate-pipeline`
+
+This prevents accidental loss of recruiter's stage customizations when making minor edits to job content.
+
 #### Data Storage
 
 Pipeline data is stored in relational tables for optimal querying:
@@ -396,9 +407,12 @@ Draft jobs return `description` as a Tiptap JSON object for the editor.
   "updatedAt": "2026-01-07T10:35:00Z",
   "processingStartedAt": "2026-01-07T10:31:00Z",
   "completedAt": "2026-01-07T10:32:00Z",
-  "pipelineGeneratedAt": "2026-01-07T10:36:00Z"
+  "pipelineGeneratedAt": "2026-01-07T10:36:00Z",
+  "pipelineStaleAt": null
 }
 ```
+
+**Note**: `pipelineStaleAt` is set when title/description is edited after pipeline generation. If not null, the pipeline may be outdated and should be regenerated.
 
 #### Published
 
@@ -445,7 +459,11 @@ Same as published, with `descriptionHtml` instead of `description`. Closed jobs 
 
 Update a draft job's content.
 
-**Note**: If `title` or `description` changes, both questions and pipeline are reset to `none` and must be regenerated.
+**Content Change Behavior** (when `title` or `description` changes):
+- **Questions**: Reset to `none` and must be regenerated (questions depend on job content)
+- **Pipeline**: Marked as stale (`pipelineStaleAt` set) but **preserved** (recruiter customizations kept)
+
+This allows recruiters to make minor edits without losing their pipeline customizations. Frontend should check `pipelineStaleAt` and prompt to regenerate if needed.
 
 ### Request
 
@@ -590,7 +608,12 @@ Or if not a draft:
 
 Queue a job for pipeline generation. The pipeline recommends assessment types and interview rounds based on job details.
 
-**Note:** Pipeline can only be generated once per job. To generate a new pipeline, edit the job title or description (which resets `pipelineStatus` to `none`).
+**Regeneration Rules:**
+- First generation: Always allowed
+- After completion: Blocked (returns `ALREADY_GENERATED`)
+- After title/description edit: Allowed (pipeline is stale, `pipelineStaleAt` is set)
+
+When regenerating a stale pipeline, the new pipeline will replace existing stages and clear `pipelineStaleAt`.
 
 ### Response
 

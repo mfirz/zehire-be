@@ -276,8 +276,8 @@ export class JobService {
       };
     }
 
-    // Check if already generated - no regeneration allowed
-    if (job.pipelineStatus === "completed") {
+    // Check if already generated - allow regeneration only if stale
+    if (job.pipelineStatus === "completed" && !job.pipelineStaleAt) {
       return {
         success: false,
         error: {
@@ -1128,6 +1128,7 @@ export class JobService {
           processingStartedAt: job.processingStartedAt,
           completedAt: job.completedAt,
           pipelineGeneratedAt: job.pipelineGeneratedAt,
+          pipelineStaleAt: job.pipelineStaleAt, // Set when title/description changes after pipeline generated
         };
 
       case "published":

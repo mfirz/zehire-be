@@ -240,6 +240,7 @@ export const JobRowSchema = z.object({
   pipelineProcessingStartedAt: z.string().nullable(),
   pipelineProcessingDurationMs: z.number().nullable(),
   pipelineGeneratedAt: z.string().nullable(),
+  pipelineStaleAt: z.string().nullable(), // Set when title/description changes after pipeline generated
 
   // Lifecycle timestamps
   createdAt: z.string(),
@@ -388,6 +389,7 @@ export const JobStatusResponseSchema = z.discriminatedUnion("status", [
     processingStartedAt: z.string().nullable(),
     completedAt: z.string().nullable(),
     pipelineGeneratedAt: z.string().nullable(),
+    pipelineStaleAt: z.string().nullable(), // Set when title/description changes after pipeline generated
   }),
 
   // Published state - has questions and pipeline, is live

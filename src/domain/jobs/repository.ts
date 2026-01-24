@@ -273,9 +273,9 @@ export class JobRepository {
       return { updated: false, contentChanged: false };
     }
 
-    // If content changed, reset questions and pipeline
+    // If content changed, reset questions (but preserve pipeline)
     if (contentChanged) {
-      // Reset questions
+      // Reset questions - they depend on title/description
       updates.questionsStatus = "none";
       updates.jobContext = null;
       updates.archetypes = null;
@@ -288,18 +288,11 @@ export class JobRepository {
       updates.processingDurationMs = null;
       updates.completedAt = null;
 
-      // Reset pipeline
-      updates.pipelineStatus = "none";
-      updates.pipelineRecommendation = null;
-      updates.pipeline = null; // DEPRECATED: keeping for cleanup
-      updates.assessmentConfig = null;
-      updates.pipelineError = null;
-      updates.pipelineErrorCode = null;
-      updates.pipelineRegenerationCount = 0;
-      updates.pipelineLastRegenerationAt = null;
-      updates.pipelineProcessingStartedAt = null;
-      updates.pipelineProcessingDurationMs = null;
-      updates.pipelineGeneratedAt = null;
+      // Mark pipeline as stale (but don't delete recruiter's customizations)
+      // Only mark stale if pipeline was already generated
+      if (currentJob.pipelineStatus === "completed") {
+        updates.pipelineStaleAt = now;
+      }
     }
 
     updates.updatedAt = now;
@@ -500,6 +493,7 @@ export class JobRepository {
           assessmentConfig: JSON.stringify(results.config.assessment),
           pipelineProcessingDurationMs: results.processingDurationMs,
           pipelineGeneratedAt: now,
+          pipelineStaleAt: null, // Clear stale flag on regeneration
           updatedAt: now,
         })
         .where(eq(jobs.id, id))
