@@ -217,6 +217,9 @@ export class JobProcessor {
 
       const processingDurationMs = Date.now() - startTime;
 
+      // Delete any existing stages first (idempotent - handles retries safely)
+      await this.interviewStagesRepository.deleteAllStagesForJob(jobId);
+
       // Create interview stages in the database table (source of truth)
       await this.interviewStagesRepository.createStagesFromRecommendation(
         jobId,
