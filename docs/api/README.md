@@ -41,7 +41,9 @@ Protected endpoints require JWT authentication via the `Authorization` header:
 Authorization: Bearer <jwt>
 ```
 
-JWTs are issued via the magic link authentication flow (`/auth/login` → `/auth/callback`).
+JWTs are issued via:
+- **Magic Link**: `/auth/login` → `/auth/callback`
+- **SSO (Google)**: `/auth/sso/google` → `/auth/sso/google/callback`
 
 ### JWT Claims
 
@@ -99,12 +101,14 @@ All errors follow a consistent format:
 
 ### Authentication (Public)
 
-| Method | Path             | Description              |
-| ------ | ---------------- | ------------------------ |
-| POST   | `/auth/login`    | Initiate magic link auth |
-| GET    | `/auth/callback` | Complete authentication  |
-| POST   | `/auth/logout`   | Clear session            |
-| GET    | `/auth/me`       | Get current user         |
+| Method | Path                          | Description                |
+| ------ | ----------------------------- | -------------------------- |
+| POST   | `/auth/login`                 | Initiate magic link auth   |
+| GET    | `/auth/callback`              | Complete authentication    |
+| POST   | `/auth/logout`                | Clear session              |
+| GET    | `/auth/me`                    | Get current user           |
+| GET    | `/auth/sso/:provider`         | Initiate SSO login         |
+| GET    | `/auth/sso/:provider/callback`| Complete SSO authentication|
 
 ### v1 (Protected)
 

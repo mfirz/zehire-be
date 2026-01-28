@@ -250,6 +250,7 @@ curl https://api.zehire.com/auth/me \
   "user": {
     "id": "user_abc123",
     "email": "user@example.com",
+    "name": "John Doe",
     "role": "recruiter",
     "orgId": "org_xyz789"
   }

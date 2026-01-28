@@ -91,6 +91,8 @@ INSERT OR IGNORE INTO jobs (
   id, org_id, status, questions_status, pipeline_status, title, description, description_text,
   company_name, department, location, work_type, employment_type,
   salary_min, salary_max, salary_currency, public_slug,
+  job_context, archetypes, questions, pipeline_recommendation,
+  processing_duration_ms, completed_at, pipeline_generated_at,
   created_at, updated_at, published_at
 )
 VALUES (
@@ -100,8 +102,8 @@ VALUES (
   'completed',
   'completed',
   'Senior Software Engineer',
-  '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"We are looking for a senior software engineer to join our team."}]}]}',
-  'We are looking for a senior software engineer to join our team.',
+  '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"We are looking for a senior software engineer to join our team. You will be responsible for designing, developing, and maintaining scalable backend systems. The ideal candidate has strong experience with distributed systems, cloud infrastructure, and modern development practices."}]}]}',
+  'We are looking for a senior software engineer to join our team. You will be responsible for designing, developing, and maintaining scalable backend systems. The ideal candidate has strong experience with distributed systems, cloud infrastructure, and modern development practices.',
   'Acme Corporation',
   'Engineering',
   'San Francisco, CA',
@@ -111,6 +113,17 @@ VALUES (
   200000,
   'USD',
   'swe-acme-dev',
+  -- job_context (JobContextSchema)
+  '{"domain":"technology","specialization":"Backend Engineering","riskLevel":"medium","decisionImpact":"business","primarySignals":["technical_depth","system_thinking","decision_under_uncertainty"],"collaborationRequired":"high","customerFacing":false,"peopleManagement":false,"regulatedEnvironment":false,"experienceLevel":"senior"}',
+  -- archetypes (array of ResolvedArchetypeSchema)
+  '[{"id":"arch_technical_depth","category":"technical_depth","description":"Assess hands-on technical expertise and problem-solving ability","signals":["technical_depth","system_thinking"],"selectionReason":"Senior engineering role requires deep technical verification"},{"id":"arch_decision_judgment","category":"decision_judgment","description":"Evaluate decision-making under uncertainty and trade-off analysis","signals":["decision_under_uncertainty","tradeoff_awareness"],"selectionReason":"Role involves architectural decisions with business impact"},{"id":"arch_ownership","category":"ownership","description":"Assess accountability and ownership mentality","signals":["accountability","learning_from_failure"],"selectionReason":"Senior engineers need to own outcomes end-to-end"}]',
+  -- questions (array of RenderedQuestionSchema)
+  '[{"archetypeId":"arch_technical_depth","questionText":"Describe a complex technical system you designed or significantly improved. What were the key technical challenges, and how did you approach solving them?","signals":["technical_depth","system_thinking"],"minAnswerWords":100,"metadata":{"category":"technical_depth","formats":["experience_based"],"renderingConstraints":{"requiresRealExample":true,"forbidYesNo":true,"singleQuestion":true,"minAnswerWords":100}}},{"archetypeId":"arch_decision_judgment","questionText":"Tell me about a time when you had to make a significant technical decision with incomplete information. How did you approach the decision, and what was the outcome?","signals":["decision_under_uncertainty","tradeoff_awareness"],"minAnswerWords":100,"metadata":{"category":"decision_judgment","formats":["experience_based"],"renderingConstraints":{"requiresRealExample":true,"forbidYesNo":true,"singleQuestion":true,"minAnswerWords":100}}},{"archetypeId":"arch_ownership","questionText":"Describe a project or feature that did not go as planned. What happened, what was your role, and what did you learn from the experience?","signals":["accountability","learning_from_failure"],"minAnswerWords":100,"metadata":{"category":"ownership","formats":["experience_based","reflection"],"renderingConstraints":{"requiresRealExample":true,"forbidYesNo":true,"singleQuestion":true,"minAnswerWords":100}}}]',
+  -- pipeline_recommendation (PipelineRecommendationSchema)
+  '{"assessment":{"recommended":false,"reason":"For senior software engineering roles, technical interviews provide better signal than standardized assessments","suggestedType":"none","suggestedProviders":[],"whatToTest":[]},"interviewPanel":{"rounds":[{"name":"Phone Screen","duration":30,"interviewerProfile":"Senior Engineer or Engineering Manager","focus":"Initial fit, communication, and high-level technical background"},{"name":"Technical Interview","duration":60,"interviewerProfile":"Senior or Staff Engineer","focus":"System design, coding ability, and technical depth"},{"name":"Culture Fit","duration":45,"interviewerProfile":"Engineering Manager and Team Lead","focus":"Team collaboration, values alignment, and growth mindset"}],"totalTime":"2 hours 15 minutes"},"evaluationCriteria":{"mustHave":["Strong system design skills","Proficiency in at least one modern programming language","Experience with distributed systems","Clear communication of technical concepts"],"niceToHave":["Experience with cloud platforms (AWS/GCP/Azure)","Open source contributions","Experience mentoring junior engineers"],"redFlags":["Unable to explain past technical decisions","Blames others for project failures","No curiosity about our tech stack"]}}',
+  1250,
+  '2024-01-12T00:00:00Z',
+  '2024-01-13T00:00:00Z',
   '2024-01-10T00:00:00Z',
   '2024-01-15T00:00:00Z',
   '2024-01-15T00:00:00Z'
@@ -145,6 +158,8 @@ INSERT OR IGNORE INTO jobs (
   id, org_id, status, questions_status, pipeline_status, title, description, description_text,
   company_name, department, location, work_type, employment_type,
   salary_min, salary_max, salary_currency, public_slug,
+  job_context, archetypes, questions, pipeline_recommendation,
+  processing_duration_ms, completed_at, pipeline_generated_at,
   created_at, updated_at, published_at
 )
 VALUES (
@@ -154,8 +169,8 @@ VALUES (
   'completed',
   'completed',
   'UX Designer',
-  '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Looking for a creative UX designer."}]}]}',
-  'Looking for a creative UX designer.',
+  '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Looking for a creative UX designer to join our product team. You will be responsible for user research, wireframing, prototyping, and creating intuitive user interfaces."}]}]}',
+  'Looking for a creative UX designer to join our product team. You will be responsible for user research, wireframing, prototyping, and creating intuitive user interfaces.',
   'Acme Corporation',
   'Design',
   'New York, NY',
@@ -165,6 +180,17 @@ VALUES (
   140000,
   'USD',
   'ux-acme-dev',
+  -- job_context
+  '{"domain":"technology","specialization":"UX Design","riskLevel":"low","decisionImpact":"business","primarySignals":["communication_clarity","stakeholder_management","tradeoff_awareness"],"collaborationRequired":"high","customerFacing":true,"peopleManagement":false,"regulatedEnvironment":false,"experienceLevel":"mid"}',
+  -- archetypes
+  '[{"id":"arch_communication","category":"communication","description":"Assess ability to communicate design decisions clearly","signals":["communication_clarity","stakeholder_management"],"selectionReason":"UX designers must articulate design rationale to stakeholders"},{"id":"arch_decision_judgment","category":"decision_judgment","description":"Evaluate user-centered decision making","signals":["tradeoff_awareness","decision_under_uncertainty"],"selectionReason":"Design involves balancing user needs with business constraints"}]',
+  -- questions
+  '[{"archetypeId":"arch_communication","questionText":"Tell me about a time when you had to present a design that stakeholders initially disagreed with. How did you handle the situation?","signals":["communication_clarity","stakeholder_management"],"minAnswerWords":100,"metadata":{"category":"communication","formats":["experience_based"],"renderingConstraints":{"requiresRealExample":true,"forbidYesNo":true,"singleQuestion":true,"minAnswerWords":100}}},{"archetypeId":"arch_decision_judgment","questionText":"Describe a situation where user research findings conflicted with business requirements. How did you navigate this trade-off?","signals":["tradeoff_awareness","decision_under_uncertainty"],"minAnswerWords":100,"metadata":{"category":"decision_judgment","formats":["experience_based"],"renderingConstraints":{"requiresRealExample":true,"forbidYesNo":true,"singleQuestion":true,"minAnswerWords":100}}}]',
+  -- pipeline_recommendation
+  '{"assessment":{"recommended":true,"reason":"Portfolio review is essential for design roles","suggestedType":"portfolio_review","suggestedProviders":["internal"],"whatToTest":["Visual design skills","Interaction design","User research methodology"]},"interviewPanel":{"rounds":[{"name":"Portfolio Review","duration":45,"interviewerProfile":"Senior Designer or Design Lead","focus":"Design process, visual skills, and problem-solving approach"},{"name":"Design Challenge","duration":60,"interviewerProfile":"Product Designer and Product Manager","focus":"Real-time problem solving and collaboration"}],"totalTime":"1 hour 45 minutes"},"evaluationCriteria":{"mustHave":["Strong portfolio with case studies","User research experience","Proficiency in Figma or similar tools"],"niceToHave":["Motion design skills","Design system experience","Accessibility expertise"],"redFlags":["Cannot explain design rationale","No user research in process","Defensive about feedback"]}}',
+  980,
+  '2024-01-06T00:00:00Z',
+  '2024-01-07T00:00:00Z',
   '2024-01-05T00:00:00Z',
   '2024-01-25T00:00:00Z',
   '2024-01-08T00:00:00Z'
@@ -174,7 +200,9 @@ VALUES (
 INSERT OR IGNORE INTO jobs (
   id, org_id, status, questions_status, pipeline_status, title, description, description_text,
   company_name, department, location, work_type, employment_type,
-  public_slug, created_at, updated_at, published_at, closed_at
+  public_slug, job_context, archetypes, questions, pipeline_recommendation,
+  processing_duration_ms, completed_at, pipeline_generated_at,
+  created_at, updated_at, published_at, closed_at
 )
 VALUES (
   'job_dev_intern',
@@ -183,14 +211,25 @@ VALUES (
   'completed',
   'completed',
   'Software Engineering Intern',
-  '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Summer internship program."}]}]}',
-  'Summer internship program.',
+  '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Summer internship program for aspiring software engineers. You will work on real projects alongside senior engineers, learning modern development practices and contributing to our codebase."}]}]}',
+  'Summer internship program for aspiring software engineers. You will work on real projects alongside senior engineers, learning modern development practices and contributing to our codebase.',
   'Acme Corporation',
   'Engineering',
   'San Francisco, CA',
   'onsite',
   'internship',
   'intern-acme-dev',
+  -- job_context
+  '{"domain":"technology","specialization":"Software Engineering","riskLevel":"low","decisionImpact":"low","primarySignals":["technical_depth","learning_from_failure","communication_clarity"],"collaborationRequired":"medium","customerFacing":false,"peopleManagement":false,"regulatedEnvironment":false,"experienceLevel":"entry"}',
+  -- archetypes
+  '[{"id":"arch_learning","category":"ownership","description":"Assess learning ability and growth mindset","signals":["learning_from_failure","accountability"],"selectionReason":"Interns need strong learning ability to grow quickly"},{"id":"arch_technical_basics","category":"technical_depth","description":"Evaluate foundational technical knowledge","signals":["technical_depth","communication_clarity"],"selectionReason":"Need to verify basic programming competency"}]',
+  -- questions
+  '[{"archetypeId":"arch_learning","questionText":"Tell me about a challenging concept or skill you recently learned. What was your approach to learning it, and what obstacles did you overcome?","signals":["learning_from_failure","accountability"],"minAnswerWords":75,"metadata":{"category":"ownership","formats":["experience_based","reflection"],"renderingConstraints":{"requiresRealExample":true,"forbidYesNo":true,"singleQuestion":true,"minAnswerWords":75}}},{"archetypeId":"arch_technical_basics","questionText":"Describe a programming project you have worked on (personal, academic, or professional). What technologies did you use and what did you learn from the experience?","signals":["technical_depth","communication_clarity"],"minAnswerWords":75,"metadata":{"category":"technical_depth","formats":["experience_based"],"renderingConstraints":{"requiresRealExample":true,"forbidYesNo":true,"singleQuestion":true,"minAnswerWords":75}}}]',
+  -- pipeline_recommendation
+  '{"assessment":{"recommended":true,"reason":"Coding assessment helps evaluate foundational skills for interns","suggestedType":"coding_challenge","suggestedProviders":["hackerrank","codility"],"whatToTest":["Basic algorithms","Data structures","Problem-solving approach"]},"interviewPanel":{"rounds":[{"name":"Technical Screen","duration":30,"interviewerProfile":"Software Engineer","focus":"Basic coding ability and problem-solving"},{"name":"Behavioral Interview","duration":30,"interviewerProfile":"Engineering Manager","focus":"Cultural fit and learning potential"}],"totalTime":"1 hour"},"evaluationCriteria":{"mustHave":["Basic programming knowledge","Eagerness to learn","Good communication skills"],"niceToHave":["Personal projects or contributions","Relevant coursework","Previous internship experience"],"redFlags":["No enthusiasm for learning","Cannot explain basic concepts","Poor communication"]}}',
+  850,
+  '2023-12-03T00:00:00Z',
+  '2023-12-05T00:00:00Z',
   '2023-12-01T00:00:00Z',
   '2024-01-30T00:00:00Z',
   '2023-12-15T00:00:00Z',
@@ -198,16 +237,29 @@ VALUES (
 );
 
 -- ============================================================================
--- INTERVIEW STAGES (for published job)
+-- INTERVIEW STAGES (for published, paused, and closed jobs)
 -- ============================================================================
 
+-- Stages for Senior Software Engineer (published)
 INSERT OR IGNORE INTO interview_stage_config (id, job_id, stage_id, name, focus, order_index, mode, duration_minutes, created_at, updated_at)
 VALUES
   ('stage_swe_screen', 'job_dev_swe', 'phone_screen', 'Phone Screen', 'Initial fit and communication', 0, 'any_one', 30, '2024-01-15T00:00:00Z', '2024-01-15T00:00:00Z'),
   ('stage_swe_tech', 'job_dev_swe', 'technical', 'Technical Interview', 'Coding and system design', 1, 'any_one', 60, '2024-01-15T00:00:00Z', '2024-01-15T00:00:00Z'),
   ('stage_swe_culture', 'job_dev_swe', 'culture_fit', 'Culture Fit', 'Team collaboration and values', 2, 'all_required', 45, '2024-01-15T00:00:00Z', '2024-01-15T00:00:00Z');
 
--- Assign interviewers to stages
+-- Stages for UX Designer (paused)
+INSERT OR IGNORE INTO interview_stage_config (id, job_id, stage_id, name, focus, order_index, mode, duration_minutes, created_at, updated_at)
+VALUES
+  ('stage_ux_portfolio', 'job_dev_design', 'portfolio_review', 'Portfolio Review', 'Design process, visual skills, and problem-solving approach', 0, 'any_one', 45, '2024-01-08T00:00:00Z', '2024-01-08T00:00:00Z'),
+  ('stage_ux_challenge', 'job_dev_design', 'design_challenge', 'Design Challenge', 'Real-time problem solving and collaboration', 1, 'any_one', 60, '2024-01-08T00:00:00Z', '2024-01-08T00:00:00Z');
+
+-- Stages for Software Engineering Intern (closed)
+INSERT OR IGNORE INTO interview_stage_config (id, job_id, stage_id, name, focus, order_index, mode, duration_minutes, created_at, updated_at)
+VALUES
+  ('stage_intern_tech', 'job_dev_intern', 'tech_screen', 'Technical Screen', 'Basic coding ability and problem-solving', 0, 'any_one', 30, '2023-12-15T00:00:00Z', '2023-12-15T00:00:00Z'),
+  ('stage_intern_behav', 'job_dev_intern', 'behavioral', 'Behavioral Interview', 'Cultural fit and learning potential', 1, 'any_one', 30, '2023-12-15T00:00:00Z', '2023-12-15T00:00:00Z');
+
+-- Assign interviewers to stages (SWE)
 INSERT OR IGNORE INTO interview_stage_interviewers (id, job_id, stage_id, interviewer_id, created_at)
 VALUES
   ('assign_1', 'job_dev_swe', 'phone_screen', 'int_dev_eng1', '2024-01-15T00:00:00Z'),
@@ -215,6 +267,18 @@ VALUES
   ('assign_3', 'job_dev_swe', 'technical', 'int_dev_eng1', '2024-01-15T00:00:00Z'),
   ('assign_4', 'job_dev_swe', 'technical', 'int_dev_eng2', '2024-01-15T00:00:00Z'),
   ('assign_5', 'job_dev_swe', 'culture_fit', 'int_dev_mgr', '2024-01-15T00:00:00Z');
+
+-- Assign interviewers to stages (UX Designer)
+INSERT OR IGNORE INTO interview_stage_interviewers (id, job_id, stage_id, interviewer_id, created_at)
+VALUES
+  ('assign_ux_1', 'job_dev_design', 'portfolio_review', 'int_dev_mgr', '2024-01-08T00:00:00Z'),
+  ('assign_ux_2', 'job_dev_design', 'design_challenge', 'int_dev_mgr', '2024-01-08T00:00:00Z');
+
+-- Assign interviewers to stages (Intern)
+INSERT OR IGNORE INTO interview_stage_interviewers (id, job_id, stage_id, interviewer_id, created_at)
+VALUES
+  ('assign_intern_1', 'job_dev_intern', 'tech_screen', 'int_dev_eng1', '2023-12-15T00:00:00Z'),
+  ('assign_intern_2', 'job_dev_intern', 'behavioral', 'int_dev_mgr', '2023-12-15T00:00:00Z');
 
 -- ============================================================================
 -- APPLICATIONS (different statuses and triage levels)
