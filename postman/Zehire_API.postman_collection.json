@@ -95,7 +95,7 @@
   "item": [
     {
       "name": "Auth",
-      "description": "Magic link authentication endpoints.\n\n**Flow:**\n1. POST /auth/login with email\n2. Check email for magic link\n3. GET /auth/callback with token (or copy token from email)\n4. JWT is auto-saved to collection variable",
+      "description": "Authentication endpoints (Magic Link & SSO).\n\n**Magic Link Flow:**\n1. POST /auth/login with email\n2. Check email for magic link\n3. GET /auth/callback with token (or copy token from email)\n4. JWT is auto-saved to collection variable\n\n**SSO Flow:**\n1. GET /auth/sso/google (browser redirect)\n2. User authorizes at Google\n3. Callback redirects with session cookie\n\n**Note:** SSO only works for existing users.",
       "item": [
         {
           "name": "Login",
@@ -203,6 +203,59 @@
               "path": ["auth", "logout"]
             },
             "description": "Clear session cookie.\n\n**Response:** 204 No Content"
+          },
+          "response": []
+        },
+        {
+          "name": "SSO - Initiate Google Login",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/sso/google?returnUrl=/",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "sso", "google"],
+              "query": [
+                {
+                  "key": "returnUrl",
+                  "value": "/",
+                  "description": "URL to redirect after successful login"
+                }
+              ]
+            },
+            "description": "Initiate SSO login with Google.\n\n**Note:** This endpoint redirects to Google OAuth. Open in browser to test.\n\n**Flow:**\n1. User is redirected to Google\n2. User authorizes the application\n3. Google redirects to /auth/sso/google/callback\n4. Session cookie is set and user is redirected to returnUrl\n\n**Important:** SSO only works for existing users. The email from Google must already exist in the system."
+          },
+          "response": []
+        },
+        {
+          "name": "SSO - Google Callback (Internal)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/sso/google/callback?code=AUTH_CODE&state=STATE",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "sso", "google", "callback"],
+              "query": [
+                {
+                  "key": "code",
+                  "value": "AUTH_CODE",
+                  "description": "Authorization code from Google (auto-provided)"
+                },
+                {
+                  "key": "state",
+                  "value": "STATE",
+                  "description": "State parameter for CSRF protection (auto-provided)"
+                }
+              ]
+            },
+            "description": "Handle OAuth callback from Google.\n\n**Note:** This endpoint is called automatically by Google after user authorization. Not meant to be called directly.\n\n**On Success:**\n- Session cookie is set\n- Redirects to returnUrl specified in initiation\n\n**On Error:**\n- Redirects to /login?error=<error_code>\n\n**Error Codes:**\n- `invalid_provider` - Unknown provider\n- `invalid_state` - CSRF validation failed\n- `auth_failed` - OAuth error\n- `user_not_registered` - Email not in system\n- `no_organization` - User has no org"
           },
           "response": []
         }

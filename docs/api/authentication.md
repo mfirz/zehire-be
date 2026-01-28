@@ -1,12 +1,16 @@
 # Authentication
 
-Zehire API uses JWT (JSON Web Token) based authentication via magic link email login.
+Zehire API uses JWT (JSON Web Token) based authentication with two login methods:
+1. **Magic Link** - Email-based passwordless login
+2. **SSO (Single Sign-On)** - OAuth 2.0 with Google (Microsoft/GitHub coming soon)
 
 ## Overview
 
+### Magic Link Flow
+
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      Authentication Flow                            │
+│                      Magic Link Authentication Flow                 │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  1. POST /auth/login          2. Email received                     │
@@ -24,15 +28,44 @@ Zehire API uses JWT (JSON Web Token) based authentication via magic link email l
 │                               │ Set-Cookie      │                   │
 │                               │ (24h expiry)    │                   │
 │                               └─────────────────┘                   │
-│                                        │                            │
-│                                        ▼                            │
-│                               ┌─────────────────┐                   │
-│  3. API Requests              │ Use JWT for API │                   │
-│     Authorization:            │ requests        │                   │
-│     Bearer <jwt>              └─────────────────┘                   │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+### SSO Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      SSO Authentication Flow                        │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. GET /auth/sso/google      2. User authorizes                    │
+│     ?returnUrl=/dashboard        at Google                          │
+│         │                              │                            │
+│         ▼                              ▼                            │
+│  ┌─────────────┐              ┌─────────────────┐                   │
+│  │ Redirect to │              │ GET /auth/sso/  │                   │
+│  │ Google OAuth│              │ google/callback │                   │
+│  └─────────────┘              └─────────────────┘                   │
+│                                        │                            │
+│                                        ▼                            │
+│                               ┌─────────────────┐                   │
+│                               │ Lookup user by  │                   │
+│                               │ email, create   │                   │
+│                               │ JWT session     │                   │
+│                               └─────────────────┘                   │
+│                                        │                            │
+│                                        ▼                            │
+│                               ┌─────────────────┐                   │
+│                               │ Redirect to     │                   │
+│                               │ returnUrl with  │                   │
+│                               │ session cookie  │                   │
+│                               └─────────────────┘                   │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Note:** SSO only works for **existing users**. Users must be registered in the system first (via admin invite or magic link signup).
 
 ## JWT Format
 
@@ -234,6 +267,105 @@ curl https://api.zehire.com/auth/me \
 }
 ```
 
+---
+
+## SSO Endpoints
+
+### GET /auth/sso/:provider
+
+Initiate SSO login with the specified provider.
+
+**Public endpoint** - No authentication required.
+
+**Supported Providers:**
+- `google` - Google OAuth 2.0
+
+#### Request
+
+```bash
+# Redirect user to this URL to start SSO
+curl -L "https://api.zehire.com/auth/sso/google?returnUrl=/dashboard"
+```
+
+#### Query Parameters
+
+| Parameter   | Required | Description                              |
+| ----------- | -------- | ---------------------------------------- |
+| `returnUrl` | No       | URL to redirect after login (default: /) |
+
+#### Response
+
+Redirects to provider's authorization page (302).
+
+#### Errors
+
+| Redirect Parameter | Description                    |
+| ------------------ | ------------------------------ |
+| `invalid_provider` | Provider not supported         |
+| `sso_unavailable`  | SSO not configured for provider |
+
+---
+
+### GET /auth/sso/:provider/callback
+
+Handle OAuth callback from the SSO provider. This endpoint is called by the provider after user authorization.
+
+**Public endpoint** - No authentication required.
+
+#### Request
+
+Called automatically by OAuth provider:
+
+```
+https://api.zehire.com/auth/sso/google/callback?code=xxx&state=xxx
+```
+
+#### Response (Success)
+
+Redirects to the `returnUrl` specified during initiation (302) with session cookie set.
+
+```
+Set-Cookie: zehire_session=<jwt>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=86400
+Location: /dashboard
+```
+
+#### Errors
+
+All errors redirect to `/login` with an error query parameter:
+
+| Redirect Parameter     | Description                              |
+| ---------------------- | ---------------------------------------- |
+| `invalid_provider`     | Unknown or unsupported provider          |
+| `invalid_state`        | Missing or invalid state parameter       |
+| `auth_failed`          | OAuth authorization failed               |
+| `user_not_registered`  | Email not found in system                |
+| `no_organization`      | User exists but has no organization      |
+
+#### Example Error Redirect
+
+```
+https://app.zehire.com/login?error=user_not_registered
+```
+
+---
+
+## SSO Security
+
+### State Parameter
+- Contains CSRF nonce and return URL
+- Base64 encoded JSON
+- Validated on callback to prevent CSRF attacks
+
+### Return URL Sanitization
+- Only relative paths or same-origin URLs allowed
+- Prevents open redirect attacks
+- Invalid URLs default to application root
+
+### Email Verification
+- Provider must return a verified email
+- Email is normalized (lowercase, trimmed)
+- User lookup is case-insensitive
+
 ## Error Responses
 
 All authentication errors follow a consistent format:
@@ -259,18 +391,31 @@ All authentication errors follow a consistent format:
 | 401  | `UNAUTHORIZED`         | Missing, invalid, or expired JWT       |
 | 403  | `FORBIDDEN`            | Valid JWT but insufficient permissions |
 
+### SSO Error Codes (via redirect)
+
+| Redirect Parameter    | Description                          |
+| --------------------- | ------------------------------------ |
+| `invalid_provider`    | Unknown or unsupported SSO provider  |
+| `invalid_state`       | CSRF validation failed               |
+| `auth_failed`         | OAuth provider returned an error     |
+| `user_not_registered` | Email from SSO not found in system   |
+| `no_organization`     | User exists but has no organization  |
+| `sso_unavailable`     | SSO provider not configured          |
+
 ## Protected vs Public Endpoints
 
-| Endpoint               | Auth Required | Description      |
-| ---------------------- | ------------- | ---------------- |
-| `POST /auth/login`     | No            | Initiate login   |
-| `GET /auth/callback`   | No            | Complete login   |
-| `POST /auth/logout`    | No            | Clear session    |
-| `GET /auth/me`         | Semi          | Get current user |
-| `GET /internal/health` | No            | Health check     |
-| `GET /v1/`             | No            | API root         |
-| `POST /v1/jobs`        | **Yes**       | Create job       |
-| `GET /v1/jobs/:id`     | **Yes**       | Get job status   |
+| Endpoint                        | Auth Required | Description             |
+| ------------------------------- | ------------- | ----------------------- |
+| `POST /auth/login`              | No            | Initiate magic link     |
+| `GET /auth/callback`            | No            | Complete magic link     |
+| `POST /auth/logout`             | No            | Clear session           |
+| `GET /auth/me`                  | Semi          | Get current user        |
+| `GET /auth/sso/:provider`       | No            | Initiate SSO            |
+| `GET /auth/sso/:provider/callback` | No         | Complete SSO            |
+| `GET /internal/health`          | No            | Health check            |
+| `GET /v1/`                      | No            | API root                |
+| `POST /v1/jobs`                 | **Yes**       | Create job              |
+| `GET /v1/jobs/:id`              | **Yes**       | Get job status          |
 
 ## Security Considerations
 
@@ -296,10 +441,12 @@ All authentication errors follow a consistent format:
 
 ### Web Application (Cookie-based)
 
-For web apps, the JWT is automatically stored in an HttpOnly cookie:
+For web apps, the JWT is automatically stored in an HttpOnly cookie.
+
+#### Magic Link Login
 
 ```javascript
-// Login
+// Initiate magic link
 await fetch("/auth/login", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
@@ -315,6 +462,38 @@ const response = await fetch("/v1/jobs", {
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ title: "Engineer" }),
 });
+```
+
+#### SSO Login
+
+```javascript
+// Redirect user to SSO provider
+function loginWithGoogle() {
+  const returnUrl = encodeURIComponent(window.location.pathname);
+  window.location.href = `/auth/sso/google?returnUrl=${returnUrl}`;
+}
+
+// After SSO callback, user is redirected back with cookie set
+// API calls work automatically
+const response = await fetch("/v1/jobs", {
+  credentials: "include",
+});
+```
+
+#### SSO Login Button Example
+
+```html
+<button onclick="loginWithGoogle()">
+  Sign in with Google
+</button>
+
+<script>
+function loginWithGoogle() {
+  // Preserve current page for return after login
+  const returnUrl = window.location.pathname + window.location.search;
+  window.location.href = `/auth/sso/google?returnUrl=${encodeURIComponent(returnUrl)}`;
+}
+</script>
 ```
 
 ### API Client (Header-based)

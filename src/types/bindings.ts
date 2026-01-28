@@ -171,10 +171,16 @@ export interface Env {
   GOOGLE_CLIENT_SECRET?: string;
 
   /**
-   * Google OAuth redirect URI.
+   * Google OAuth redirect URI for calendar integration.
    * Should be: {APP_BASE_URL}/auth/calendar/google/callback
    */
   GOOGLE_REDIRECT_URI?: string;
+
+  /**
+   * Google SSO redirect URI for login authentication.
+   * Should be: {APP_BASE_URL}/auth/sso/google/callback
+   */
+  GOOGLE_SSO_REDIRECT_URI?: string;
 
   // ==========================================================================
   // OUTLOOK CALENDAR OAUTH

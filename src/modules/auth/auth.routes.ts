@@ -1,13 +1,19 @@
 /**
  * Auth Routes
  * ===========
- * HTTP endpoints for magic link authentication.
+ * HTTP endpoints for authentication (magic link and SSO).
  *
- * Endpoints:
+ * Magic Link Endpoints:
  * - POST /auth/login  - Initiate magic link login
  * - GET  /auth/callback - Complete magic link authentication
- * - POST /auth/logout - Clear session (optional)
- * - GET  /auth/me     - Get current user (optional)
+ * - POST /auth/logout - Clear session
+ * - GET  /auth/me     - Get current user
+ *
+ * SSO Endpoints:
+ * - GET  /auth/sso/:provider - Initiate SSO login (e.g., /auth/sso/google)
+ * - GET  /auth/sso/:provider/callback - Handle SSO callback
+ *
+ * OAuth Integration Endpoints:
  * - GET  /auth/calendar/:provider/callback - OAuth callback for calendar connection
  * - GET  /auth/video/:provider/callback - OAuth callback for video provider
  */
@@ -32,6 +38,7 @@ import { InterviewerRepository } from "../../domain/interviewers";
 import { encryptTokens } from "../../lib/crypto";
 import { createDb, orgs } from "../../db";
 import { eq } from "drizzle-orm";
+import { createSSOProvider, isSupportedSSOProvider, type SSOProviderType } from "./sso";
 
 // =============================================================================
 // SCHEMAS
@@ -412,6 +419,128 @@ export function createAuthRoutes(): Hono<{ Bindings: Env }> {
     }
   });
 
+  // ===========================================================================
+  // GET /auth/sso/:provider - Initiate SSO login
+  // ===========================================================================
+  auth.get("/sso/:provider", async (c) => {
+    const providerType = c.req.param("provider");
+    const returnUrl = c.req.query("returnUrl") || "/";
+    const appBaseUrl = c.env.APP_BASE_URL || "";
+
+    // Validate provider type
+    if (!isSupportedSSOProvider(providerType)) {
+      return c.redirect(`${appBaseUrl}/login?error=invalid_provider`);
+    }
+
+    try {
+      // Create SSO provider
+      const provider = createSSOProvider(providerType as SSOProviderType, c.env);
+
+      // Generate state with return URL for CSRF protection
+      const state = btoa(
+        JSON.stringify({
+          returnUrl,
+          provider: providerType,
+          // Add random nonce for additional security
+          nonce: crypto.randomUUID(),
+        })
+      );
+
+      // Redirect to provider authorization URL
+      return c.redirect(provider.getAuthorizationUrl(state));
+    } catch (err) {
+      console.error("SSO initiation error:", err);
+      return c.redirect(`${appBaseUrl}/login?error=sso_unavailable`);
+    }
+  });
+
+  // ===========================================================================
+  // GET /auth/sso/:provider/callback - Handle SSO callback
+  // ===========================================================================
+  auth.get("/sso/:provider/callback", async (c) => {
+    const providerType = c.req.param("provider");
+    const code = c.req.query("code");
+    const state = c.req.query("state");
+    const error = c.req.query("error");
+    const appBaseUrl = c.env.APP_BASE_URL || "";
+
+    // Handle OAuth error (user denied access)
+    if (error) {
+      console.error("SSO OAuth error:", error);
+      return c.redirect(`${appBaseUrl}/login?error=auth_failed`);
+    }
+
+    // Validate provider type
+    if (!isSupportedSSOProvider(providerType)) {
+      return c.redirect(`${appBaseUrl}/login?error=invalid_provider`);
+    }
+
+    // Validate required parameters
+    if (!code || !state) {
+      return c.redirect(`${appBaseUrl}/login?error=invalid_state`);
+    }
+
+    try {
+      // Decode and parse state
+      let stateData: { returnUrl: string; provider: string; nonce: string };
+      try {
+        stateData = JSON.parse(atob(state)) as {
+          returnUrl: string;
+          provider: string;
+          nonce: string;
+        };
+      } catch {
+        return c.redirect(`${appBaseUrl}/login?error=invalid_state`);
+      }
+
+      // Verify provider matches state
+      if (stateData.provider !== providerType) {
+        return c.redirect(`${appBaseUrl}/login?error=invalid_state`);
+      }
+
+      // Create SSO provider
+      const provider = createSSOProvider(providerType as SSOProviderType, c.env);
+
+      // Exchange code for tokens
+      const { accessToken } = await provider.exchangeCodeForTokens(code);
+
+      // Get user email from provider
+      const email = await provider.getUserEmail(accessToken);
+
+      // Create auth service
+      const authService = createAuthService(c.env);
+
+      // Attempt to login with email
+      const loginResult = await authService.loginWithEmail(email);
+
+      if (!loginResult.success) {
+        // Map error codes to user-friendly redirect params
+        const errorParam =
+          loginResult.error === "USER_NOT_REGISTERED"
+            ? "user_not_registered"
+            : "no_organization";
+        return c.redirect(`${appBaseUrl}/login?error=${errorParam}`);
+      }
+
+      // Set session cookie and redirect to return URL
+      const cookieHeader = authService.getSessionCookieHeader(loginResult.sessionToken);
+
+      // Sanitize return URL to prevent open redirect
+      const safeReturnUrl = getSafeReturnUrl(stateData.returnUrl, appBaseUrl);
+
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: safeReturnUrl,
+          "Set-Cookie": cookieHeader,
+        },
+      });
+    } catch (err) {
+      console.error("SSO callback error:", err);
+      return c.redirect(`${appBaseUrl}/login?error=auth_failed`);
+    }
+  });
+
   return auth;
 }
 
@@ -482,4 +611,35 @@ function getErrorMessage(code: string): string {
     FORBIDDEN: "Access denied",
   };
   return messages[code] ?? "An error occurred";
+}
+
+/**
+ * Sanitize return URL to prevent open redirect attacks.
+ * Only allows relative paths or paths to the same origin.
+ */
+function getSafeReturnUrl(returnUrl: string, appBaseUrl: string): string {
+  // Default to root if no return URL
+  if (!returnUrl) {
+    return appBaseUrl;
+  }
+
+  // If it's a relative path (starts with /), it's safe
+  if (returnUrl.startsWith("/") && !returnUrl.startsWith("//")) {
+    return `${appBaseUrl}${returnUrl}`;
+  }
+
+  // If it's an absolute URL, verify it's the same origin
+  try {
+    const targetUrl = new URL(returnUrl);
+    const baseUrl = new URL(appBaseUrl);
+
+    if (targetUrl.origin === baseUrl.origin) {
+      return returnUrl;
+    }
+  } catch {
+    // Invalid URL, fall through to default
+  }
+
+  // Default to app root for any suspicious URLs
+  return appBaseUrl;
 }

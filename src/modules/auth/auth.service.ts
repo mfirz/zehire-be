@@ -15,6 +15,7 @@
 
 import type { EmailGateway } from "../email/email.gateway";
 import type { CallbackResult, LoginResult, UserClaims, UserRole, UserRow } from "./auth.types";
+import type { SSOLoginResult } from "./sso/types";
 import { SessionService } from "./session.service";
 import { TokenService } from "./token.service";
 
@@ -218,13 +219,60 @@ export class AuthService {
   }
 
   // ===========================================================================
-  // PRIVATE METHODS
+  // SSO LOGIN
+  // ===========================================================================
+
+  /**
+   * Login user by email address (for SSO providers).
+   * Does not send magic link - directly creates session if user exists.
+   *
+   * @param email - User email from SSO provider
+   * @returns Session token or error
+   */
+  async loginWithEmail(email: string): Promise<SSOLoginResult> {
+    // Normalize email
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Find user by email
+    const user = await this.findUserByEmail(normalizedEmail);
+
+    if (!user) {
+      return { success: false, error: "USER_NOT_REGISTERED" };
+    }
+
+    // Verify user has an organization
+    if (!user.org_id) {
+      return { success: false, error: "NO_ORGANIZATION" };
+    }
+
+    // Create user claims
+    const userClaims: UserClaims = {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      orgId: user.org_id,
+    };
+
+    // Create session
+    const sessionToken = await this.sessionService.createSession(userClaims);
+
+    console.log(`[AuthService] SSO login successful for ${normalizedEmail}`);
+
+    return {
+      success: true,
+      sessionToken,
+      user: userClaims,
+    };
+  }
+
+  // ===========================================================================
+  // USER LOOKUP METHODS
   // ===========================================================================
 
   /**
    * Find user by email address.
    */
-  private async findUserByEmail(email: string): Promise<UserRow | null> {
+  async findUserByEmail(email: string): Promise<UserRow | null> {
     const result = await this.db
       .prepare("SELECT id, email, role, org_id, created_at, updated_at FROM users WHERE email = ?")
       .bind(email)
@@ -232,6 +280,10 @@ export class AuthService {
 
     return result ?? null;
   }
+
+  // ===========================================================================
+  // PRIVATE METHODS
+  // ===========================================================================
 
   /**
    * Find user by ID.
