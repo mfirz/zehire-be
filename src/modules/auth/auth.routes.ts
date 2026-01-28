@@ -182,9 +182,9 @@ export function createAuthRoutes(): Hono<{ Bindings: Env }> {
     const authHeader = c.req.header("Authorization") ?? null;
     const cookieHeader = c.req.header("Cookie") ?? null;
 
-    const user = await authService.verifySessionFromHeaders(authHeader, cookieHeader);
+    const claims = await authService.verifySessionFromHeaders(authHeader, cookieHeader);
 
-    if (!user) {
+    if (!claims) {
       return c.json(
         {
           error: {
@@ -196,12 +196,28 @@ export function createAuthRoutes(): Hono<{ Bindings: Env }> {
       );
     }
 
+    // Fetch user from DB to get latest data including name
+    const user = await authService.findUserByEmail(claims.email);
+
+    if (!user) {
+      return c.json(
+        {
+          error: {
+            code: "UNAUTHORIZED",
+            message: "User not found",
+          },
+        },
+        401
+      );
+    }
+
     return c.json({
       user: {
-        id: user.userId,
+        id: user.id,
         email: user.email,
+        name: user.name,
         role: user.role,
-        orgId: user.orgId,
+        orgId: user.org_id,
       },
     });
   });

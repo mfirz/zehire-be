@@ -16,6 +16,7 @@ export const users = sqliteTable(
   {
     id: text("id").primaryKey(),
     email: text("email").notNull().unique(),
+    name: text("name"), // Display name (can be set via SSO or manually)
     role: text("role", { enum: userRoles }).notNull().default("recruiter"),
     orgId: text("org_id").references(() => orgs.id),
     createdAt: text("created_at").notNull(),

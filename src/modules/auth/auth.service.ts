@@ -274,7 +274,7 @@ export class AuthService {
    */
   async findUserByEmail(email: string): Promise<UserRow | null> {
     const result = await this.db
-      .prepare("SELECT id, email, role, org_id, created_at, updated_at FROM users WHERE email = ?")
+      .prepare("SELECT id, email, name, role, org_id, created_at, updated_at FROM users WHERE email = ?")
       .bind(email)
       .first<UserRow>();
 
@@ -290,7 +290,7 @@ export class AuthService {
    */
   private async findUserById(userId: string): Promise<UserRow | null> {
     const result = await this.db
-      .prepare("SELECT id, email, role, org_id, created_at, updated_at FROM users WHERE id = ?")
+      .prepare("SELECT id, email, name, role, org_id, created_at, updated_at FROM users WHERE id = ?")
       .bind(userId)
       .first<UserRow>();
 
@@ -317,22 +317,28 @@ export class UserRepository {
   /**
    * Create a new user.
    */
-  async create(email: string, orgId: string, role: UserRole = "recruiter"): Promise<UserRow> {
+  async create(
+    email: string,
+    orgId: string,
+    role: UserRole = "recruiter",
+    name?: string
+  ): Promise<UserRow> {
     const { nanoid } = await import("nanoid");
     const id = nanoid();
     const now = new Date().toISOString();
 
     await this.db
       .prepare(
-        `INSERT INTO users (id, email, role, org_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO users (id, email, name, role, org_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
-      .bind(id, email.toLowerCase().trim(), role, orgId, now, now)
+      .bind(id, email.toLowerCase().trim(), name ?? null, role, orgId, now, now)
       .run();
 
     return {
       id,
       email: email.toLowerCase().trim(),
+      name: name ?? null,
       role,
       org_id: orgId,
       created_at: now,
@@ -345,7 +351,7 @@ export class UserRepository {
    */
   async findByEmail(email: string): Promise<UserRow | null> {
     const result = await this.db
-      .prepare("SELECT id, email, role, org_id, created_at, updated_at FROM users WHERE email = ?")
+      .prepare("SELECT id, email, name, role, org_id, created_at, updated_at FROM users WHERE email = ?")
       .bind(email.toLowerCase().trim())
       .first<UserRow>();
 

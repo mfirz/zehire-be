@@ -29,6 +29,13 @@
       "when": 1769137720901,
       "tag": "0003_optimal_speed",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1769593260271,
+      "tag": "0004_normal_thunderbolt",
+      "breakpoints": true
     }
   ]
 }

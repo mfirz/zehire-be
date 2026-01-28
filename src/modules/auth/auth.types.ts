@@ -22,6 +22,7 @@ export type UserRole = (typeof USER_ROLES)[number];
 export interface UserRow {
   id: string;
   email: string;
+  name: string | null;
   role: UserRole;
   org_id: string | null;
   created_at: string;
