@@ -1,0 +1,58 @@
+meta {
+  name: Evaluate
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/candidates/{{application_id}}/assessment/evaluate
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "signal": "clear_evidence",
+    "notes": "Strong performance across all parts. Coding challenge demonstrated clean architecture with proper error handling. Design document showed depth of understanding in distributed systems. Candidate clearly meets the technical bar."
+  }
+}
+
+tests {
+  test("Status code is 200 or 201", function() {
+    const status = res.getStatus();
+    expect(status === 200 || status === 201).to.be.true;
+  });
+
+  test("Response contains evaluation", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('signal');
+    expect(data.signal).to.equal('clear_evidence');
+  });
+
+  test("Assessment status is evaluated", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('status');
+    expect(data.status).to.equal('evaluated');
+  });
+}
+
+docs {
+  Submit an evaluation for a candidate's completed assessment.
+
+  **Signal values:**
+  - "clear_evidence": Candidate clearly demonstrated the required skills
+  - "some_evidence": Candidate showed partial evidence of skills
+  - "no_evidence": Candidate did not demonstrate the required skills
+  - "inconclusive": Assessment was not sufficient to determine
+
+  **Prerequisites:** Candidate assessment must be in "submitted" status.
+
+  **Effects:**
+  - Records the evaluation signal and notes
+  - Updates the candidate assessment status to "evaluated"
+  - Contributes to the candidate's overall posture calculation
+}

@@ -1,0 +1,53 @@
+meta {
+  name: Schedule
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/assess/{{assessment_token}}/schedule
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "date": "2026-02-05",
+    "time": "09:00",
+    "timezone": "America/New_York"
+  }
+}
+
+tests {
+  test("Status code is 200 or 201", function() {
+    const status = res.getStatus();
+    expect(status === 200 || status === 201).to.be.true;
+  });
+
+  test("Assessment is scheduled", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('status');
+    expect(data.status).to.equal('scheduled');
+  });
+
+  test("Response contains scheduled date", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('scheduledAt');
+    expect(data).to.have.property('deadline');
+  });
+}
+
+docs {
+  Schedule the assessment as a candidate.
+
+  **Authentication:** Token-based via URL path (no bearer auth).
+
+  **Required fields:**
+  - date: Date in YYYY-MM-DD format
+  - time: Time in HH:mm format (24h)
+  - timezone: IANA timezone string
+
+  The candidate must schedule within the scheduleWithinDays window.
+  Once scheduled, the assessment opens at the scheduled time and
+  must be completed within completeWithinHours.
+}

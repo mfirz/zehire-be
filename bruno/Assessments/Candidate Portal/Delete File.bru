@@ -1,0 +1,28 @@
+meta {
+  name: Delete File
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{base_url}}/assess/{{assessment_token}}/parts/{{part_id}}/files/{{file_id}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status code is 200 or 204", function() {
+    const status = res.getStatus();
+    expect(status === 200 || status === 204).to.be.true;
+  });
+}
+
+docs {
+  Delete an uploaded file from an assessment part.
+
+  **Authentication:** Token-based via URL path (no bearer auth).
+
+  **Prerequisites:** Assessment must be in "in_progress" status (not yet submitted).
+
+  Candidates can re-upload a new file after deleting.
+}

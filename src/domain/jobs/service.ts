@@ -18,7 +18,6 @@ import { renderToHtml, type TiptapDoc } from "../../lib/tiptap";
 import type { Env } from "../../types/bindings";
 import { CustomQuestionsRepository } from "../custom-questions/repository";
 import { InterviewStagesRepository, type StageInput } from "../interview-stages";
-import { generateInitialConfig } from "../pipeline/advisor";
 import { PipelineRecommendationSchema } from "../pipeline/types";
 import type { PipelineConfig, PipelineUpdate } from "../pipeline/types";
 import { BillingEventRepository, JobRepository, OrgRepository } from "./repository";
@@ -78,11 +77,11 @@ export class JobService {
     private readonly repository: JobRepository,
     private readonly orgRepository: OrgRepository,
     private readonly queue: Env["JOB_QUEUE"],
-    db: D1Database
+    private readonly d1: D1Database
   ) {
-    this.billingEventRepository = new BillingEventRepository(db);
-    this.customQuestionsRepository = new CustomQuestionsRepository(db);
-    this.interviewStagesRepository = new InterviewStagesRepository(db);
+    this.billingEventRepository = new BillingEventRepository(d1);
+    this.customQuestionsRepository = new CustomQuestionsRepository(d1);
+    this.interviewStagesRepository = new InterviewStagesRepository(d1);
   }
 
   // ===========================================================================
@@ -403,11 +402,6 @@ export class JobService {
         }
       }
 
-      // Update assessment config
-      if (update.assessment) {
-        await this.repository.updateAssessmentConfig(jobId, update.assessment);
-      }
-
       // Update stage structure (name, duration, focus) - no interviewers, no mode
       if (update.interviewRounds) {
         // Validate required fields for draft stage updates
@@ -476,17 +470,6 @@ export class JobService {
     // PUBLISHED/PAUSED: Operations only (interviewerIds, mode) - NO structure
     // ==========================================================================
     if (!isDraft) {
-      // Block assessment changes
-      if (update.assessment) {
-        return {
-          success: false,
-          error: {
-            code: "INVALID_STATE",
-            message: "Cannot modify assessment after publishing. Only interviewer assignments can be changed.",
-          },
-        };
-      }
-
       // Partial update: only update stages you send (interviewerIds, mode only)
       if (update.interviewRounds) {
         const currentStages = await this.interviewStagesRepository.getStagesForJob(jobId);
@@ -601,13 +584,7 @@ export class JobService {
       JSON.parse(job.pipelineRecommendation)
     );
 
-    // Regenerate initial config from recommendation (no LLM call)
-    const resetConfig = generateInitialConfig(recommendation);
-
-    // Save reset assessment config to dedicated column
-    await this.repository.updateAssessmentConfig(jobId, resetConfig.assessment);
-
-    // Also reset interview_stages table
+    // Reset interview_stages table
     // Delete existing stages and create fresh ones from recommendation
     await this.interviewStagesRepository.deleteAllStagesForJob(jobId);
     await this.interviewStagesRepository.createStagesFromRecommendation(
@@ -720,6 +697,16 @@ export class JobService {
     // Invalidate cache
     if (job.orgId) {
       await this.orgRepository.incrementJobsListVersion(job.orgId);
+    }
+
+    // Create assessment snapshot if job has an assessment
+    try {
+      const { AssessmentService } = await import("../assessments/service");
+      const assessmentService = new AssessmentService(this.d1);
+      await assessmentService.createSnapshotForJob(jobId);
+    } catch (e) {
+      // Non-fatal: assessment snapshot failure shouldn't block publish
+      console.error(`[jobs] Failed to create assessment snapshot for job ${jobId}:`, e);
     }
 
     // Fetch updated job
@@ -889,6 +876,18 @@ export class JobService {
       await this.orgRepository.incrementJobsListVersion(job.orgId);
     }
 
+    // Queue assessment cancellation
+    try {
+      await this.queue.send({
+        type: "cancel_assessments",
+        jobId: jobId,
+        createdAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      // Non-fatal: assessment cancellation failure shouldn't block close
+      console.error(`[jobs] Failed to queue assessment cancellation for job ${jobId}:`, e);
+    }
+
     // Fetch updated job
     const closedJob = await this.repository.findById(jobId);
     if (!closedJob) {
@@ -1056,14 +1055,10 @@ export class JobService {
     const stages = await this.interviewStagesRepository.getStagesForJob(job.id);
 
     // Build pipeline config from interview_stages table (source of truth)
-    // Assessment config comes from dedicated assessmentConfig column
     const totalDurationMinutes = stages.reduce((sum, stage) => sum + stage.durationMinutes, 0);
     const pipelineFromStages: PipelineConfig | null =
       stages.length > 0
         ? {
-            assessment: job.assessmentConfig
-              ? JSON.parse(job.assessmentConfig)
-              : { enabled: false, providerId: null, config: null },
             interviewRounds: stages.map((stage) => ({
               id: stage.id,
               name: stage.name,

@@ -1,0 +1,29 @@
+meta {
+  name: Remove Job Assessment
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{base_url}}/v1/jobs/{{job_id}}/assessment
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+tests {
+  test("Status code is 200 or 204", function() {
+    const status = res.getStatus();
+    expect(status === 200 || status === 204).to.be.true;
+  });
+}
+
+docs {
+  Remove the assessment assignment from a job.
+
+  Existing in-progress candidates keep their assessment; new candidates will not receive one.
+  This does not delete the assessment from the library.
+}

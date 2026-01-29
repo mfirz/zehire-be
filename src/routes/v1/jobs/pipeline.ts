@@ -12,7 +12,6 @@ import type { Context } from "hono";
 import { InterviewStagesRepository } from "../../../domain/interview-stages";
 import { JobRepository, JobService, OrgRepository } from "../../../domain/jobs";
 import {
-  AssessmentConfigSchema,
   PipelineRecommendationSchema,
   PipelineUpdateSchema,
   type PipelineConfig,
@@ -91,9 +90,6 @@ export async function getPipeline(
   const config: PipelineConfig | null =
     stages.length > 0
       ? {
-          assessment: job.assessmentConfig
-            ? AssessmentConfigSchema.parse(JSON.parse(job.assessmentConfig))
-            : { enabled: false, providerId: null, config: null },
           interviewRounds: stages.map((stage) => ({
             id: stage.id,
             name: stage.name,

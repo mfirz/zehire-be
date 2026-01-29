@@ -1,0 +1,44 @@
+meta {
+  name: Update Evaluation
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{base_url}}/v1/jobs/{{job_id}}/candidates/{{application_id}}/assessment/evaluate
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "signal": "some_evidence",
+    "notes": "After further review, the coding challenge had some minor issues with edge case handling. Revising signal to some_evidence. Design document remains strong."
+  }
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Evaluation is updated", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('signal');
+    expect(data.signal).to.equal('some_evidence');
+  });
+}
+
+docs {
+  Update an existing evaluation for a candidate's assessment.
+
+  **Fields that can be updated:**
+  - signal: Updated signal value
+  - notes: Updated evaluation notes
+
+  Only assessments in "evaluated" status can be re-evaluated.
+}

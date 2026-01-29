@@ -1,0 +1,38 @@
+meta {
+  name: Download File
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/v1/files/{{file_id}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Response has content", function() {
+    const headers = res.getHeaders();
+    expect(headers).to.have.property('content-type');
+  });
+}
+
+docs {
+  Download an assessment file by ID.
+
+  **Authentication:** Bearer token (recruiter only).
+
+  Returns the file binary with appropriate Content-Type and
+  Content-Disposition headers for download.
+
+  Recruiters can download files from any candidate assessment
+  within their organization.
+}

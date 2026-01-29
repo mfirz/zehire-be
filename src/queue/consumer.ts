@@ -22,6 +22,7 @@ import { SignalExtractionService } from "../domain/signals/service";
 import { createLLMClient } from "../lib/llm";
 import type {
   ApplicationEvaluationMessage,
+  CancelAssessmentsMessage,
   CVProcessingMessage,
   Env,
   JobProcessingMessage,
@@ -158,6 +159,18 @@ export async function handleQueue(batch: MessageBatch<JobQueueMessage>, env: Env
 
         message.ack();
         console.log(`[Queue] Application ${cvMsg.applicationId} CV processing completed`);
+      } else if (messageType === "cancel_assessments") {
+        const cancelMsg = body as CancelAssessmentsMessage;
+        console.log(
+          `[Queue] Processing cancel_assessments for job ${cancelMsg.jobId} (queued at ${cancelMsg.createdAt})`
+        );
+
+        const { AssessmentService } = await import("../domain/assessments/service");
+        const assessmentService = new AssessmentService(env.DB);
+        const count = await assessmentService.cancelAssessmentsForJob(cancelMsg.jobId);
+
+        message.ack();
+        console.log(`[Queue] Cancelled ${count} assessments for job ${cancelMsg.jobId}`);
       } else if (messageType === "pipeline") {
         const jobMsg = body as JobProcessingMessage;
         console.log(`[Queue] Processing pipeline for job ${jobMsg.jobId} (queued at ${jobMsg.createdAt})`);
@@ -184,6 +197,8 @@ export async function handleQueue(batch: MessageBatch<JobQueueMessage>, env: Env
         identifier = `application ${(body as ApplicationEvaluationMessage).applicationId}`;
       } else if (messageType === "process_cv") {
         identifier = `application ${(body as CVProcessingMessage).applicationId}`;
+      } else if (messageType === "cancel_assessments") {
+        identifier = `job ${(body as CancelAssessmentsMessage).jobId}`;
       } else {
         identifier = `job ${(body as JobProcessingMessage).jobId}`;
       }

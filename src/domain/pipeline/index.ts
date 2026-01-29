@@ -19,7 +19,6 @@ export type {
   InterviewPanelRecommendation,
   EvaluationCriteria,
   PipelineRecommendation,
-  AssessmentConfig,
   InterviewRoundConfig,
   PipelineConfig,
   PipelineUpdate,
@@ -31,21 +30,10 @@ export {
   InterviewPanelRecommendationSchema,
   EvaluationCriteriaSchema,
   PipelineRecommendationSchema,
-  AssessmentConfigSchema,
   InterviewRoundConfigSchema,
   PipelineConfigSchema,
   PipelineUpdateSchema,
 } from "./types";
-
-// Providers
-export type { AssessmentProvider } from "./providers";
-
-export {
-  assessmentProviders,
-  getProviderById,
-  getProviderIds,
-  isValidProviderId,
-} from "./providers";
 
 // Advisor (LLM generation)
 export type { PipelineGenerationInput, PipelineGenerationResult } from "./advisor";

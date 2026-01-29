@@ -1,0 +1,50 @@
+meta {
+  name: Get Candidate Assessment
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/v1/jobs/{{job_id}}/candidates/{{application_id}}/assessment
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    const data = res.getBody();
+    if (data.token) {
+      bru.setEnvVar('assessment_token', data.token);
+      console.log('Assessment token saved:', data.token);
+    }
+  }
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Response contains assessment status", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('status');
+    expect(data).to.have.property('parts');
+  });
+}
+
+docs {
+  Get the assessment status and details for a specific candidate.
+
+  Returns:
+  - Assessment status (invited, scheduled, in_progress, submitted, evaluated, expired, cancelled)
+  - Part completion status
+  - Scheduling details (scheduled date, deadline)
+  - Evaluation results (if evaluated)
+  - Token for the candidate portal URL
+
+  Returns 404 if the candidate has not been invited to an assessment.
+}

@@ -1,0 +1,54 @@
+meta {
+  name: Reschedule
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/assess/{{assessment_token}}/reschedule
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "date": "2026-02-07",
+    "time": "14:00",
+    "timezone": "America/New_York"
+  }
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Assessment is rescheduled", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('status');
+    expect(data.status).to.equal('scheduled');
+    expect(data).to.have.property('scheduledAt');
+  });
+
+  test("Reschedule count is tracked", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('rescheduleCount');
+    expect(data.rescheduleCount).to.be.greaterThan(0);
+  });
+}
+
+docs {
+  Reschedule a previously scheduled assessment.
+
+  **Authentication:** Token-based via URL path (no bearer auth).
+
+  **Required fields:**
+  - date: New date in YYYY-MM-DD format
+  - time: New time in HH:mm format (24h)
+  - timezone: IANA timezone string
+
+  **Limits:** Candidates can only reschedule up to maxReschedules times
+  (configured per assessment). Returns 409 if the limit is reached.
+
+  **Prerequisites:** Assessment must be in "scheduled" status (not yet started).
+}

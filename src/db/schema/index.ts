@@ -158,3 +158,31 @@ export {
   type SchedulingToken,
   type NewSchedulingToken,
 } from "./interviews";
+
+// Assessments (Phase 10)
+export {
+  // Tables
+  assessmentDefinitions,
+  assessmentParts,
+  jobAssessments,
+  candidateAssessments,
+  assessmentFiles,
+  // Enums
+  assessmentDefinitionStatuses,
+  candidateAssessmentStatuses,
+  evaluationSignals,
+  // Types
+  type AssessmentDefinition,
+  type NewAssessmentDefinition,
+  type AssessmentDefinitionStatus,
+  type AssessmentPart,
+  type NewAssessmentPart,
+  type JobAssessment,
+  type NewJobAssessment,
+  type CandidateAssessment,
+  type NewCandidateAssessment,
+  type CandidateAssessmentStatus,
+  type EvaluationSignal,
+  type AssessmentFile,
+  type NewAssessmentFile,
+} from "./assessments";

@@ -407,7 +407,7 @@ export type LLMProvider = (typeof LLM_PROVIDERS)[number];
  * - evaluate_application: Extract signals from application answers (Phase 1)
  * - process_cv: Extract and summarize CV content (Phase 8C)
  */
-export type JobQueueType = "questions" | "pipeline" | "evaluate_application" | "process_cv";
+export type JobQueueType = "questions" | "pipeline" | "evaluate_application" | "process_cv" | "cancel_assessments";
 
 /**
  * Base message payload for job processing queue.
@@ -455,9 +455,20 @@ export interface CVProcessingMessage extends JobQueueMessageBase {
 }
 
 /**
+ * Message for cancelling active assessments when a job is closed.
+ */
+export interface CancelAssessmentsMessage extends JobQueueMessageBase {
+  /** Type discriminator */
+  type: "cancel_assessments";
+
+  /** Job ID whose assessments should be cancelled */
+  jobId: string;
+}
+
+/**
  * Union type for all queue message types.
  */
-export type JobQueueMessage = JobProcessingMessage | ApplicationEvaluationMessage | CVProcessingMessage;
+export type JobQueueMessage = JobProcessingMessage | ApplicationEvaluationMessage | CVProcessingMessage | CancelAssessmentsMessage;
 
 // =============================================================================
 // BILLING TYPES

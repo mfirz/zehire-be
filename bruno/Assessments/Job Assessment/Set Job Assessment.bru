@@ -1,0 +1,42 @@
+meta {
+  name: Set Job Assessment
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{base_url}}/v1/jobs/{{job_id}}/assessment
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "assessmentId": "{{assessment_id}}"
+  }
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Assessment is linked to job", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('assessmentId');
+    expect(data.assessmentId).to.equal(bru.getEnvVar('assessment_id'));
+  });
+}
+
+docs {
+  Assign an assessment from the library to a job.
+
+  **Idempotent:** Calling this again with the same assessmentId is a no-op.
+  **Replace:** Calling with a different assessmentId replaces the current assignment. Existing in-progress candidates keep their original assessment.
+
+  **Prerequisites:** Assessment must be active (not archived).
+}

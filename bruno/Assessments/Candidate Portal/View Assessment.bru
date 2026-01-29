@@ -1,0 +1,52 @@
+meta {
+  name: View Assessment
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/assess/{{assessment_token}}
+  body: none
+  auth: none
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    const data = res.getBody();
+    if (data.parts && data.parts.length > 0) {
+      bru.setEnvVar('part_id', data.parts[0].id);
+      console.log('Part ID saved:', data.parts[0].id);
+    }
+  }
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Response contains assessment details", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('status');
+    expect(data).to.have.property('parts');
+    expect(data.parts).to.be.an('array');
+  });
+
+  test("Response contains scheduling info", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('scheduling');
+  });
+}
+
+docs {
+  View assessment details as a candidate.
+
+  **Authentication:** Token-based via URL path (no bearer auth).
+  The assessment_token is provided to the candidate via email.
+
+  Returns:
+  - Assessment name, instructions, and parts
+  - Current status (invited, scheduled, in_progress, submitted, etc.)
+  - Scheduling deadlines and configuration
+  - File upload status per part
+}

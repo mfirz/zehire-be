@@ -15,7 +15,6 @@ import {
   type PipelineConfig,
   type PipelineRecommendation,
 } from "./types";
-import { getProviderIds } from "./providers";
 
 // =============================================================================
 // INPUT TYPES
@@ -56,8 +55,6 @@ Key principles:
  * Build the user prompt for pipeline generation.
  */
 export function buildPipelinePrompt(input: PipelineGenerationInput): string {
-  const providerIds = getProviderIds();
-
   const jobDetails = [
     `Job Title: ${input.title}`,
     `Description: ${input.description}`,
@@ -79,7 +76,7 @@ Return JSON matching this exact schema:
     "recommended": boolean (true if technical/skills assessment adds value),
     "reason": string (why assessment is or isn't recommended),
     "suggestedType": string (e.g., "coding challenge", "case study", "portfolio review", "none"),
-    "suggestedProviders": array of strings from [${providerIds.map((p) => `"${p}"`).join(", ")}],
+    "suggestedProviders": array of strings (e.g., ["takehome", "none"]),
     "whatToTest": array of strings (specific skills/competencies to assess)
   },
   "interviewPanel": {
@@ -175,11 +172,6 @@ export function generateInitialConfig(recommendation: PipelineRecommendation): P
   }));
 
   return {
-    assessment: {
-      enabled: recommendation.assessment.recommended,
-      providerId: recommendation.assessment.suggestedProviders[0] ?? null,
-      config: null, // Recruiter fills in provider-specific config
-    },
     interviewRounds,
     totalDurationMinutes: interviewRounds.reduce((sum, round) => sum + round.duration, 0),
   };

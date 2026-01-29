@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 
 import { createAuthRoutes } from "./modules/auth";
+import assessRoutes from "./routes/assess";
 import internal from "./routes/internal/route";
 import interviewerRoutes from "./routes/interviewer";
 import oauthRoutes from "./routes/oauth";
@@ -28,6 +29,9 @@ app.route("/i", interviewerRoutes);
 
 // Candidate scheduling routes (scheduling token auth)
 app.route("/schedule", scheduleRoutes);
+
+// Candidate assessment portal (assessment token auth)
+app.route("/assess", assessRoutes);
 
 // Internal routes
 app.route("/internal", internal);

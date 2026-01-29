@@ -1,0 +1,55 @@
+meta {
+  name: Upload File
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/assess/{{assessment_token}}/parts/{{part_id}}/files
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  file: @file(/Users/firz/Documents/projects/zehire/zehire-be/bruno/sample-submission.pdf)
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    const data = res.getBody();
+    if (data.id) {
+      bru.setEnvVar('file_id', data.id);
+      console.log('File ID saved:', data.id);
+    }
+  }
+}
+
+tests {
+  test("Status code is 201", function() {
+    expect(res.getStatus()).to.equal(201);
+  });
+
+  test("Response contains file details", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('id');
+    expect(data).to.have.property('filename');
+    expect(data).to.have.property('size');
+  });
+}
+
+docs {
+  Upload a file for a specific assessment part.
+
+  **Authentication:** Token-based via URL path (no bearer auth).
+
+  **Content-Type:** multipart/form-data
+  **Field name:** file
+
+  **Supported formats:** PDF, DOC, DOCX, TXT, MD, ZIP, PNG, JPG
+  **Max file size:** 25MB per file
+
+  **Prerequisites:** Assessment must be in "scheduled" or "in_progress" status.
+  The assessment transitions to "in_progress" on the first upload.
+
+  Note: Update the file path in body:multipart-form to point to a local test file.
+}

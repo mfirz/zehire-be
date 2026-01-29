@@ -35,10 +35,11 @@ export async function handleScheduled(
   const schedulingRepo = new SchedulingRepository(env.DB);
   const emailGateway = createEmailGatewayFromEnv(env);
 
-  // Run both reminder tasks in parallel
+  // Run all tasks in parallel
   const results = await Promise.allSettled([
     sendInterviewReminders(schedulingRepo, emailGateway, env),
     sendFeedbackReminders(schedulingRepo, emailGateway, env),
+    processAssessmentExpirations(env),
   ]);
 
   // Log results
@@ -190,5 +191,32 @@ async function sendFeedbackReminders(
       );
       // Continue with next participant
     }
+  }
+}
+
+/**
+ * Process expired assessment deadlines.
+ * Handles both schedule expiry (invited -> schedule_expired) and
+ * completion expiry (scheduled/in_progress -> expired).
+ */
+async function processAssessmentExpirations(env: Env): Promise<void> {
+  console.log("[Scheduled] Processing assessment expirations...");
+
+  try {
+    const { AssessmentService } = await import("../domain/assessments/service");
+    const assessmentService = new AssessmentService(env.DB);
+
+    const scheduleExpired = await assessmentService.processExpiredScheduleDeadlines();
+    const completionExpired = await assessmentService.processExpiredCompletionDeadlines();
+
+    if (scheduleExpired > 0 || completionExpired > 0) {
+      console.log(
+        `[Scheduled] Assessment expirations: ${scheduleExpired} schedule, ${completionExpired} completion`
+      );
+    } else {
+      console.log("[Scheduled] No assessment expirations to process");
+    }
+  } catch (e) {
+    console.error("[Scheduled] Failed to process assessment expirations:", e);
   }
 }

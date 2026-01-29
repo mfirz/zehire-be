@@ -1,0 +1,100 @@
+meta {
+  name: Create Assessment
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/v1/assessments
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "name": "Frontend Technical Assessment",
+    "parts": [
+      {
+        "name": "Coding Challenge",
+        "instructions": "Build a responsive React component that fetches data from a provided API endpoint and displays it in a sortable table. Include error handling and loading states. You may use any styling approach.",
+        "evidenceDescription": "Can write clean, working frontend code with proper state management",
+        "required": true
+      },
+      {
+        "name": "System Design Document",
+        "instructions": "Write a brief design document (1-2 pages) describing how you would architect a real-time collaborative editing feature. Include data flow diagrams and technology choices.",
+        "evidenceDescription": "Can think through complex system design problems and communicate clearly",
+        "required": true
+      },
+      {
+        "name": "Code Review Exercise",
+        "instructions": "Review the provided pull request and leave comments. Focus on correctness, performance, and maintainability. Suggest improvements where appropriate.",
+        "evidenceDescription": "Can identify issues in existing code and provide constructive feedback",
+        "required": false
+      }
+    ],
+    "scheduling": {
+      "scheduleWithinDays": 7,
+      "completeWithinHours": 48,
+      "maxReschedules": 2
+    }
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    const data = res.getBody();
+    if (data.id) {
+      bru.setEnvVar('assessment_id', data.id);
+      console.log('Assessment ID saved:', data.id);
+    }
+    if (data.parts && data.parts.length > 0) {
+      bru.setEnvVar('part_id', data.parts[0].id);
+      console.log('Part ID saved:', data.parts[0].id);
+    }
+  }
+}
+
+tests {
+  test("Status code is 201", function() {
+    expect(res.getStatus()).to.equal(201);
+  });
+
+  test("Response contains assessment ID", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('id');
+    expect(data).to.have.property('name');
+    expect(data.name).to.equal('Frontend Technical Assessment');
+  });
+
+  test("Assessment has parts", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('parts');
+    expect(data.parts).to.be.an('array');
+    expect(data.parts.length).to.equal(3);
+  });
+
+  test("Assessment has scheduling config", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('scheduling');
+    expect(data.scheduling.scheduleWithinDays).to.equal(7);
+    expect(data.scheduling.completeWithinHours).to.equal(48);
+  });
+}
+
+docs {
+  Create a new assessment in the organization library.
+
+  **Required fields:** name, parts (at least 1 part)
+  **Optional:** scheduling config (uses defaults if omitted)
+
+  Each part requires:
+  - name: Display name for the part
+  - instructions: Detailed instructions shown to candidate
+  - evidenceDescription: What signal this part provides
+  - required: Whether the candidate must complete this part
+}

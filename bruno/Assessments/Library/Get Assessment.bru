@@ -1,0 +1,54 @@
+meta {
+  name: Get Assessment
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/v1/assessments/{{assessment_id}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    const data = res.getBody();
+    if (data.parts && data.parts.length > 0) {
+      bru.setEnvVar('part_id', data.parts[0].id);
+      console.log('Part ID saved:', data.parts[0].id);
+    }
+  }
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Response contains assessment details", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('id');
+    expect(data).to.have.property('name');
+    expect(data).to.have.property('parts');
+    expect(data).to.have.property('scheduling');
+  });
+
+  test("Assessment has correct ID", function() {
+    const data = res.getBody();
+    expect(data.id).to.equal(bru.getEnvVar('assessment_id'));
+  });
+}
+
+docs {
+  Get a single assessment by ID with all parts and scheduling config.
+
+  Returns the full assessment object including:
+  - Assessment metadata (name, status, timestamps)
+  - All parts with instructions and evidence descriptions
+  - Scheduling configuration
+  - Usage stats (how many jobs use this assessment)
+}

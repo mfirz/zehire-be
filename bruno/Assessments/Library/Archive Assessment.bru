@@ -1,0 +1,38 @@
+meta {
+  name: Archive Assessment
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{base_url}}/v1/assessments/{{assessment_id}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "status": "archived"
+  }
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Assessment is archived", function() {
+    const data = res.getBody();
+    expect(data.status).to.equal('archived');
+  });
+}
+
+docs {
+  Archive an assessment. Archived assessments cannot be assigned to new jobs but existing assignments remain active.
+
+  To restore, send a PATCH with { "status": "active" }.
+}

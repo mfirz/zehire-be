@@ -1,0 +1,57 @@
+meta {
+  name: Invite Candidate
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/candidates/{{application_id}}/assessment
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    const data = res.getBody();
+    if (data.token) {
+      bru.setEnvVar('assessment_token', data.token);
+      console.log('Assessment token saved:', data.token);
+    }
+  }
+}
+
+tests {
+  test("Status code is 201", function() {
+    expect(res.getStatus()).to.equal(201);
+  });
+
+  test("Response contains assessment invitation", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('status');
+    expect(data.status).to.equal('invited');
+    expect(data).to.have.property('token');
+  });
+
+  test("Response includes scheduling deadline", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('scheduleDeadline');
+  });
+}
+
+docs {
+  Invite a candidate to take an assessment for a job.
+
+  **Prerequisites:**
+  - Job must have an assessment assigned
+  - Candidate must not already have an active assessment invitation
+
+  **Effects:**
+  - Creates a candidate assessment record with status "invited"
+  - Generates a unique assessment token for the candidate portal
+  - Sends an email notification to the candidate with the assessment link
+  - Sets a scheduling deadline based on the assessment config
+}

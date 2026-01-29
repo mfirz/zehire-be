@@ -1,0 +1,46 @@
+meta {
+  name: Submit
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{base_url}}/assess/{{assessment_token}}/submit
+  body: none
+  auth: none
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Assessment is submitted", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('status');
+    expect(data.status).to.equal('submitted');
+  });
+
+  test("Response contains submission timestamp", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('submittedAt');
+  });
+}
+
+docs {
+  Submit the completed assessment.
+
+  **Authentication:** Token-based via URL path (no bearer auth).
+
+  **Prerequisites:**
+  - Assessment must be in "in_progress" status
+  - All required parts must have at least one file uploaded
+
+  **Effects:**
+  - Assessment status transitions to "submitted"
+  - Candidate can no longer upload or delete files
+  - Recruiter is notified that the assessment is ready for evaluation
+  - Submission timestamp is recorded
+
+  This action is irreversible.
+}

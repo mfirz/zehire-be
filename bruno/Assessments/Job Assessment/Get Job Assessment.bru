@@ -1,0 +1,45 @@
+meta {
+  name: Get Job Assessment
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/v1/jobs/{{job_id}}/assessment
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    const data = res.getBody();
+    if (data.assessmentId) {
+      bru.setEnvVar('assessment_id', data.assessmentId);
+      console.log('Assessment ID saved:', data.assessmentId);
+    }
+  }
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Response contains assessment data", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('assessmentId');
+    expect(data).to.have.property('name');
+    expect(data).to.have.property('parts');
+  });
+}
+
+docs {
+  Get the assessment currently assigned to a job.
+
+  Returns the full assessment details including parts and scheduling config.
+  Returns 404 if no assessment is assigned to the job.
+}

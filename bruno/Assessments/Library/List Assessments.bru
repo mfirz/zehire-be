@@ -1,0 +1,52 @@
+meta {
+  name: List Assessments
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/v1/assessments?status=active
+  body: none
+  auth: bearer
+}
+
+params:query {
+  status: active
+  ~limit: 20
+  ~offset: 0
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    const data = res.getBody();
+    if (data.assessments && data.assessments.length > 0) {
+      bru.setEnvVar('assessment_id', data.assessments[0].id);
+      console.log('Assessment ID saved:', data.assessments[0].id);
+    }
+  }
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Response has assessments array", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('assessments');
+    expect(data.assessments).to.be.an('array');
+  });
+}
+
+docs {
+  List all assessments in the organization library.
+
+  **Query params:**
+  - status: Filter by status (active, archived). Defaults to active.
+  - limit: Number of items per page
+  - offset: Pagination offset
+}

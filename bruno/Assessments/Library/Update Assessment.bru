@@ -1,0 +1,80 @@
+meta {
+  name: Update Assessment
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{base_url}}/v1/assessments/{{assessment_id}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "name": "Frontend Technical Assessment (Updated)",
+    "parts": [
+      {
+        "name": "Coding Challenge",
+        "instructions": "Build a responsive React component that fetches data from a provided API endpoint and displays it in a sortable, filterable table. Include error handling, loading states, and pagination. You may use any styling approach.",
+        "evidenceDescription": "Can write clean, working frontend code with proper state management and UX considerations",
+        "required": true
+      },
+      {
+        "name": "Architecture Document",
+        "instructions": "Write a design document (2-3 pages) describing how you would architect a real-time collaborative editing feature for a web application. Include data flow diagrams, technology choices, and tradeoff analysis.",
+        "evidenceDescription": "Can think through complex system design problems and communicate technical decisions clearly",
+        "required": true
+      }
+    ],
+    "scheduling": {
+      "scheduleWithinDays": 10,
+      "completeWithinHours": 72,
+      "maxReschedules": 3
+    }
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    const data = res.getBody();
+    if (data.parts && data.parts.length > 0) {
+      bru.setEnvVar('part_id', data.parts[0].id);
+      console.log('Part ID saved:', data.parts[0].id);
+    }
+  }
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Assessment name is updated", function() {
+    const data = res.getBody();
+    expect(data.name).to.equal('Frontend Technical Assessment (Updated)');
+  });
+
+  test("Parts are synced (replace semantics)", function() {
+    const data = res.getBody();
+    expect(data.parts).to.be.an('array');
+    expect(data.parts.length).to.equal(2);
+  });
+}
+
+docs {
+  Update an assessment in the library.
+
+  **Parts use sync/replace semantics:** The provided parts array fully replaces the existing parts. Omitted parts are removed, new parts are created.
+
+  **Fields that can be updated:**
+  - name: Assessment display name
+  - parts: Full replacement of all parts
+  - scheduling: Scheduling configuration
+
+  Changes do not affect candidates who have already been invited.
+}

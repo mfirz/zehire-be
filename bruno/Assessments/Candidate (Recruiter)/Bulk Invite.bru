@@ -1,0 +1,59 @@
+meta {
+  name: Bulk Invite
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/assessment/invites
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "candidateIds": [
+      "{{application_id}}"
+    ]
+  }
+}
+
+tests {
+  test("Status code is 200 or 201", function() {
+    const status = res.getStatus();
+    expect(status === 200 || status === 201).to.be.true;
+  });
+
+  test("Response contains results for each candidate", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('results');
+    expect(data.results).to.be.an('array');
+    expect(data.results.length).to.be.greaterThan(0);
+  });
+
+  test("Each result has status", function() {
+    const data = res.getBody();
+    data.results.forEach(function(result) {
+      expect(result).to.have.property('candidateId');
+      expect(result).to.have.property('status');
+    });
+  });
+}
+
+docs {
+  Invite multiple candidates to take an assessment in bulk.
+
+  **Body:**
+  - candidateIds: Array of application IDs to invite
+
+  **Returns:** An array of results, one per candidate, indicating:
+  - "invited": Successfully invited
+  - "already_invited": Candidate already has an active invitation
+  - "error": Failed to invite (with reason)
+
+  Candidates who already have active invitations are skipped (not duplicated).
+}

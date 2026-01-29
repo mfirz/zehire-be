@@ -73,25 +73,6 @@ export type PipelineRecommendation = z.infer<typeof PipelineRecommendationSchema
 // =============================================================================
 
 /**
- * Assessment configuration (editable by recruiter).
- */
-export const AssessmentConfigSchema = z.object({
-  enabled: z.boolean(),
-  providerId: z.string().nullable(),
-  config: z
-    .object({
-      testId: z.string().optional(),
-      testUrl: z.string().optional(),
-      timeLimit: z.number().optional(),
-      deadline: z.number().optional(),
-      instructions: z.string().optional(),
-    })
-    .nullable(),
-});
-
-export type AssessmentConfig = z.infer<typeof AssessmentConfigSchema>;
-
-/**
  * Interview round configuration (editable by recruiter).
  */
 export const InterviewRoundConfigSchema = z.object({
@@ -110,7 +91,6 @@ export type InterviewRoundConfig = z.infer<typeof InterviewRoundConfigSchema>;
  * This is stored in pipeline column.
  */
 export const PipelineConfigSchema = z.object({
-  assessment: AssessmentConfigSchema,
   interviewRounds: z.array(InterviewRoundConfigSchema),
   totalDurationMinutes: z.number(), // Calculated from interviewRounds
 });
@@ -146,7 +126,6 @@ export type InterviewRoundUpdate = z.infer<typeof InterviewRoundUpdateSchema>;
  * All fields are optional for partial updates.
  */
 export const PipelineUpdateSchema = z.object({
-  assessment: AssessmentConfigSchema.optional(),
   interviewRounds: z.array(InterviewRoundUpdateSchema).optional(),
 });
 

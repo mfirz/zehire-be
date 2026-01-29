@@ -1,0 +1,37 @@
+meta {
+  name: Cancel Assessment
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/candidates/{{application_id}}/assessment/cancel
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Assessment is cancelled", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('status');
+    expect(data.status).to.equal('cancelled');
+  });
+}
+
+docs {
+  Cancel an active assessment for a candidate.
+
+  **Cancellable statuses:** invited, scheduled, in_progress
+  **Non-cancellable:** submitted, evaluated, expired, cancelled
+
+  The candidate will no longer be able to access the assessment portal.
+  A new assessment can be re-issued by calling Invite Candidate again.
+}
