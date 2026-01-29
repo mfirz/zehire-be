@@ -1,0 +1,40 @@
+meta {
+  name: Create Logistical Question
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/custom-questions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "category": "logistical",
+    "answerType": "number",
+    "questionText": "What is your expected annual salary (USD)?",
+    "required": false,
+    "minValue": 0,
+    "maxValue": 1000000
+  }
+}
+
+docs {
+  Create a logistical custom question (number) for a job.
+
+  Logistical questions collect practical information from candidates.
+
+  **Fields:**
+  - category: "logistical"
+  - answerType: "number"
+  - questionText: The question to ask
+  - required: Whether the question is required
+  - minValue: Minimum acceptable value
+  - maxValue: Maximum acceptable value
+}

@@ -1,0 +1,27 @@
+meta {
+  name: Suggest Signals for Question
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{base_url}}/v1/custom-questions/suggest-signals
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "questionText": "Describe a time when you had to make a difficult decision with incomplete information."
+  }
+}
+
+docs {
+  Suggest target signals for an evaluative question.
+
+  Given a question text, returns suggested competency signals that the question could evaluate.
+}

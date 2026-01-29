@@ -1,0 +1,27 @@
+meta {
+  name: Set Triage Status
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{base_url}}/v1/applications/{{application_id}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "triageStatus": "SHORTLIST"
+  }
+}
+
+docs {
+  Set the triage status of an application.
+
+  **Triage statuses:** SHORTLIST, MAYBE, REJECT
+}

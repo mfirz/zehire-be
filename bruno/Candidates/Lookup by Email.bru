@@ -1,0 +1,25 @@
+meta {
+  name: Lookup by Email
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/v1/candidates/lookup?email=candidate@example.com
+  body: none
+  auth: bearer
+}
+
+params:query {
+  email: candidate@example.com
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Look up all applications by a candidate email.
+
+  Only returns applications for jobs in your organization.
+}

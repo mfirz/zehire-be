@@ -1,0 +1,25 @@
+meta {
+  name: Send Scheduling Invite
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{base_url}}/v1/applications/{{application_id}}/schedule-invite
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "stageId": "{{stage_id}}"
+  }
+}
+
+docs {
+  Send a scheduling invite to the applicant for a specific interview stage.
+}

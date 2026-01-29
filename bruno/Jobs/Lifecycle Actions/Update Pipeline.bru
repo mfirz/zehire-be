@@ -1,0 +1,55 @@
+meta {
+  name: Update Pipeline
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{base_url}}/v1/jobs/{{job_id}}/pipeline
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "assessment": {
+      "enabled": true,
+      "providerId": "hackerrank",
+      "config": {
+        "testId": "test-123",
+        "timeLimit": 90
+      }
+    },
+    "interviewRounds": [
+      {
+        "id": "stage_abc123",
+        "name": "Technical Screen",
+        "duration": 45,
+        "focus": "Technical fundamentals"
+      },
+      {
+        "name": "New Stage (no id = create)",
+        "duration": 30,
+        "focus": "New stage without id will be created (draft only)"
+      }
+    ]
+  }
+}
+
+docs {
+  Update pipeline configuration.
+
+  **Editing by Job Status:**
+  - draft: Structure only (assessment, stages name/duration/focus)
+  - published/paused: Operations only (interviewerIds, mode)
+  - closed: No edits allowed
+
+  **Stage Operations (Draft Only):**
+  - With id: Update existing stage
+  - Without id: Create new stage
+  - Stage not in request: Delete that stage
+}

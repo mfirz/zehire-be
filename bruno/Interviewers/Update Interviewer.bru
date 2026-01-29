@@ -1,0 +1,29 @@
+meta {
+  name: Update Interviewer
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{base_url}}/v1/interviewers/{{interviewer_id}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "name": "John D. Smith",
+    "timezone": "America/New_York",
+    "status": "active"
+  }
+}
+
+docs {
+  Update an interviewer's details.
+
+  **Optional fields:** name, timezone, status
+}

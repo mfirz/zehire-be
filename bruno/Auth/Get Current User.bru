@@ -1,0 +1,23 @@
+meta {
+  name: Get Current User
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/auth/me
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Get current authenticated user info.
+
+  Returns: id, email, name, role, orgId
+
+  Requires valid JWT token.
+}

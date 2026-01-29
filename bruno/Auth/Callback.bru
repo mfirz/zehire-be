@@ -1,0 +1,50 @@
+meta {
+  name: Callback
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/auth/callback?token=PASTE_TOKEN_HERE
+  body: none
+  auth: none
+}
+
+params:query {
+  token: PASTE_TOKEN_HERE
+}
+
+script:post-response {
+  // Auto-save JWT token from session cookie
+  const cookies = res.getHeader('Set-Cookie');
+  if (cookies) {
+    const sessionMatch = cookies.match(/zehire_session=([^;]+)/);
+    if (sessionMatch && sessionMatch[1]) {
+      bru.setEnvVar('jwt_token', sessionMatch[1]);
+      console.log('JWT token saved to environment variable');
+    }
+  }
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Response contains user info", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('user');
+    expect(data.user).to.have.property('id');
+    expect(data.user).to.have.property('email');
+  });
+}
+
+docs {
+  Complete magic link authentication.
+
+  **Steps:**
+  1. Copy the token from the magic link in your email
+  2. Replace `PASTE_TOKEN_HERE` with the actual token
+  3. Send request
+  4. JWT will be auto-saved to environment variable
+}

@@ -1,0 +1,17 @@
+meta {
+  name: Mark Unavailable Today
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{base_url}}/i/{{interviewer_token}}/unavailable-today
+  body: none
+  auth: none
+}
+
+docs {
+  Mark the interviewer as unavailable for the rest of today.
+
+  Uses magic token in URL path for authentication.
+}

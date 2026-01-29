@@ -1,0 +1,21 @@
+meta {
+  name: List Custom Questions
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/v1/jobs/{{job_id}}/custom-questions
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  List all custom questions for a job.
+
+  Returns questions ordered by their position.
+}

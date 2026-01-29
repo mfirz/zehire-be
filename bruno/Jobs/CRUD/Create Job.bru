@@ -1,0 +1,90 @@
+meta {
+  name: Create Job
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/v1/jobs
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "title": "Senior Software Engineer",
+    "description": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            { "type": "text", "text": "We are looking for a " },
+            { "type": "text", "marks": [{"type": "bold"}], "text": "senior software engineer" },
+            { "type": "text", "text": " to join our growing team." }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            { "type": "text", "text": "You will be responsible for designing and implementing scalable backend systems, mentoring junior developers, and collaborating with product managers to deliver high-quality features." }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": { "level": 3 },
+          "content": [{ "type": "text", "text": "Requirements" }]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "5+ years of experience with distributed systems" }] }] },
+            { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Strong problem-solving skills" }] }] },
+            { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Excellent communication abilities" }] }] }
+          ]
+        }
+      ]
+    },
+    "companyName": "Acme Corp",
+    "department": "Engineering",
+    "location": "Remote",
+    "workType": "remote",
+    "employmentType": "fulltime",
+    "salaryMin": 120000,
+    "salaryMax": 180000,
+    "salaryCurrency": "USD"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    const data = res.getBody();
+    if (data.id) {
+      bru.setEnvVar('job_id', data.id);
+      console.log('Job ID saved:', data.id);
+    }
+  }
+}
+
+tests {
+  test("Status code is 201", function() {
+    expect(res.getStatus()).to.equal(201);
+  });
+
+  test("Response contains job ID", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('id');
+    expect(data.status).to.equal('draft');
+  });
+}
+
+docs {
+  Create a new job as draft.
+
+  **Required fields:** title, description (Tiptap JSON), workType, employmentType
+  **Optional fields:** companyName, department, location, salaryMin, salaryMax, salaryCurrency
+}

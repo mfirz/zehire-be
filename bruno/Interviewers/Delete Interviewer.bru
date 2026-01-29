@@ -1,0 +1,19 @@
+meta {
+  name: Delete Interviewer
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{base_url}}/v1/interviewers/{{interviewer_id}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Delete an interviewer.
+}

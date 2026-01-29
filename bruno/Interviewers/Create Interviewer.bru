@@ -1,0 +1,46 @@
+meta {
+  name: Create Interviewer
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/v1/interviewers
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "email": "interviewer@example.com",
+    "name": "John Smith"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    const data = res.getBody();
+    if (data.id) {
+      bru.setEnvVar('interviewer_id', data.id);
+      console.log('Interviewer ID saved:', data.id);
+    }
+    if (data._magicLink) {
+      const match = data._magicLink.match(/\/i\/([^/]+)$/);
+      if (match) {
+        bru.setEnvVar('interviewer_token', match[1]);
+        console.log('Interviewer token saved:', match[1]);
+      }
+    }
+  }
+}
+
+docs {
+  Create a new interviewer and send them a magic link invite.
+
+  **Required fields:** email, name
+  **Response:** Includes `_magicLink` with the interviewer portal access token.
+}

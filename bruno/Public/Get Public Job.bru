@@ -1,0 +1,17 @@
+meta {
+  name: Get Public Job
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/public/jobs/{{public_slug}}
+  body: none
+  auth: none
+}
+
+docs {
+  Get public job details by slug for candidates.
+
+  No authentication required. Only published jobs.
+}

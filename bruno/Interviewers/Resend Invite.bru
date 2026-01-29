@@ -1,0 +1,19 @@
+meta {
+  name: Resend Invite
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{base_url}}/v1/interviewers/{{interviewer_id}}/resend
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Resend the magic link invite email to an interviewer.
+}

@@ -1,0 +1,21 @@
+meta {
+  name: Get Pipeline
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/v1/jobs/{{job_id}}/pipeline
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Get pipeline recommendation and configuration.
+
+  Returns pipelineStatus, recommendation, config, and generatedAt.
+}

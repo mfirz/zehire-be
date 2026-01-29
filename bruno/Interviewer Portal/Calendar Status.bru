@@ -1,0 +1,17 @@
+meta {
+  name: Calendar Status
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{base_url}}/i/{{interviewer_token}}/calendar-status
+  body: none
+  auth: none
+}
+
+docs {
+  Get the status of the interviewer's calendar integration.
+
+  Uses magic token in URL path for authentication.
+}

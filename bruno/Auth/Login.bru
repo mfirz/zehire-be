@@ -1,0 +1,25 @@
+meta {
+  name: Login
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{user_email}}"
+  }
+}
+
+docs {
+  Initiate magic link login.
+
+  **Response:** 204 No Content on success (email sent)
+
+  Check your email for the magic link with token.
+}

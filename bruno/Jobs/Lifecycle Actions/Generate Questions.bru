@@ -1,0 +1,24 @@
+meta {
+  name: Generate Questions
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/generate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Queue a job for question generation.
+
+  **Rate Limits:** Max 20 regenerations, 1 min cooldown
+  **Response:** 202 Accepted with `{ "queued": true }`
+
+  Poll GET /v1/jobs/:id to check questionsStatus.
+}

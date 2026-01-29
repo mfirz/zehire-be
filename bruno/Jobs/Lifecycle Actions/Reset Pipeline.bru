@@ -1,0 +1,22 @@
+meta {
+  name: Reset Pipeline
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/pipeline/reset
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Reset pipeline configuration to AI recommendation.
+
+  No LLM call, instant, free, doesn't count against limit.
+  Job must be in draft status with completed pipeline.
+}

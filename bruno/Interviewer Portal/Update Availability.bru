@@ -1,0 +1,32 @@
+meta {
+  name: Update Availability
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{base_url}}/i/{{interviewer_token}}/availability
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "timezone": "America/New_York",
+    "windows": [
+      {"dayOfWeek": 1, "startTime": "09:00", "endTime": "17:00"},
+      {"dayOfWeek": 2, "startTime": "09:00", "endTime": "17:00"},
+      {"dayOfWeek": 3, "startTime": "09:00", "endTime": "17:00"},
+      {"dayOfWeek": 4, "startTime": "09:00", "endTime": "17:00"},
+      {"dayOfWeek": 5, "startTime": "09:00", "endTime": "17:00"}
+    ]
+  }
+}
+
+docs {
+  Update the interviewer's availability windows.
+
+  Uses magic token in URL path for authentication.
+
+  **Required fields:** timezone, windows (array of day/time slots)
+}

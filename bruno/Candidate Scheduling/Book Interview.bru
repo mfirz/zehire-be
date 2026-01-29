@@ -1,0 +1,37 @@
+meta {
+  name: Book Interview
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/schedule/{{scheduling_token}}/book
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "date": "2026-01-24",
+    "time": "14:00",
+    "timezone": "America/New_York"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200 || res.getStatus() === 201) {
+    const body = res.getBody();
+    if (body.interview && body.interview.id) {
+      bru.setEnvVar('interview_id', body.interview.id);
+      console.log('Interview ID saved:', body.interview.id);
+    }
+  }
+}
+
+docs {
+  Book an interview at a selected time slot.
+
+  Uses scheduling token in URL path for authentication.
+
+  **Required fields:** date, time, timezone
+}

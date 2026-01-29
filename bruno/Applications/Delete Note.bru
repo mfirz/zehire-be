@@ -1,0 +1,19 @@
+meta {
+  name: Delete Note
+  type: http
+  seq: 9
+}
+
+delete {
+  url: {{base_url}}/v1/applications/{{application_id}}/notes/{{note_id}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Delete a note from an application.
+}

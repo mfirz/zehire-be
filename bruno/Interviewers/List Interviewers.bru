@@ -1,0 +1,19 @@
+meta {
+  name: List Interviewers
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/v1/interviewers
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  List all interviewers for the authenticated organization.
+}

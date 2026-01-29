@@ -1,0 +1,21 @@
+meta {
+  name: Logout
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/auth/logout
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Clear session cookie.
+
+  **Response:** 204 No Content
+}

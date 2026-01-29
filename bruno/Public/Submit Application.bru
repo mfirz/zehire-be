@@ -1,0 +1,26 @@
+meta {
+  name: Submit Application
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/public/jobs/{{public_slug}}/apply
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  data: {"email":"candidate@example.com","name":"Jane Doe","answers":[{"archetypeId":"arch_technical_depth","answerText":"When I was leading the migration project When I was leading the migration project When I was leading the migration project When I was leading the migration project..."},{"archetypeId":"arch_decision_judgment","answerText":"I took full responsibility for I took full responsibility for I took full responsibility for I took full responsibility for..."},{"archetypeId":"arch_ownership","answerText":"There was a time when There was a time when There was a time when There was a time when There was a time when..."}],"customAnswers":[{"archetypeId":"cq_1","answerText":"There was a time when There was a time when There was a time when There was a time when There was a time when…"},{"archetypeId":"cq_2","answerText":"There was a time when There was a time when There was a time when There was a time when There was a time when…"},{"archetypeId":"cq_3","answerText":"There was a time when There was a time when There was a time when There was a time when There was a time when..."}]}
+  cv: @file(/Users/firz/Downloads/Muhammad-Faris-Zaini_Resume (1) (1) (1).pdf)
+}
+
+docs {
+  Submit a complete job application.
+  
+  Multipart form data with two fields:
+  - data: JSON string with email, name, answers, customAnswers
+  - cv: CV file upload
+  
+  All archetype questions must be answered.
+}

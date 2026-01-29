@@ -1,0 +1,40 @@
+meta {
+  name: Create Screening Question
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/custom-questions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "category": "screening",
+    "answerType": "yes_no",
+    "questionText": "Do you have authorization to work in the United States?",
+    "required": true,
+    "expectedAnswer": "yes",
+    "failAction": "flag"
+  }
+}
+
+docs {
+  Create a screening custom question (yes/no) for a job.
+
+  Screening questions filter candidates with expected answers.
+
+  **Fields:**
+  - category: "screening"
+  - answerType: "yes_no"
+  - questionText: The question to ask
+  - required: Whether the question is required
+  - expectedAnswer: The expected answer ("yes" or "no")
+  - failAction: Action when answer doesn't match ("flag")
+}

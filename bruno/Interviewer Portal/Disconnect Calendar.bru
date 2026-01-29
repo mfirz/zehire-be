@@ -1,0 +1,17 @@
+meta {
+  name: Disconnect Calendar
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{base_url}}/i/{{interviewer_token}}/disconnect
+  body: none
+  auth: none
+}
+
+docs {
+  Disconnect the interviewer's calendar integration.
+
+  Uses magic token in URL path for authentication.
+}

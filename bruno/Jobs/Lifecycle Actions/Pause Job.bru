@@ -1,0 +1,21 @@
+meta {
+  name: Pause Job
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/pause
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Pause a published job.
+
+  Hides from public view. Can be resumed. Pausing does NOT stop billing.
+}

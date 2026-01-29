@@ -1,0 +1,19 @@
+meta {
+  name: Resume Job
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/resume
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Resume a paused job. Makes job public again.
+}

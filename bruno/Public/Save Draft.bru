@@ -1,0 +1,54 @@
+meta {
+  name: Save Draft
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/public/jobs/{{public_slug}}/apply/draft
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "candidate@example.com",
+    "name": "Jane Doe",
+    "preferredName": "Jane",
+    "phone": "+1-555-123-4567",
+    "answers": [
+      {
+        "archetypeId": "situational_uncertainty_story",
+        "answerText": "When I was leading the migration project..."
+      },
+      {
+        "archetypeId": "ownership_of_outcome",
+        "answerText": ""
+      },
+      {
+        "archetypeId": "failure_and_recovery",
+        "answerText": ""
+      }
+    ]
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200 || res.getStatus() === 201) {
+    const data = res.getBody();
+    if (data.draftId) {
+      bru.setEnvVar('draft_id', data.draftId);
+      console.log('Draft ID saved:', data.draftId);
+    }
+    if (data.resumeToken) {
+      bru.setEnvVar('resume_token', data.resumeToken);
+      console.log('Resume token saved:', data.resumeToken);
+    }
+  }
+}
+
+docs {
+  Save a draft application for a public job.
+
+  Returns a draft ID and resume token for later retrieval.
+}

@@ -1,0 +1,37 @@
+meta {
+  name: Get Job
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/v1/jobs/{{job_id}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    const data = res.getBody();
+    if (data.publicSlug) {
+      bru.setEnvVar('public_slug', data.publicSlug);
+      console.log('Public slug saved:', data.publicSlug);
+    }
+  }
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+
+docs {
+  Get job status and details.
+
+  Response varies by job status (draft includes full editing data, published includes publicSlug).
+}

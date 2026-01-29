@@ -1,0 +1,31 @@
+meta {
+  name: Reorder Questions
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/custom-questions/reorder
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "questionIds": [
+      "question_id_3",
+      "question_id_1",
+      "question_id_2"
+    ]
+  }
+}
+
+docs {
+  Reorder custom questions for a job.
+
+  Provide the question IDs in the desired order. All question IDs must be included.
+}

@@ -1,0 +1,24 @@
+meta {
+  name: Generate Pipeline
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/generate-pipeline
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Queue a job for pipeline generation.
+
+  Pipeline includes: assessment recommendations, interview panel structure, evaluation criteria.
+
+  **Rate Limits:** Max 20 regenerations, 1 min cooldown
+  **Response:** 202 Accepted
+}

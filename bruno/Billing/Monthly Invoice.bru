@@ -1,0 +1,21 @@
+meta {
+  name: Monthly Invoice
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{base_url}}/v1/billing/2026/1/invoice
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Get the invoice for a specific month.
+
+  URL format: /v1/billing/:year/:month/invoice
+}

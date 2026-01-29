@@ -1,0 +1,27 @@
+meta {
+  name: Block Date
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{base_url}}/i/{{interviewer_token}}/block-date
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "date": "2026-01-25",
+    "reason": "Personal day"
+  }
+}
+
+docs {
+  Block a specific date from being scheduled.
+
+  Uses magic token in URL path for authentication.
+
+  **Required fields:** date
+  **Optional fields:** reason
+}

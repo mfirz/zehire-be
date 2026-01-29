@@ -1,0 +1,21 @@
+meta {
+  name: Delete Job
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{base_url}}/v1/jobs/{{job_id}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Delete a draft job.
+
+  Only draft jobs can be deleted. Published/paused/closed jobs cannot be deleted.
+}

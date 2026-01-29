@@ -1,0 +1,39 @@
+meta {
+  name: Submit Feedback
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{base_url}}/i/{{interviewer_token}}/interviews/{{interview_id}}/feedback
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "recommendation": "advance",
+    "recommendationReason": "Strong technical skills demonstrated through clear system design discussion",
+    "observations": [
+      {
+        "signal": "technical_depth",
+        "observation": "clear",
+        "evidence": "Demonstrated deep knowledge of distributed systems, explained CAP theorem tradeoffs"
+      },
+      {
+        "signal": "communication_clarity",
+        "observation": "clear",
+        "evidence": "Explained complex architectural concepts clearly with good use of diagrams"
+      }
+    ],
+    "summary": "Strong candidate with excellent technical background. Recommend advancing to next round."
+  }
+}
+
+docs {
+  Submit interview feedback for a specific interview.
+
+  Uses magic token in URL path for authentication.
+
+  **Required fields:** recommendation, recommendationReason, observations, summary
+}

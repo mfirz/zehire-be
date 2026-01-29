@@ -1,0 +1,21 @@
+meta {
+  name: Monthly Usage
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/v1/billing/2026/1
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Get billing usage for a specific month.
+
+  URL format: /v1/billing/:year/:month
+}

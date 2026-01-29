@@ -1,0 +1,32 @@
+meta {
+  name: List Jobs
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/v1/jobs?limit=20
+  body: none
+  auth: bearer
+}
+
+params:query {
+  limit: 20
+  ~cursor:
+  ~status: draft
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  List jobs for the authenticated organization.
+
+  Supports cursor-based pagination.
+
+  **Query params:**
+  - limit: Number of items (max: 50)
+  - cursor: Pagination cursor
+  - status: Filter by draft, published, paused, closed
+}

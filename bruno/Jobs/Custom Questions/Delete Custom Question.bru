@@ -1,0 +1,21 @@
+meta {
+  name: Delete Custom Question
+  type: http
+  seq: 9
+}
+
+delete {
+  url: {{base_url}}/v1/jobs/{{job_id}}/custom-questions/{{custom_question_id}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Delete a custom question.
+
+  Permanently removes the custom question from the job.
+}

@@ -1,0 +1,19 @@
+meta {
+  name: Get Application Posture
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{base_url}}/v1/applications/{{application_id}}/posture
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Get the posture analysis for an application.
+}

@@ -1,0 +1,43 @@
+meta {
+  name: Create Logistical Question (Multiple Choice)
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/custom-questions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "category": "logistical",
+    "answerType": "multiple_choice",
+    "questionText": "Which office locations would work for you?",
+    "required": true,
+    "options": [
+      "New York",
+      "San Francisco",
+      "Austin",
+      "Remote"
+    ]
+  }
+}
+
+docs {
+  Create a logistical custom question (multiple choice) for a job.
+
+  Logistical questions with multiple selectable options.
+
+  **Fields:**
+  - category: "logistical"
+  - answerType: "multiple_choice"
+  - questionText: The question to ask
+  - required: Whether the question is required
+  - options: Array of selectable options (candidates can pick multiple)
+}

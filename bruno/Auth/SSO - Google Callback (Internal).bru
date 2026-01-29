@@ -1,0 +1,31 @@
+meta {
+  name: SSO - Google Callback (Internal)
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{base_url}}/auth/sso/google/callback?code=AUTH_CODE&state=STATE
+  body: none
+  auth: none
+}
+
+params:query {
+  code: AUTH_CODE
+  state: STATE
+}
+
+docs {
+  Handle OAuth callback from Google.
+
+  **Note:** This endpoint is called automatically by Google after user authorization. Not meant to be called directly.
+
+  **On Success:** Session cookie is set, redirects to returnUrl
+
+  **Error Codes (via redirect):**
+  - `invalid_provider` - Unknown provider
+  - `invalid_state` - CSRF validation failed
+  - `auth_failed` - OAuth error
+  - `user_not_registered` - Email not in system
+  - `no_organization` - User has no org
+}

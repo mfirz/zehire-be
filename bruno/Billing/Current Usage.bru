@@ -1,0 +1,19 @@
+meta {
+  name: Current Usage
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/v1/billing
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Get current billing usage for the authenticated organization.
+}

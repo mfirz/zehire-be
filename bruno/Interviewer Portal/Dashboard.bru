@@ -1,0 +1,17 @@
+meta {
+  name: Dashboard
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/i/{{interviewer_token}}
+  body: none
+  auth: none
+}
+
+docs {
+  Get the interviewer portal dashboard.
+
+  Uses magic token in URL path for authentication.
+}

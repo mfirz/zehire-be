@@ -1,0 +1,38 @@
+meta {
+  name: Update Job
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{base_url}}/v1/jobs/{{job_id}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "title": "Senior Backend Engineer",
+    "department": "Backend Team",
+    "location": "Remote (US)",
+    "workType": "remote",
+    "employmentType": "fulltime",
+    "salaryMin": 150000,
+    "salaryMax": 200000,
+    "salaryCurrency": "USD"
+  }
+}
+
+docs {
+  Update a draft job's content.
+
+  Only draft jobs can be updated. All fields are optional.
+
+  **Content Change Behavior** (when title or description changes):
+  - Questions: Reset to `none` and must be regenerated
+  - Pipeline: Marked as stale but preserved
+}

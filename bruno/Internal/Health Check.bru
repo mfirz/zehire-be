@@ -1,0 +1,17 @@
+meta {
+  name: Health Check
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/internal/health
+  body: none
+  auth: none
+}
+
+docs {
+  Health check endpoint.
+
+  No authentication required.
+}

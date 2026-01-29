@@ -1,0 +1,29 @@
+meta {
+  name: SSO - Initiate Google Login
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{base_url}}/auth/sso/google?returnUrl=/
+  body: none
+  auth: none
+}
+
+params:query {
+  returnUrl: /
+}
+
+docs {
+  Initiate SSO login with Google.
+
+  **Note:** This endpoint redirects to Google OAuth. Open in browser to test.
+
+  **Flow:**
+  1. User is redirected to Google
+  2. User authorizes the application
+  3. Google redirects to /auth/sso/google/callback
+  4. Session cookie is set and user is redirected to returnUrl
+
+  **Important:** SSO only works for existing users.
+}

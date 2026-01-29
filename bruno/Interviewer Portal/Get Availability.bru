@@ -1,0 +1,17 @@
+meta {
+  name: Get Availability
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/i/{{interviewer_token}}/availability
+  body: none
+  auth: none
+}
+
+docs {
+  Get the interviewer's current availability settings.
+
+  Uses magic token in URL path for authentication.
+}

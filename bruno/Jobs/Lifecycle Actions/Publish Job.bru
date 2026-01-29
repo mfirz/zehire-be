@@ -1,0 +1,32 @@
+meta {
+  name: Publish Job
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/publish
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    const data = res.getBody();
+    if (data.publicSlug) {
+      bru.setEnvVar('public_slug', data.publicSlug);
+      console.log('Public slug saved:', data.publicSlug);
+    }
+  }
+}
+
+docs {
+  Publish a draft job.
+
+  **Prerequisites:** Questions and Pipeline must be completed.
+  **Effects:** Generates public slug, starts billing.
+}

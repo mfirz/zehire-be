@@ -1,0 +1,19 @@
+meta {
+  name: Get Interviewer
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/v1/interviewers/{{interviewer_id}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Get details for a specific interviewer.
+}

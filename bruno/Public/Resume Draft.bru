@@ -1,0 +1,21 @@
+meta {
+  name: Resume Draft
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/public/jobs/{{public_slug}}/apply/draft/{{draft_id}}?token={{resume_token}}
+  body: none
+  auth: none
+}
+
+params:query {
+  token: {{resume_token}}
+}
+
+docs {
+  Resume a previously saved draft application.
+
+  Requires the draft ID and resume token from the Save Draft response.
+}

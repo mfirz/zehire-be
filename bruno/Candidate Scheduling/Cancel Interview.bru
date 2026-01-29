@@ -1,0 +1,25 @@
+meta {
+  name: Cancel Interview
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{base_url}}/schedule/{{scheduling_token}}/cancel
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "reason": "Accepted another position"
+  }
+}
+
+docs {
+  Cancel a scheduled interview.
+
+  Uses scheduling token in URL path for authentication.
+
+  **Optional fields:** reason
+}

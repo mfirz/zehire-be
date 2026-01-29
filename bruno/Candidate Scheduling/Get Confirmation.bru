@@ -1,0 +1,17 @@
+meta {
+  name: Get Confirmation
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{base_url}}/schedule/{{scheduling_token}}/confirmation
+  body: none
+  auth: none
+}
+
+docs {
+  Get the booking confirmation details.
+
+  Uses scheduling token in URL path for authentication.
+}

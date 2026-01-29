@@ -1,0 +1,17 @@
+meta {
+  name: List Interviews
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/i/{{interviewer_token}}/interviews
+  body: none
+  auth: none
+}
+
+docs {
+  List all interviews assigned to this interviewer.
+
+  Uses magic token in URL path for authentication.
+}

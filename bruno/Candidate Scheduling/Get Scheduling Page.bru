@@ -1,0 +1,17 @@
+meta {
+  name: Get Scheduling Page
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/schedule/{{scheduling_token}}
+  body: none
+  auth: none
+}
+
+docs {
+  Get the scheduling page for a candidate.
+
+  Uses scheduling token in URL path for authentication.
+}

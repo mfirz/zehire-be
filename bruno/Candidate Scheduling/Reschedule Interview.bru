@@ -1,0 +1,27 @@
+meta {
+  name: Reschedule Interview
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{base_url}}/schedule/{{scheduling_token}}/reschedule
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "date": "2026-01-27",
+    "time": "10:00",
+    "timezone": "America/New_York"
+  }
+}
+
+docs {
+  Reschedule an existing interview to a new time slot.
+
+  Uses scheduling token in URL path for authentication.
+
+  **Required fields:** date, time, timezone
+}

@@ -1,0 +1,19 @@
+meta {
+  name: Get Capacity
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/v1/capacity
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  Get capacity information for the authenticated organization.
+}

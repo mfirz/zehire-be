@@ -1,0 +1,28 @@
+meta {
+  name: Get Available Slots
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/schedule/{{scheduling_token}}/slots?timezone=America/New_York
+  body: none
+  auth: none
+}
+
+params:query {
+  timezone: America/New_York
+  ~startDate:
+  ~endDate:
+}
+
+docs {
+  Get available interview time slots for a candidate.
+
+  Uses scheduling token in URL path for authentication.
+
+  **Query params:**
+  - timezone: Candidate's timezone (required)
+  - startDate: Filter slots from this date (optional)
+  - endDate: Filter slots until this date (optional)
+}

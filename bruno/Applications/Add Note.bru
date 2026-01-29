@@ -1,0 +1,25 @@
+meta {
+  name: Add Note
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{base_url}}/v1/applications/{{application_id}}/notes
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "content": "Strong candidate with relevant experience. Follow up on system design skills in interview."
+  }
+}
+
+docs {
+  Add a note to an application.
+}

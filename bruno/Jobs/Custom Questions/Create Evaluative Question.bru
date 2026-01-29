@@ -1,0 +1,52 @@
+meta {
+  name: Create Evaluative Question
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/custom-questions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "category": "evaluative",
+    "answerType": "free_text",
+    "questionText": "Describe a situation where you had to push back on a stakeholder's request. What was the outcome?",
+    "required": true,
+    "targetSignals": [
+      "stakeholder_management",
+      "communication_clarity",
+      "accountability"
+    ]
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    const data = res.getBody();
+    if (data.id) {
+      bru.setEnvVar('custom_question_id', data.id);
+      console.log('Custom Question ID saved:', data.id);
+    }
+  }
+}
+
+docs {
+  Create an evaluative custom question for a job.
+
+  Evaluative questions assess candidate competencies with target signals.
+
+  **Fields:**
+  - category: "evaluative"
+  - answerType: "free_text"
+  - questionText: The question to ask
+  - required: Whether the question is required
+  - targetSignals: Array of competency signals to evaluate
+}

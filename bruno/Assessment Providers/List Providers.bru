@@ -1,0 +1,19 @@
+meta {
+  name: List Providers
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/v1/assessment-providers
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+docs {
+  List all available assessment providers for the authenticated organization.
+}

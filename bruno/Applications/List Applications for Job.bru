@@ -1,0 +1,62 @@
+meta {
+  name: List Applications for Job
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/v1/jobs/{{job_id}}/applications?limit=20
+  body: none
+  auth: bearer
+}
+
+params:query {
+  limit: 20
+  ~offset: 0
+  ~status: pending
+  ~signalsStatus: completed
+  ~posture: LOW_REGRET_RISK
+  ~triageStatus: SHORTLIST
+  ~sort: createdAt
+  ~order: desc
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    const data = res.getBody();
+    if (data.applications && data.applications.length > 0) {
+      bru.setEnvVar('application_id', data.applications[0].id);
+      console.log('Application ID saved:', data.applications[0].id);
+    }
+  }
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Response has applications array", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('applications');
+    expect(data.applications).to.be.an('array');
+  });
+}
+
+docs {
+  List applications for a specific job.
+
+  **Query params:**
+  - limit: Number of items per page
+  - offset: Pagination offset
+  - status: Filter by application status (e.g. pending, screening)
+  - signalsStatus: Filter by signals processing status (e.g. completed)
+  - posture: Filter by posture (e.g. LOW_REGRET_RISK)
+  - triageStatus: Filter by triage status (e.g. SHORTLIST)
+  - sort: Sort field (e.g. createdAt)
+  - order: Sort order (asc, desc)
+}

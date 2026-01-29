@@ -1,0 +1,51 @@
+meta {
+  name: Create Screening Question (Choice)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/custom-questions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+body:json {
+  {
+    "category": "screening",
+    "answerType": "single_choice",
+    "questionText": "What is your highest level of education?",
+    "required": true,
+    "options": [
+      "High School",
+      "Bachelor's Degree",
+      "Master's Degree",
+      "PhD"
+    ],
+    "expectedAnswer": [
+      "Bachelor's Degree",
+      "Master's Degree",
+      "PhD"
+    ],
+    "failAction": "flag"
+  }
+}
+
+docs {
+  Create a screening custom question (single choice) for a job.
+
+  Screening questions with single choice options and multiple acceptable answers.
+
+  **Fields:**
+  - category: "screening"
+  - answerType: "single_choice"
+  - questionText: The question to ask
+  - required: Whether the question is required
+  - options: Array of choice options
+  - expectedAnswer: Array of acceptable answers
+  - failAction: Action when answer doesn't match ("flag")
+}
