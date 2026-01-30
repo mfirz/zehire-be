@@ -161,6 +161,10 @@ SchedulingConfig
 └── maxReschedules: number (default: 2)
 ```
 
+**Deadline formulas:**
+- `scheduleDeadline = invitedAt + scheduleWithinDays` (days)
+- `completionDeadline = scheduledFor + completeWithinHours` (hours)
+
 ### JobAssessment
 
 ```
@@ -289,10 +293,11 @@ When a candidate or recruiter accesses a CandidateAssessment, the server checks 
 | Current Status | Condition | Transition To |
 |---|---|---|
 | `invited` | `now > scheduleDeadline` | `schedule_expired` |
-| `scheduled` | `now >= scheduledFor` | `in_progress` |
 | `in_progress` | `now > completionDeadline + 10min grace` | `expired` |
 
 The transition is applied (DB write) before returning the response. This ensures candidates always see the correct status instantly.
+
+**Note:** `scheduled → in_progress` is NOT a lazy transition. It requires the candidate to explicitly call `POST /assess/{token}/start` after the scheduled time arrives.
 
 ### Cron Job (Secondary — Hourly)
 
@@ -327,7 +332,7 @@ Base URL: `/api/v1`
 
 ### File Download Authorization
 
-File downloads (`GET /v1/assessments/files/{fileId}`) are accessible to any recruiter or admin within the organization. Access is scoped to the organization, not to the individual recruiter who invited the candidate.
+File downloads (`GET /assessments/files/{fileId}`) are accessible to any recruiter or admin within the organization. Access is scoped to the organization, not to the individual recruiter who invited the candidate.
 
 ---
 
@@ -761,7 +766,7 @@ Response: 200 OK (submitted)
             "size": 2400000,
             "mimeType": "application/zip",
             "uploadedAt": "2026-02-01T08:30:00Z",
-            "downloadUrl": "/v1/assessments/files/file_123"
+            "downloadUrl": "/assessments/files/file_123"
           }
         ]
       },
@@ -775,7 +780,7 @@ Response: 200 OK (submitted)
             "size": 450000,
             "mimeType": "application/pdf",
             "uploadedAt": "2026-02-01T09:15:00Z",
-            "downloadUrl": "/v1/assessments/files/file_124"
+            "downloadUrl": "/assessments/files/file_124"
           }
         ]
       }
@@ -908,10 +913,11 @@ Response: 200 OK
   }
 }
 
+Cancellable statuses: `invited`, `schedule_expired`, `scheduled`, `in_progress`.
+
 Errors:
-- 400 ALREADY_SUBMITTED: Cannot cancel after submission
-- 400 ALREADY_EVALUATED: Cannot cancel after evaluation
-- 400 ALREADY_CANCELLED: Already cancelled
+- 400 ALREADY_SUBMITTED: Cannot cancel after submission or evaluation
+- 400 ALREADY_CANCELLED: Already cancelled or in a non-cancellable state (`expired`)
 ```
 
 ---
@@ -928,7 +934,8 @@ Middleware validates the token on every request: DB lookup → expiry check → 
 ```
 GET /assess/{token}
 
-Response varies based on status. Instructions are only revealed when status is `in_progress`.
+Response varies based on status. The response shape changes significantly per status — this is intentional (status-driven response).
+Instructions and evidenceDescription are hidden (null) until the candidate starts (`in_progress`). `evidenceDescription` is recruiter-facing context and is also omitted from candidate responses even after start.
 Lazy status transitions are applied before returning (see Status Transition Mechanism).
 ```
 
@@ -1269,7 +1276,7 @@ Optional parts can be submitted without files.
 #### Download File
 
 ```
-GET /v1/assessments/files/{fileId}
+GET /assessments/files/{fileId}
 
 Headers:
 - Authorization: Bearer {recruiterJWT}
@@ -1428,7 +1435,7 @@ Follows the same pattern as interview pipeline CRUD:
 | | `POST` | `/assess/{token}/parts/{partId}/files` | Upload file |
 | | `DELETE` | `/assess/{token}/parts/{partId}/files/{fileId}` | Delete file |
 | | `POST` | `/assess/{token}/submit` | Submit |
-| **Files** | `GET` | `/v1/assessments/files/{fileId}` | Download file |
+| **Files** | `GET` | `/assessments/files/{fileId}` | Download file |
 
 **Total: 16 endpoints**
 
@@ -1439,5 +1446,6 @@ Follows the same pattern as interview pipeline CRUD:
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | January 2026 | Initial MVP specification |
-| 1.1 | January 2026 | Added: timezone handling, 5-min grace period, bulk invite, evaluation updates, merged candidate view. Changed: `usedByJobs` → `usedByActiveJobs`. |
-| 1.2 | January 2026 | **Breaking changes from v1.1 review.** Replaced external assessment providers with in-house library. Changed: candidate auth to opaque tokens (`/assess/{token}/...`), grace period 5min → 10min, max file size 100MB → 50MB, archive via `PATCH` not `DELETE`, removed `usedByActiveJobs` and `remainingTime`, removed `PUT` with null for removal (use `DELETE` only), removed `order` from parts (array position is order). Added: `required` field on parts, hybrid status transition mechanism (lazy eval + cron), queue-based auto-cancel on job close, candidate token model, standardized file fields, terminal status responses (expired/cancelled). Kept existing candidate stages unchanged. |
+| 1.1 | January 2026 | Added: timezone handling, grace period, evaluation updates, merged candidate view. |
+| 1.2 | January 2026 | **Breaking changes from v1.1 review.** Replaced external assessment providers with in-house library. Changed: candidate auth to opaque tokens (`/assess/{token}/...`), grace period 5min → 10min, max file size 100MB → 50MB, archive via `PATCH` not `DELETE`, removed `PUT` with null for removal (use `DELETE` only), removed `order` from parts (array position is order). Added: `required` field on parts, hybrid status transition mechanism (lazy eval + cron), queue-based auto-cancel on job close, candidate token model, terminal status responses (expired/cancelled). |
+| 1.3 | January 2026 | **Implementation alignment.** Removed bulk invite (not implemented). Removed PATCH evaluate (POST handles re-evaluation). Added `POST /assess/{token}/start` endpoint. Fixed invite path (`/assessment/invite`), file download path (`/assessments/files/{fileId}`), `candidateId` → `applicationId`. Fixed lazy eval table (removed `scheduled → in_progress` — requires explicit `/start`). Added deadline formulas, cancel allowed statuses, instruction visibility notes. |
