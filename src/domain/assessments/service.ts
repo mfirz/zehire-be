@@ -582,9 +582,19 @@ export class AssessmentService {
     // Get files already uploaded
     const files = await this.repo.getFilesForAssessment(updated.id);
 
+    // Hide instructions and evidenceDescription before candidate has started
+    const hiddenStatuses = ["invited", "scheduled", "schedule_expired", "cancelled"];
+    const sanitizedParts = hiddenStatuses.includes(updated.status)
+      ? parts.map((p) => ({
+          ...p,
+          instructions: null as unknown as string,
+          evidenceDescription: null as unknown as string,
+        }))
+      : parts;
+
     return {
       success: true,
-      data: { assessment: updated, definition, parts, scheduling, files },
+      data: { assessment: updated, definition, parts: sanitizedParts, scheduling, files },
     };
   }
 

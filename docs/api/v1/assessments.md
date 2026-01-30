@@ -327,7 +327,7 @@ Base URL: `/api/v1`
 
 ### File Download Authorization
 
-File downloads (`GET /files/{id}`) are accessible to any recruiter or admin within the organization. Access is scoped to the organization, not to the individual recruiter who invited the candidate.
+File downloads (`GET /v1/assessments/files/{fileId}`) are accessible to any recruiter or admin within the organization. Access is scoped to the organization, not to the individual recruiter who invited the candidate.
 
 ---
 
@@ -666,7 +666,7 @@ Errors:
 #### Get Candidate Assessment
 
 ```
-GET /jobs/{jobId}/candidates/{candidateId}/assessment
+GET /jobs/{jobId}/candidates/{applicationId}/assessment
 
 Response: 200 OK (not invited)
 {
@@ -761,7 +761,7 @@ Response: 200 OK (submitted)
             "size": 2400000,
             "mimeType": "application/zip",
             "uploadedAt": "2026-02-01T08:30:00Z",
-            "downloadUrl": "/files/file_123"
+            "downloadUrl": "/v1/assessments/files/file_123"
           }
         ]
       },
@@ -775,7 +775,7 @@ Response: 200 OK (submitted)
             "size": 450000,
             "mimeType": "application/pdf",
             "uploadedAt": "2026-02-01T09:15:00Z",
-            "downloadUrl": "/files/file_124"
+            "downloadUrl": "/v1/assessments/files/file_124"
           }
         ]
       }
@@ -823,7 +823,7 @@ Response: 200 OK (cancelled)
 #### Invite Candidate
 
 ```
-POST /jobs/{jobId}/candidates/{candidateId}/assessment
+POST /jobs/{jobId}/candidates/{applicationId}/assessment/invite
 
 Note: Body is optional. Uses job's attached assessment.
 
@@ -853,66 +853,10 @@ Errors:
 - 400 JOB_NOT_OPEN: Job is not open
 ```
 
-#### Bulk Invite Candidates
-
-```
-POST /jobs/{jobId}/assessment/invites
-
-Request:
-{
-  "candidateIds": ["cand_1", "cand_2", "cand_3"]
-}
-
-Response: 200 OK
-{
-  "data": {
-    "invited": [
-      {
-        "candidateId": "cand_1",
-        "assessmentId": "ca_def456",
-        "status": "invited"
-      },
-      {
-        "candidateId": "cand_2",
-        "assessmentId": "ca_def457",
-        "status": "invited"
-      }
-    ],
-    "failed": [
-      {
-        "candidateId": "cand_3",
-        "error": {
-          "code": "ALREADY_INVITED",
-          "message": "Candidate already has an active assessment"
-        }
-      }
-    ],
-    "summary": {
-      "total": 3,
-      "invited": 2,
-      "failed": 1
-    }
-  }
-}
-
-Side Effects:
-- Generates opaque candidate tokens for each invited candidate
-- Sends invitation emails to successfully invited candidates
-
-Errors (request-level):
-- 400 NO_ASSESSMENT: Job has no assessment attached
-- 400 JOB_NOT_OPEN: Job is not open
-- 400 EMPTY_LIST: candidateIds cannot be empty
-- 400 TOO_MANY_CANDIDATES: Maximum 50 candidates per request
-
-Note: Individual candidate failures do not fail the entire request.
-Partial success is expected and reported in the response.
-```
-
 #### Evaluate
 
 ```
-POST /jobs/{jobId}/candidates/{candidateId}/assessment/evaluate
+POST /jobs/{jobId}/candidates/{applicationId}/assessment/evaluate
 
 Request:
 {
@@ -939,44 +883,15 @@ Response: 200 OK
 Errors:
 - 400 NOT_SUBMITTED: Cannot evaluate before submission
 - 400 INVALID_SIGNAL: Signal must be clear_evidence | some_gaps | insufficient_evidence
-```
 
-#### Update Evaluation
-
-```
-PATCH /jobs/{jobId}/candidates/{candidateId}/assessment/evaluate
-
-Request:
-{
-  "signal": "some_gaps",
-  "notes": "Reconsidered after team discussion. Some concerns about scalability approach."
-}
-
-Response: 200 OK
-{
-  "data": {
-    "id": "ca_def456",
-    "status": "evaluated",
-    "evaluation": {
-      "signal": "some_gaps",
-      "notes": "Reconsidered after team discussion. Some concerns about scalability approach.",
-      "evaluatedBy": "user_123",
-      "evaluatedAt": "2026-02-03T09:00:00Z",
-      "updatedBy": "user_456",
-      "updatedAt": "2026-02-04T14:00:00Z"
-    }
-  }
-}
-
-Errors:
-- 400 NOT_EVALUATED: Cannot update evaluation that doesn't exist
-- 400 INVALID_SIGNAL: Signal must be clear_evidence | some_gaps | insufficient_evidence
+Note: Calling POST again on an already-evaluated assessment updates the signal/notes
+and tracks `evaluationUpdatedBy`/`evaluationUpdatedAt`. No separate PATCH endpoint needed.
 ```
 
 #### Cancel
 
 ```
-POST /jobs/{jobId}/candidates/{candidateId}/assessment/cancel
+POST /jobs/{jobId}/candidates/{applicationId}/assessment/cancel
 
 Request:
 {
@@ -1181,6 +1096,33 @@ Lazy status transitions are applied before returning (see Status Transition Mech
 - 401 UNAUTHORIZED: Invalid or expired token
 - 404 NOT_FOUND: Assessment not found
 
+#### Start Assessment
+
+```
+POST /assess/{token}/start
+
+Request: (no body required)
+
+Response: 200 OK
+{
+  "data": {
+    "id": "ca_def456",
+    "status": "in_progress"
+  }
+}
+
+Transitions `scheduled` → `in_progress`.
+Validates that the assessment is in `scheduled` state, the `scheduledFor` time has arrived,
+and the completion deadline has not passed (including grace period).
+
+Errors:
+- 404 NOT_FOUND: Assessment not found
+- 400 ALREADY_STARTED: Assessment is already in progress
+- 400 NOT_SCHEDULED: Assessment is not in a scheduled state
+- 400 INVALID_TIME: Assessment scheduled time hasn't arrived yet
+- 400 EXPIRED: Assessment completion deadline has passed
+```
+
 #### Schedule
 
 ```
@@ -1327,7 +1269,7 @@ Optional parts can be submitted without files.
 #### Download File
 
 ```
-GET /files/{id}
+GET /v1/assessments/files/{fileId}
 
 Headers:
 - Authorization: Bearer {recruiterJWT}
@@ -1417,7 +1359,6 @@ Assessment evaluation uses a dedicated signal system, separate from the screenin
 | `NOT_SCHEDULED` | 400 | Must schedule first |
 | `NOT_IN_PROGRESS` | 400 | Assessment not in progress |
 | `NOT_SUBMITTED` | 400 | Cannot evaluate before submission |
-| `NOT_EVALUATED` | 400 | Cannot update non-existent evaluation |
 | `EXPIRED` | 400 | Deadline has passed |
 | `NO_RESCHEDULES_LEFT` | 400 | Maximum reschedules reached |
 | `PAST_SCHEDULE_DEADLINE` | 400 | Schedule deadline has passed |
@@ -1431,8 +1372,6 @@ Assessment evaluation uses a dedicated signal system, separate from the screenin
 | `JOB_NOT_OPEN` | 400 | Job is not open |
 | `JOB_PUBLISHED` | 400 | Cannot modify published job assessment |
 | `JOB_CLOSED` | 400 | Job is closed |
-| `EMPTY_LIST` | 400 | List cannot be empty |
-| `TOO_MANY_CANDIDATES` | 400 | Exceeds maximum batch size |
 
 ---
 
@@ -1478,21 +1417,20 @@ Follows the same pattern as interview pipeline CRUD:
 | **Job** | `GET` | `/jobs/{jobId}/assessment` | Get job assessment |
 | | `PUT` | `/jobs/{jobId}/assessment` | Attach assessment |
 | | `DELETE` | `/jobs/{jobId}/assessment` | Remove assessment (draft only) |
-| **Candidate (Recruiter)** | `GET` | `/jobs/{jobId}/candidates/{candidateId}/assessment` | Get candidate assessment |
-| | `POST` | `/jobs/{jobId}/candidates/{candidateId}/assessment` | Invite candidate |
-| | `POST` | `/jobs/{jobId}/assessment/invites` | Bulk invite |
-| | `POST` | `.../assessment/evaluate` | Evaluate submission |
-| | `PATCH` | `.../assessment/evaluate` | Update evaluation |
+| **Candidate (Recruiter)** | `GET` | `/jobs/{jobId}/candidates/{applicationId}/assessment` | Get candidate assessment |
+| | `POST` | `/jobs/{jobId}/candidates/{applicationId}/assessment/invite` | Invite candidate |
+| | `POST` | `.../assessment/evaluate` | Evaluate submission (re-call to update) |
 | | `POST` | `.../assessment/cancel` | Cancel assessment |
 | **Candidate-Facing** | `GET` | `/assess/{token}` | View assessment (status-aware) |
+| | `POST` | `/assess/{token}/start` | Start assessment |
 | | `POST` | `/assess/{token}/schedule` | Schedule |
 | | `POST` | `/assess/{token}/reschedule` | Reschedule |
 | | `POST` | `/assess/{token}/parts/{partId}/files` | Upload file |
 | | `DELETE` | `/assess/{token}/parts/{partId}/files/{fileId}` | Delete file |
 | | `POST` | `/assess/{token}/submit` | Submit |
-| **Files** | `GET` | `/files/{id}` | Download file |
+| **Files** | `GET` | `/v1/assessments/files/{fileId}` | Download file |
 
-**Total: 17 endpoints**
+**Total: 16 endpoints**
 
 ---
 

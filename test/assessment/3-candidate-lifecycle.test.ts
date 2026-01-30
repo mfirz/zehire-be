@@ -100,6 +100,85 @@ describe("Candidate Assessment Lifecycle", () => {
   });
 
   // ---------------------------------------------------------------------------
+  // INSTRUCTION VISIBILITY
+  // ---------------------------------------------------------------------------
+
+  describe("instruction visibility by status", () => {
+    it("hides instructions and evidenceDescription when status is invited", async () => {
+      const pipeline = await seedFullPipeline({
+        parts: [
+          { name: "Task", instructions: "Secret instructions", evidenceDescription: "Secret evidence", required: true },
+        ],
+      });
+      const invite = await service.inviteCandidate(pipeline.application.id, pipeline.job.id);
+      if (!invite.success) throw new Error("Invite failed");
+
+      const result = await service.getAssessmentByToken(invite.data.token);
+
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.data.parts[0].instructions).toBeNull();
+      expect(result.data.parts[0].evidenceDescription).toBeNull();
+      expect(result.data.parts[0].name).toBe("Task");
+    });
+
+    it("hides instructions when status is scheduled", async () => {
+      const pipeline = await seedFullPipeline({
+        parts: [
+          { name: "Task", instructions: "Secret instructions", evidenceDescription: "Secret evidence", required: true },
+        ],
+      });
+      const invite = await service.inviteCandidate(pipeline.application.id, pipeline.job.id);
+      if (!invite.success) throw new Error("Invite failed");
+
+      await service.scheduleAssessment(invite.data.token, {
+        scheduledFor: hoursFromNow(24),
+        timezone: "UTC",
+      });
+
+      const result = await service.getAssessmentByToken(invite.data.token);
+
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.data.parts[0].instructions).toBeNull();
+      expect(result.data.parts[0].evidenceDescription).toBeNull();
+    });
+
+    it("reveals instructions when status is in_progress", async () => {
+      const pipeline = await seedFullPipeline({
+        parts: [
+          { name: "Task", instructions: "Secret instructions", evidenceDescription: "Secret evidence", required: true },
+        ],
+      });
+      const { token } = await advanceToInProgress(service, pipeline);
+
+      const result = await service.getAssessmentByToken(token);
+
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.data.parts[0].instructions).toBe("Secret instructions");
+      expect(result.data.parts[0].evidenceDescription).toBe("Secret evidence");
+    });
+
+    it("reveals instructions when status is submitted", async () => {
+      const pipeline = await seedFullPipeline({
+        parts: [
+          { name: "Task", instructions: "Secret instructions", evidenceDescription: "Secret evidence", required: false },
+        ],
+      });
+      const { token } = await advanceToInProgress(service, pipeline);
+      await service.submitAssessment(token);
+
+      const result = await service.getAssessmentByToken(token);
+
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.data.parts[0].instructions).toBe("Secret instructions");
+      expect(result.data.parts[0].evidenceDescription).toBe("Secret evidence");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // SCHEDULE
   // ---------------------------------------------------------------------------
 
