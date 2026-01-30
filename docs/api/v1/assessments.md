@@ -1317,6 +1317,8 @@ Design:      .fig, .sketch
 | Max files per part | No limit (reasonable) |
 | Grace period | 10 minutes |
 
+**Validation:** Server checks both file extension and MIME type. Both must pass — renaming a `.exe` to `.pdf` will be rejected by MIME check.
+
 ---
 
 ## Evaluation Signals
@@ -1361,7 +1363,6 @@ Assessment evaluation uses a dedicated signal system, separate from the screenin
 | `ALREADY_SCHEDULED` | 400 | Already scheduled |
 | `ALREADY_STARTED` | 400 | Cannot modify after window opened |
 | `ALREADY_SUBMITTED` | 400 | Cannot modify after submission |
-| `ALREADY_EVALUATED` | 400 | Cannot modify after evaluation |
 | `ALREADY_CANCELLED` | 400 | Already cancelled |
 | `NOT_SCHEDULED` | 400 | Must schedule first |
 | `NOT_IN_PROGRESS` | 400 | Assessment not in progress |
