@@ -18,7 +18,9 @@
     "db:seed:local": "wrangler d1 execute zehire-db-dev --local --file=./seeds/seed_dev.sql",
     "db:reset:local": "rm -rf .wrangler/state && bun run db:migrate:local && bun run db:seed:local",
     "db:studio": "drizzle-kit studio",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.7.6",
@@ -34,6 +36,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.12.8",
     "@cloudflare/workers-types": "^4.20241218.0",
     "@types/better-sqlite3": "^7.6.13",
     "@typescript-eslint/eslint-plugin": "^8.18.2",
@@ -44,7 +47,13 @@
     "prettier": "^3.4.2",
     "prettier-plugin-organize-imports": "^4.1.0",
     "typescript": "^5.7.2",
+    "vitest": "^2.1.0",
     "wrangler": "^4.59.2"
+  },
+  "overrides": {
+    "@vitest/runner": "2.1.9",
+    "@vitest/snapshot": "2.1.9",
+    "@vitest/utils": "2.1.9"
   },
   "engines": {
     "node": ">=18.0.0"
