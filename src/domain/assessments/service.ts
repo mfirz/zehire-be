@@ -134,6 +134,25 @@ export class AssessmentService {
   }
 
   /**
+   * List assessment definitions with part counts (for list view).
+   */
+  async listAssessmentsWithCounts(
+    orgId: string,
+    status?: "active" | "archived"
+  ): Promise<AssessmentServiceResult<Array<AssessmentDefinition & { partsCount: number }>>> {
+    const definitions = await this.repo.listDefinitionsWithPartCounts(orgId, status ? { status } : undefined);
+
+    const parsed = definitions.map((def) => ({
+      ...def,
+      schedulingConfig: JSON.stringify(
+        this.parseSchedulingConfig(def.schedulingConfig)
+      ),
+    }));
+
+    return { success: true, data: parsed };
+  }
+
+  /**
    * Update an existing assessment definition.
    *
    * If input.status === 'archived', archives the definition.
@@ -270,6 +289,8 @@ export class AssessmentService {
       definition: AssessmentDefinition;
       parts: AssessmentPart[];
       scheduling: SchedulingConfig;
+      isSnapshot: boolean;
+      snapshotAt: string | null;
     } | null>
   > {
     const result = await this.repo.getJobAssessmentWithDefinition(jobId);
@@ -292,6 +313,8 @@ export class AssessmentService {
           definition: snapshot.definition,
           parts: snapshot.parts,
           scheduling,
+          isSnapshot: true,
+          snapshotAt: result.jobAssessment.snapshotAt,
         },
       };
     }
@@ -309,6 +332,8 @@ export class AssessmentService {
         definition: result.definition,
         parts: result.parts,
         scheduling,
+        isSnapshot: false,
+        snapshotAt: null,
       },
     };
   }
@@ -351,10 +376,15 @@ export class AssessmentService {
     const existing = await this.repo.findByApplicationId(applicationId);
 
     if (existing) {
-      return {
-        success: false,
-        error: { code: "ALREADY_INVITED", message: "Candidate has already been invited for this assessment" },
-      };
+      const TERMINAL_STATUSES = ["cancelled", "expired", "schedule_expired"];
+      if (!TERMINAL_STATUSES.includes(existing.status)) {
+        return {
+          success: false,
+          error: { code: "ALREADY_INVITED", message: "Candidate has already been invited for this assessment" },
+        };
+      }
+      // Delete old terminal assessment (cascade handles file DB records)
+      await this.repo.deleteCandidateAssessment(existing.id);
     }
 
     // Parse the scheduling config (from snapshot if published, from definition if draft)
@@ -807,7 +837,10 @@ export class AssessmentService {
       };
     }
 
-    await this.repo.updateCandidateAssessmentStatus(assessment.id, "in_progress");
+    const now = new Date().toISOString();
+    await this.repo.updateCandidateAssessmentStatus(assessment.id, "in_progress", {
+      startedAt: now,
+    });
 
     // Re-fetch the updated record
     const updated = await this.repo.findByToken(token);
@@ -950,6 +983,14 @@ export class AssessmentService {
       return {
         success: false,
         error: { code: "NOT_IN_PROGRESS", message: "Assessment is not in progress" },
+      };
+    }
+
+    // Check completion deadline with grace period
+    if (assessment.completionDeadline && !isWithinGracePeriod(assessment.completionDeadline)) {
+      return {
+        success: false,
+        error: { code: "EXPIRED", message: "Assessment completion deadline has passed" },
       };
     }
 

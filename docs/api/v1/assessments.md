@@ -1,7 +1,7 @@
 # Zehire Assessment API Specification
 
-**Version:** 1.2 (MVP)
-**Last Updated:** January 2026
+**Version:** 1.8 (MVP)
+**Last Updated:** February 2026
 
 ---
 
@@ -204,6 +204,7 @@ Timeline
 ├── scheduledFor: datetime | null (UTC)
 ├── scheduledTimezone: string | null (IANA timezone, e.g., "Asia/Jakarta")
 ├── completionDeadline: datetime | null (UTC)
+├── startedAt: datetime | null (UTC, set when POST /assess/{token}/start is called)
 └── submittedAt: datetime | null
 ```
 
@@ -643,8 +644,8 @@ Response: 200 OK
 }
 
 Errors:
-- 400 ASSESSMENT_NOT_FOUND: Assessment doesn't exist
-- 400 ASSESSMENT_ARCHIVED: Cannot attach archived assessment
+- 404 ASSESSMENT_NOT_FOUND: Assessment doesn't exist
+- 409 ASSESSMENT_ARCHIVED: Cannot attach archived assessment
 - 400 JOB_CLOSED: Cannot modify closed job
 - 400 JOB_PUBLISHED: Cannot change assessment on published job
 ```
@@ -706,6 +707,7 @@ Response: 200 OK (invited, not yet scheduled)
       "scheduledFor": null,
       "scheduledTimezone": null,
       "completionDeadline": null,
+      "startedAt": null,
       "submittedAt": null
     },
     "rescheduleCount": 0,
@@ -729,6 +731,7 @@ Response: 200 OK (scheduled)
       "scheduledFor": "2026-02-01T07:00:00Z",
       "scheduledTimezone": "Asia/Jakarta",
       "completionDeadline": "2026-02-02T07:00:00Z",
+      "startedAt": null,
       "submittedAt": null
     },
     "rescheduleCount": 0,
@@ -752,6 +755,7 @@ Response: 200 OK (submitted)
       "scheduledFor": "2026-02-01T07:00:00Z",
       "scheduledTimezone": "Asia/Jakarta",
       "completionDeadline": "2026-02-02T07:00:00Z",
+      "startedAt": "2026-02-01T07:00:00Z",
       "submittedAt": "2026-02-01T11:30:00Z"
     },
     "rescheduleCount": 0,
@@ -843,6 +847,7 @@ Response: 201 Created
       "scheduledFor": null,
       "scheduledTimezone": null,
       "completionDeadline": null,
+      "startedAt": null,
       "submittedAt": null
     }
   }
@@ -853,9 +858,39 @@ Side Effects:
 - Sends invitation email with assessment link containing token
 
 Errors:
-- 400 NO_ASSESSMENT: Job has no assessment attached
-- 400 ALREADY_INVITED: Candidate already has assessment
+- 404 NO_ASSESSMENT: Job has no assessment attached
+- 409 ALREADY_INVITED: Candidate already has an active assessment (not in a terminal state)
 - 400 JOB_NOT_OPEN: Job is not open
+
+Note: If the candidate's previous assessment is in a terminal state
+(`cancelled`, `expired`, `schedule_expired`), the old record is deleted
+and a fresh invitation is created. This is the "cancel + re-invite" workflow.
+```
+
+#### Resend Invite
+
+```
+POST /jobs/{jobId}/candidates/{applicationId}/assessment/resend-invite
+
+Note: No body required. Resends the assessment invite email using the existing token.
+
+Allowed statuses: `invited`, `schedule_expired`
+(Resending makes sense only when the candidate hasn't acted yet.)
+
+Response: 200 OK
+{
+  "success": true,
+  "message": "Assessment invite resent successfully"
+}
+
+Errors:
+- 404 NOT_FOUND: No candidate assessment found
+- 409 INVALID_STATUS: Candidate has already progressed beyond invite stage
+- 500 EMAIL_SEND_FAILED: Email delivery failed
+
+Note: Unlike the initial invite (fire-and-forget), resend returns 500 on email failure.
+When a user explicitly asks to resend, they should know if it failed.
+No new token is generated — the existing portal URL is resent.
 ```
 
 #### Evaluate
@@ -886,7 +921,8 @@ Response: 200 OK
 }
 
 Errors:
-- 400 NOT_SUBMITTED: Cannot evaluate before submission
+- 404 NOT_FOUND: Candidate assessment not found
+- 409 NOT_SUBMITTED: Cannot evaluate before submission
 - 400 INVALID_SIGNAL: Signal must be clear_evidence | some_gaps | insufficient_evidence
 
 Note: Calling POST again on an already-evaluated assessment updates the signal/notes
@@ -916,8 +952,9 @@ Response: 200 OK
 Cancellable statuses: `invited`, `schedule_expired`, `scheduled`, `in_progress`.
 
 Errors:
-- 400 ALREADY_SUBMITTED: Cannot cancel after submission or evaluation
-- 400 ALREADY_CANCELLED: Already cancelled or in a non-cancellable state (`expired`)
+- 404 NOT_FOUND: Candidate assessment not found
+- 409 ALREADY_SUBMITTED: Cannot cancel after submission or evaluation
+- 409 ALREADY_CANCELLED: Already cancelled or in a non-cancellable state (`expired`)
 ```
 
 ---
@@ -1127,7 +1164,7 @@ Errors:
 - 400 ALREADY_STARTED: Assessment is already in progress
 - 400 NOT_SCHEDULED: Assessment is not in a scheduled state
 - 400 INVALID_TIME: Assessment scheduled time hasn't arrived yet
-- 400 EXPIRED: Assessment completion deadline has passed
+- 410 EXPIRED: Assessment completion deadline has passed
 ```
 
 #### Schedule
@@ -1157,10 +1194,10 @@ Side Effects:
 - Sends confirmation email to candidate
 
 Errors:
-- 400 PAST_SCHEDULE_DEADLINE: Cannot schedule after deadline
+- 410 PAST_SCHEDULE_DEADLINE: Cannot schedule after deadline
 - 400 INVALID_TIME: Time must be in the future
-- 400 ALREADY_SCHEDULED: Already scheduled (use reschedule)
-- 400 CANCELLED: Assessment was cancelled
+- 409 ALREADY_SCHEDULED: Already scheduled (use reschedule)
+- 410 EXPIRED: Assessment is no longer available for scheduling
 ```
 
 #### Reschedule
@@ -1189,11 +1226,11 @@ Response: 200 OK
 }
 
 Errors:
-- 400 NO_RESCHEDULES_LEFT: Maximum reschedules reached
+- 409 NO_RESCHEDULES_LEFT: Maximum reschedules reached
 - 400 ALREADY_STARTED: Cannot reschedule after window opened
-- 400 PAST_SCHEDULE_DEADLINE: New time must be before schedule deadline
+- 410 PAST_SCHEDULE_DEADLINE: New time must be before schedule deadline
 - 400 INVALID_TIME: Time must be in the future
-- 400 NOT_SCHEDULED: Must schedule first
+- 409 NOT_SCHEDULED: Must schedule first
 ```
 
 #### Upload File
@@ -1207,7 +1244,7 @@ Headers:
 Body:
 - file: (binary)
 
-Response: 200 OK
+Response: 201 Created
 {
   "data": {
     "id": "file_123",
@@ -1219,11 +1256,11 @@ Response: 200 OK
 }
 
 Errors:
-- 400 INVALID_FILE_TYPE: File type not allowed
-- 400 FILE_TOO_LARGE: Exceeds 50MB limit
-- 400 EXPIRED: Deadline has passed (including 10-min grace period)
-- 400 NOT_IN_PROGRESS: Assessment not in progress
-- 400 PART_NOT_FOUND: Part does not exist
+- 415 INVALID_FILE_TYPE: File type not allowed
+- 413 FILE_TOO_LARGE: Exceeds 50MB limit
+- 410 EXPIRED: Deadline has passed (including 10-min grace period)
+- 409 NOT_IN_PROGRESS: Assessment not in progress
+- 404 PART_NOT_FOUND: Part does not exist
 ```
 
 #### Delete File
@@ -1237,8 +1274,8 @@ Response: 200 OK
 }
 
 Errors:
-- 400 EXPIRED: Deadline has passed (including 10-min grace period)
-- 400 NOT_IN_PROGRESS: Assessment not in progress
+- 410 EXPIRED: Deadline has passed (including 10-min grace period)
+- 409 NOT_IN_PROGRESS: Assessment not in progress
 - 404 FILE_NOT_FOUND: File doesn't exist
 ```
 
@@ -1261,9 +1298,9 @@ Response: 200 OK
 
 Errors:
 - 400 MISSING_PARTS: Required parts without files: ["Coding Challenge"]
-- 400 EXPIRED: Deadline has passed (including 10-min grace period)
-- 400 ALREADY_SUBMITTED: Cannot submit twice
-- 400 NOT_IN_PROGRESS: Assessment not in progress
+- 410 EXPIRED: Deadline has passed (including 10-min grace period)
+- 409 ALREADY_SUBMITTED: Cannot submit twice
+- 409 NOT_IN_PROGRESS: Assessment not in progress
 
 Note: Only parts with `required: true` must have at least one file.
 Optional parts can be submitted without files.
@@ -1341,10 +1378,8 @@ Assessment evaluation uses a dedicated signal system, separate from the screenin
 
 ```json
 {
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human readable message"
-  }
+  "error": "Human readable message",
+  "code": "ERROR_CODE"
 }
 ```
 
@@ -1356,27 +1391,29 @@ Assessment evaluation uses a dedicated signal system, separate from the screenin
 | `UNAUTHORIZED` | 401 | Invalid or missing token |
 | `FORBIDDEN` | 403 | No permission for this action |
 | `VALIDATION_ERROR` | 400 | Invalid request data |
-| `ASSESSMENT_NOT_FOUND` | 400 | Assessment doesn't exist |
-| `ASSESSMENT_ARCHIVED` | 400 | Cannot use archived assessment |
-| `NO_ASSESSMENT` | 400 | Job has no assessment attached |
-| `ALREADY_INVITED` | 400 | Candidate already has assessment |
-| `ALREADY_SCHEDULED` | 400 | Already scheduled |
+| `ASSESSMENT_NOT_FOUND` | 404 | Assessment doesn't exist |
+| `ASSESSMENT_ARCHIVED` | 409 | Cannot use archived assessment |
+| `NO_ASSESSMENT` | 404 | Job has no assessment attached |
+| `ALREADY_INVITED` | 409 | Candidate already has assessment |
+| `ALREADY_SCHEDULED` | 409 | Already scheduled |
 | `ALREADY_STARTED` | 400 | Cannot modify after window opened |
-| `ALREADY_SUBMITTED` | 400 | Cannot modify after submission |
-| `ALREADY_CANCELLED` | 400 | Already cancelled |
-| `NOT_SCHEDULED` | 400 | Must schedule first |
-| `NOT_IN_PROGRESS` | 400 | Assessment not in progress |
-| `NOT_SUBMITTED` | 400 | Cannot evaluate before submission |
-| `EXPIRED` | 400 | Deadline has passed |
-| `NO_RESCHEDULES_LEFT` | 400 | Maximum reschedules reached |
-| `PAST_SCHEDULE_DEADLINE` | 400 | Schedule deadline has passed |
+| `ALREADY_SUBMITTED` | 409 | Cannot modify after submission |
+| `ALREADY_CANCELLED` | 409 | Already cancelled |
+| `NOT_SCHEDULED` | 409 | Must schedule first |
+| `NOT_IN_PROGRESS` | 409 | Assessment not in progress |
+| `NOT_SUBMITTED` | 409 | Cannot evaluate before submission |
+| `EXPIRED` | 410 | Deadline has passed |
+| `NO_RESCHEDULES_LEFT` | 409 | Maximum reschedules reached |
+| `PAST_SCHEDULE_DEADLINE` | 410 | Schedule deadline has passed |
 | `INVALID_TIME` | 400 | Time must be in the future |
 | `INVALID_SIGNAL` | 400 | Invalid evaluation signal |
-| `INVALID_FILE_TYPE` | 400 | File type not allowed |
-| `FILE_TOO_LARGE` | 400 | Exceeds size limit |
+| `INVALID_FILE_TYPE` | 415 | File type not allowed |
+| `FILE_TOO_LARGE` | 413 | Exceeds size limit |
 | `FILE_NOT_FOUND` | 404 | File doesn't exist |
-| `PART_NOT_FOUND` | 400 | Part doesn't exist |
+| `PART_NOT_FOUND` | 404 | Part doesn't exist |
 | `MISSING_PARTS` | 400 | Required parts without files |
+| `INVALID_STATUS` | 409 | Status does not allow this action |
+| `EMAIL_SEND_FAILED` | 500 | Email delivery failed |
 | `JOB_NOT_OPEN` | 400 | Job is not open |
 | `JOB_PUBLISHED` | 400 | Cannot modify published job assessment |
 | `JOB_CLOSED` | 400 | Job is closed |
@@ -1427,6 +1464,7 @@ Follows the same pattern as interview pipeline CRUD:
 | | `DELETE` | `/jobs/{jobId}/assessment` | Remove assessment (draft only) |
 | **Candidate (Recruiter)** | `GET` | `/jobs/{jobId}/candidates/{applicationId}/assessment` | Get candidate assessment |
 | | `POST` | `/jobs/{jobId}/candidates/{applicationId}/assessment/invite` | Invite candidate |
+| | `POST` | `.../assessment/resend-invite` | Resend invite email |
 | | `POST` | `.../assessment/evaluate` | Evaluate submission (re-call to update) |
 | | `POST` | `.../assessment/cancel` | Cancel assessment |
 | **Candidate-Facing** | `GET` | `/assess/{token}` | View assessment (status-aware) |
@@ -1438,7 +1476,7 @@ Follows the same pattern as interview pipeline CRUD:
 | | `POST` | `/assess/{token}/submit` | Submit |
 | **Files** | `GET` | `/assessments/files/{fileId}` | Download file |
 
-**Total: 16 endpoints**
+**Total: 17 endpoints**
 
 ---
 
@@ -1450,3 +1488,8 @@ Follows the same pattern as interview pipeline CRUD:
 | 1.1 | January 2026 | Added: timezone handling, grace period, evaluation updates, merged candidate view. |
 | 1.2 | January 2026 | **Breaking changes from v1.1 review.** Replaced external assessment providers with in-house library. Changed: candidate auth to opaque tokens (`/assess/{token}/...`), grace period 5min → 10min, max file size 100MB → 50MB, archive via `PATCH` not `DELETE`, removed `PUT` with null for removal (use `DELETE` only), removed `order` from parts (array position is order). Added: `required` field on parts, hybrid status transition mechanism (lazy eval + cron), queue-based auto-cancel on job close, candidate token model, terminal status responses (expired/cancelled). |
 | 1.3 | January 2026 | **Implementation alignment.** Removed bulk invite (not implemented). Removed PATCH evaluate (POST handles re-evaluation). Added `POST /assess/{token}/start` endpoint. Fixed invite path (`/assessment/invite`), file download path (`/assessments/files/{fileId}`), `candidateId` → `applicationId`. Fixed lazy eval table (removed `scheduled → in_progress` — requires explicit `/start`). Added deadline formulas, cancel allowed statuses, instruction visibility notes. |
+| 1.4 | January 2026 | Added `POST .../assessment/resend-invite` endpoint for resending assessment invitation emails. Allowed statuses: `invited`, `schedule_expired`. Returns 500 on email failure (not fire-and-forget). |
+| 1.5 | January 2026 | **Response shape alignment.** All assessment endpoints now return documented nested response shapes via shared formatter functions. List endpoint returns `partsCount` instead of full parts. Job assessment responses include `isSnapshot`/`snapshotAt`. Candidate GET returns `{ data: null }` instead of 404 when no assessment. Portal GET returns status-driven shapes with `company`/`jobTitle`. Upload response status corrected to `201 Created`. |
+| 1.6 | January 2026 | **Error code alignment & validation.** Fixed error response format to flat `{ error, code }`. Updated HTTP status codes to match implementation (409 for conflict/wrong-state, 410 for expired/gone, 413/415 for file errors). Implemented `JOB_NOT_OPEN` validation on invite (blocks draft/closed jobs). Added grace period check to file deletion (matches upload/submit behavior). |
+| 1.7 | January 2026 | **Re-invite after terminal state.** Invite now deletes the old record and creates a fresh one when the existing assessment is in a terminal state (`cancelled`, `expired`, `schedule_expired`). `ALREADY_INVITED` only applies to active assessments. Enables the "cancel + re-invite" workflow documented in Key Decisions. |
+| 1.8 | February 2026 | **Added startedAt to timeline.** New `startedAt` field in timeline object, set when `POST /assess/{token}/start` is called. Tracks when the candidate actually started their assessment window. |

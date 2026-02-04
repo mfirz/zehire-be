@@ -167,6 +167,7 @@ export const candidateAssessments = sqliteTable(
     scheduledFor: text("scheduled_for"), // UTC datetime
     scheduledTimezone: text("scheduled_timezone"), // IANA timezone string
     completionDeadline: text("completion_deadline"), // UTC datetime
+    startedAt: text("started_at"), // UTC datetime, set when candidate starts (in_progress)
     submittedAt: text("submitted_at"),
     rescheduleCount: integer("reschedule_count").notNull().default(0),
 
