@@ -17,4 +17,5 @@ export {
   type SendFeedbackReminderInput,
   type SendInterviewRescheduleInput,
   type SendInterviewCancellationInput,
+  type SendAssessmentInviteInput,
 } from "./email.gateway";

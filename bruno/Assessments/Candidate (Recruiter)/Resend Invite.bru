@@ -1,0 +1,45 @@
+meta {
+  name: Resend Invite
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/v1/jobs/{{job_id}}/candidates/{{application_id}}/assessment/resend-invite
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_token}}
+}
+
+tests {
+  test("Status code is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("Response indicates success", function() {
+    const data = res.getBody();
+    expect(data).to.have.property('success');
+    expect(data.success).to.equal(true);
+  });
+}
+
+docs {
+  Resend the assessment invitation email to a candidate.
+
+  **Prerequisites:**
+  - Candidate must have an existing assessment invitation
+  - Assessment status must be `invited` or `schedule_expired`
+
+  **Behavior:**
+  - Resends the same portal URL (no new token generated)
+  - Returns 500 if email delivery fails (not fire-and-forget)
+  - Returns 409 if candidate has already scheduled/started/submitted
+
+  **When to use:**
+  - Candidate didn't receive the original email
+  - Candidate lost the assessment link
+  - Schedule deadline expired and recruiter wants to remind candidate
+}

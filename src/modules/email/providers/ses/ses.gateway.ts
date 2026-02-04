@@ -20,6 +20,7 @@ import type {
   SendInterviewRescheduleInput,
   SendInterviewCancellationInput,
   SendSchedulingInviteInput,
+  SendAssessmentInviteInput,
 } from "../../email.gateway";
 import { SesClient, SesError, type SesClientConfig } from "./ses.client";
 
@@ -271,6 +272,29 @@ export class SesEmailGateway implements EmailGateway {
       });
 
       console.log("[SES] Scheduling invite sent", {
+        messageId: result.messageId,
+        recipient: this.redactEmail(input.email),
+      });
+    } catch (error) {
+      this.logError(error, input.email);
+    }
+  }
+
+  async sendAssessmentInvite(input: SendAssessmentInviteInput): Promise<void> {
+    const subject = `Assessment Invitation: ${input.jobTitle} at ${input.companyName}`;
+    const { textBody, htmlBody } = this.buildAssessmentInviteEmail(input);
+
+    try {
+      const result = await this.client.sendEmail({
+        from: this.fromEmail,
+        to: input.email,
+        subject,
+        textBody,
+        htmlBody,
+        configurationSet: this.configurationSet,
+      });
+
+      console.log("[SES] Assessment invite sent", {
         messageId: result.messageId,
         recipient: this.redactEmail(input.email),
       });
@@ -812,6 +836,80 @@ Zehire - Signal-First Hiring
     </div>
 
     <p style="color: #666; font-size: 14px;">This link expires in 7 days.</p>
+  </div>
+
+  <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">
+    Zehire — Signal-First Hiring
+  </p>
+</body>
+</html>
+`.trim();
+
+    return { textBody, htmlBody };
+  }
+
+  /**
+   * Build assessment invite email content.
+   */
+  private buildAssessmentInviteEmail(
+    input: SendAssessmentInviteInput
+  ): { textBody: string; htmlBody: string } {
+    const deadlineDate = new Date(input.scheduleDeadline);
+    const now = new Date();
+    const daysUntilDeadline = Math.max(
+      1,
+      Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    );
+
+    const textBody = `
+Hi ${input.name},
+
+${input.companyName} has invited you to complete an assessment for the ${input.jobTitle} position.
+
+Assessment: ${input.assessmentName}
+
+Please schedule your assessment within ${daysUntilDeadline} day${daysUntilDeadline !== 1 ? "s" : ""}.
+
+View your assessment here:
+${input.portalUrl}
+
+---
+Zehire - Signal-First Hiring
+`.trim();
+
+    const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: #f8f9fa; padding: 30px; border-radius: 8px;">
+    <h1 style="color: #1a1a1a; margin-top: 0; font-size: 24px;">Assessment Invitation</h1>
+
+    <p>Hi ${this.escapeHtml(input.name)},</p>
+
+    <p><strong>${this.escapeHtml(input.companyName)}</strong> has invited you to complete an assessment for the <strong>${this.escapeHtml(input.jobTitle)}</strong> position.</p>
+
+    <div style="background: white; padding: 20px; border-radius: 6px; margin: 20px 0;">
+      <p style="margin: 0 0 10px;"><strong>Assessment:</strong> ${this.escapeHtml(input.assessmentName)}</p>
+      <p style="margin: 0;"><strong>Schedule within:</strong> ${daysUntilDeadline} day${daysUntilDeadline !== 1 ? "s" : ""}</p>
+    </div>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${this.escapeHtml(input.portalUrl)}"
+         style="display: inline-block; background: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600;">
+        View Assessment
+      </a>
+    </div>
+
+    <p style="color: #666; font-size: 14px;">
+      Or copy and paste this link into your browser:<br>
+      <code style="background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-size: 12px; word-break: break-all;">
+        ${this.escapeHtml(input.portalUrl)}
+      </code>
+    </p>
   </div>
 
   <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">

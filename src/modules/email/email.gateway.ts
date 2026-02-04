@@ -213,6 +213,32 @@ export interface SendInterviewCancellationInput {
 }
 
 /**
+ * Input for sending assessment invite email to candidate.
+ */
+export interface SendAssessmentInviteInput {
+  /** Candidate email address */
+  email: string;
+
+  /** Candidate name */
+  name: string;
+
+  /** Job title */
+  jobTitle: string;
+
+  /** Company name */
+  companyName: string;
+
+  /** Assessment name */
+  assessmentName: string;
+
+  /** URL to the candidate assessment portal */
+  portalUrl: string;
+
+  /** Schedule deadline (ISO string) */
+  scheduleDeadline: string;
+}
+
+/**
  * Input for sending scheduling invite email to candidate.
  */
 export interface SendSchedulingInviteInput {
@@ -279,6 +305,11 @@ export interface EmailGateway {
    * Send scheduling invite to candidate.
    */
   sendSchedulingInvite(input: SendSchedulingInviteInput): Promise<void>;
+
+  /**
+   * Send assessment invite to candidate.
+   */
+  sendAssessmentInvite(input: SendAssessmentInviteInput): Promise<void>;
 }
 
 // =============================================================================
@@ -389,6 +420,19 @@ export class ConsoleEmailGateway implements EmailGateway {
     console.log(`Job: ${input.jobTitle} at ${input.companyName}`);
     console.log(`Stage: ${input.stageName}`);
     console.log(`Scheduling URL: ${input.schedulingUrl}`);
+    console.log("========================================");
+  }
+
+  async sendAssessmentInvite(input: SendAssessmentInviteInput): Promise<void> {
+    console.log("========================================");
+    console.log("[EmailGateway] Assessment Invite (Console)");
+    console.log("========================================");
+    console.log(`To: ${input.email}`);
+    console.log(`Candidate: ${input.name}`);
+    console.log(`Job: ${input.jobTitle} at ${input.companyName}`);
+    console.log(`Assessment: ${input.assessmentName}`);
+    console.log(`Portal URL: ${input.portalUrl}`);
+    console.log(`Schedule Deadline: ${input.scheduleDeadline}`);
     console.log("========================================");
   }
 }

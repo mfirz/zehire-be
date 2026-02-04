@@ -3,6 +3,7 @@ import type { Env } from "../../../types/bindings";
 import type { AuthVariables } from "../../../types/bindings";
 import { AssessmentService } from "../../../domain/assessments/service";
 import { CreateAssessmentInputSchema, UpdateAssessmentInputSchema } from "../../../domain/assessments/types";
+import { formatDefinitionResponse, formatDefinitionListItem } from "../../helpers/assessment-response";
 
 const library = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
@@ -12,13 +13,13 @@ library.get("/", async (c) => {
   const status = c.req.query("status") as "active" | "archived" | undefined;
 
   const service = new AssessmentService(c.env.DB);
-  const result = await service.listAssessments(user.orgId, status);
+  const result = await service.listAssessmentsWithCounts(user.orgId, status);
 
   if (!result.success) {
     return c.json({ error: result.error.message, code: result.error.code }, 400);
   }
 
-  return c.json(result.data);
+  return c.json({ data: result.data.map(formatDefinitionListItem) });
 });
 
 // POST /v1/assessments — Create new assessment definition
@@ -38,7 +39,7 @@ library.post("/", async (c) => {
     return c.json({ error: result.error.message, code: result.error.code }, 400);
   }
 
-  return c.json(result.data, 201);
+  return c.json({ data: formatDefinitionResponse(result.data.definition, result.data.parts) }, 201);
 });
 
 // GET /v1/assessments/:id — Get assessment definition with parts
@@ -56,7 +57,7 @@ library.get("/:id", async (c) => {
     return c.json({ error: result.error.message, code: result.error.code }, 400);
   }
 
-  return c.json(result.data);
+  return c.json({ data: formatDefinitionResponse(result.data.definition, result.data.parts) });
 });
 
 // PATCH /v1/assessments/:id — Update or archive assessment definition
@@ -80,7 +81,7 @@ library.patch("/:id", async (c) => {
     return c.json({ error: result.error.message, code: result.error.code }, 400);
   }
 
-  return c.json(result.data);
+  return c.json({ data: formatDefinitionResponse(result.data.definition, result.data.parts) });
 });
 
 export default library;

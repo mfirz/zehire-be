@@ -3,6 +3,7 @@ import type { Env } from "../../../types/bindings";
 import type { AuthVariables } from "../../../types/bindings";
 import { AssessmentService } from "../../../domain/assessments/service";
 import { SetJobAssessmentInputSchema } from "../../../domain/assessments/types";
+import { formatJobAssessmentResponse } from "../../helpers/assessment-response";
 
 const jobAssessment = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
@@ -18,10 +19,18 @@ jobAssessment.get("/:jobId/assessment", async (c) => {
   }
 
   if (result.data === null) {
-    return c.json({ assessment: null });
+    return c.json({ data: null });
   }
 
-  return c.json(result.data);
+  return c.json({
+    data: formatJobAssessmentResponse(
+      result.data.definition,
+      result.data.parts,
+      result.data.scheduling,
+      result.data.isSnapshot,
+      result.data.snapshotAt,
+    ),
+  });
 });
 
 // PUT /v1/jobs/:jobId/assessment — Set/replace the assessment for this job
@@ -45,7 +54,22 @@ jobAssessment.put("/:jobId/assessment", async (c) => {
     return c.json({ error: result.error.message, code: result.error.code }, status);
   }
 
-  return c.json(result.data);
+  // Fetch full data after set
+  const fullResult = await service.getJobAssessment(jobId);
+
+  if (!fullResult.success || !fullResult.data) {
+    return c.json({ error: "Failed to fetch assessment data", code: "INTERNAL_ERROR" }, 500);
+  }
+
+  return c.json({
+    data: formatJobAssessmentResponse(
+      fullResult.data.definition,
+      fullResult.data.parts,
+      fullResult.data.scheduling,
+      fullResult.data.isSnapshot,
+      fullResult.data.snapshotAt,
+    ),
+  });
 });
 
 // DELETE /v1/jobs/:jobId/assessment — Remove assessment from job
@@ -59,7 +83,7 @@ jobAssessment.delete("/:jobId/assessment", async (c) => {
     return c.json({ error: result.error.message, code: result.error.code }, 400);
   }
 
-  return c.json({ success: true });
+  return c.json({ message: "Assessment removed" });
 });
 
 export default jobAssessment;

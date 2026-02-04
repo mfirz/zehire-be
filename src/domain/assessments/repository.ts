@@ -6,7 +6,7 @@
  */
 
 import type { D1Database } from "@cloudflare/workers-types";
-import { and, eq, inArray, lt, desc } from "drizzle-orm";
+import { and, eq, inArray, lt, desc, sql } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 
 import {
@@ -179,6 +179,37 @@ export class AssessmentRepository {
 
     return this.db
       .select()
+      .from(assessmentDefinitions)
+      .where(and(...conditions))
+      .orderBy(desc(assessmentDefinitions.createdAt))
+      .all();
+  }
+
+  /**
+   * List assessment definitions with part counts (avoids N+1 for list view).
+   */
+  async listDefinitionsWithPartCounts(
+    orgId: string,
+    options?: { status?: "active" | "archived" }
+  ): Promise<Array<AssessmentDefinition & { partsCount: number }>> {
+    const conditions = [eq(assessmentDefinitions.orgId, orgId)];
+
+    if (options?.status) {
+      conditions.push(eq(assessmentDefinitions.status, options.status));
+    }
+
+    return this.db
+      .select({
+        id: assessmentDefinitions.id,
+        orgId: assessmentDefinitions.orgId,
+        name: assessmentDefinitions.name,
+        schedulingConfig: assessmentDefinitions.schedulingConfig,
+        status: assessmentDefinitions.status,
+        createdBy: assessmentDefinitions.createdBy,
+        createdAt: assessmentDefinitions.createdAt,
+        updatedAt: assessmentDefinitions.updatedAt,
+        partsCount: sql<number>`(SELECT COUNT(*) FROM assessment_parts WHERE assessment_definition_id = ${assessmentDefinitions.id})`,
+      })
       .from(assessmentDefinitions)
       .where(and(...conditions))
       .orderBy(desc(assessmentDefinitions.createdAt))
@@ -655,6 +686,16 @@ export class AssessmentRepository {
         status: status as any,
         updatedAt: now,
       })
+      .where(eq(candidateAssessments.id, id));
+  }
+
+  /**
+   * Delete a candidate assessment record.
+   * The onDelete: "cascade" on assessmentFiles handles file DB record cleanup.
+   */
+  async deleteCandidateAssessment(id: string): Promise<void> {
+    await this.db
+      .delete(candidateAssessments)
       .where(eq(candidateAssessments.id, id));
   }
 

@@ -2,7 +2,16 @@ import { Hono } from "hono";
 import type { Env } from "../../types/bindings";
 import { assessAuth, type AssessmentAuthVariables } from "../../middleware/assess-auth";
 import { AssessmentService } from "../../domain/assessments/service";
+import { JobRepository } from "../../domain/jobs/repository";
 import { ScheduleInputSchema } from "../../domain/assessments/types";
+import {
+  formatPortalResponse,
+  formatScheduleResponse,
+  formatRescheduleResponse,
+  formatStartResponse,
+  formatUploadResponse,
+  formatSubmitResponse,
+} from "../helpers/assessment-response";
 
 type AssessEnv = { Bindings: Env; Variables: AssessmentAuthVariables };
 
@@ -24,7 +33,20 @@ assess.get("/:token", async (c) => {
     return c.json({ error: result.error.message, code: result.error.code }, status);
   }
 
-  return c.json(result.data);
+  // Fetch job for company/jobTitle
+  const jobRepo = new JobRepository(c.env.DB);
+  const job = await jobRepo.findById(result.data.assessment.jobId);
+
+  return c.json({
+    data: formatPortalResponse(
+      result.data.assessment,
+      result.data.definition,
+      result.data.parts,
+      result.data.scheduling,
+      result.data.files,
+      { title: job?.title ?? "Position", companyName: job?.companyName ?? null },
+    ),
+  });
 });
 
 // POST /assess/:token/schedule — Schedule assessment
@@ -48,7 +70,7 @@ assess.post("/:token/schedule", async (c) => {
     return c.json({ error: result.error.message, code: result.error.code }, status);
   }
 
-  return c.json(result.data);
+  return c.json({ data: formatScheduleResponse(result.data) });
 });
 
 // POST /assess/:token/reschedule — Reschedule assessment
@@ -72,7 +94,13 @@ assess.post("/:token/reschedule", async (c) => {
     return c.json({ error: result.error.message, code: result.error.code }, status);
   }
 
-  return c.json(result.data);
+  // Fetch scheduling config for maxReschedules
+  const jobAssessment = await service.getJobAssessment(result.data.jobId);
+  const maxReschedules = jobAssessment.success && jobAssessment.data
+    ? jobAssessment.data.scheduling.maxReschedules
+    : 2;
+
+  return c.json({ data: formatRescheduleResponse(result.data, maxReschedules) });
 });
 
 // POST /assess/:token/start — Start the assessment (transition to in_progress)
@@ -87,7 +115,7 @@ assess.post("/:token/start", async (c) => {
     return c.json({ error: result.error.message, code: result.error.code }, status);
   }
 
-  return c.json(result.data);
+  return c.json({ data: formatStartResponse(result.data) });
 });
 
 // POST /assess/:token/parts/:partId/files — Upload file
@@ -129,7 +157,7 @@ assess.post("/:token/parts/:partId/files", async (c) => {
     return c.json({ error: result.error.message, code: result.error.code }, status);
   }
 
-  return c.json(result.data, 201);
+  return c.json({ data: formatUploadResponse(result.data) }, 201);
 });
 
 // DELETE /assess/:token/parts/:partId/files/:fileId — Delete file
@@ -148,7 +176,7 @@ assess.delete("/:token/parts/:partId/files/:fileId", async (c) => {
     return c.json({ error: result.error.message, code: result.error.code }, status);
   }
 
-  return c.json({ success: true });
+  return c.json({ message: "File deleted" });
 });
 
 // POST /assess/:token/submit — Submit assessment
@@ -166,7 +194,7 @@ assess.post("/:token/submit", async (c) => {
     return c.json({ error: result.error.message, code: result.error.code }, status);
   }
 
-  return c.json(result.data);
+  return c.json({ data: formatSubmitResponse(result.data) });
 });
 
 export default assess;
