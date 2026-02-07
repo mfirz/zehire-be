@@ -66,13 +66,13 @@ export class AuthService {
    * @returns Success or error result
    */
   async login(email: string): Promise<LoginResult> {
+    // Normalize email before validation (trim whitespace, lowercase)
+    const normalizedEmail = email.toLowerCase().trim();
+
     // Validate email format
-    if (!this.isValidEmail(email)) {
+    if (!this.isValidEmail(normalizedEmail)) {
       return { success: false, error: "INVALID_EMAIL" };
     }
-
-    // Normalize email
-    const normalizedEmail = email.toLowerCase().trim();
 
     // Check if user exists
     const user = await this.findUserByEmail(normalizedEmail);
