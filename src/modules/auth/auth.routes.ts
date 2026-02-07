@@ -35,7 +35,7 @@ import {
   type VideoTokens,
 } from "../../domain/video";
 import { InterviewerRepository } from "../../domain/interviewers";
-import { encryptTokens } from "../../lib/crypto";
+import { encryptTokens, createSignedState, verifySignedState } from "../../lib/crypto";
 import { createDb, orgs } from "../../db";
 import { eq } from "drizzle-orm";
 import { createSSOProvider, isSupportedSSOProvider, type SSOProviderType } from "./sso";
@@ -251,8 +251,23 @@ export function createAuthRoutes(): Hono<{ Bindings: Env }> {
     }
 
     try {
-      // Decode and parse state
-      const stateData = JSON.parse(atob(state)) as { token: string; provider: CalendarProviderType };
+      // Verify HMAC signature and decode state
+      const stateData = await verifySignedState<{ token: string; provider: CalendarProviderType }>(
+        state,
+        c.env.AUTH_JWT_SECRET,
+      );
+
+      if (!stateData) {
+        return c.json(
+          {
+            error: {
+              code: "INVALID_STATE",
+              message: "Invalid or tampered state parameter",
+            },
+          },
+          400
+        );
+      }
 
       // Verify provider matches
       if (stateData.provider !== providerType) {
@@ -313,23 +328,22 @@ export function createAuthRoutes(): Hono<{ Bindings: Env }> {
       console.error("Calendar OAuth callback error:", err);
 
       // Try to redirect with error, but handle case where state is invalid
-      try {
-        const stateData = JSON.parse(atob(state)) as { token: string };
+      const fallbackState = await verifySignedState<{ token: string }>(state, c.env.AUTH_JWT_SECRET);
+      if (fallbackState?.token) {
         const appBaseUrl = c.env.APP_BASE_URL || "";
         return c.redirect(
-          `${appBaseUrl}/i/${stateData.token}?error=${encodeURIComponent("Failed to connect calendar")}`
-        );
-      } catch {
-        return c.json(
-          {
-            error: {
-              code: "OAUTH_ERROR",
-              message: err instanceof Error ? err.message : "OAuth callback failed",
-            },
-          },
-          500
+          `${appBaseUrl}/i/${fallbackState.token}?error=${encodeURIComponent("Failed to connect calendar")}`
         );
       }
+      return c.json(
+        {
+          error: {
+            code: "OAUTH_ERROR",
+            message: err instanceof Error ? err.message : "OAuth callback failed",
+          },
+        },
+        500
+      );
     }
   });
 
@@ -362,8 +376,23 @@ export function createAuthRoutes(): Hono<{ Bindings: Env }> {
     }
 
     try {
-      // Decode and parse state
-      const stateData = JSON.parse(atob(state)) as { orgId: string; provider: VideoProviderType };
+      // Verify HMAC signature and decode state
+      const stateData = await verifySignedState<{ orgId: string; provider: VideoProviderType }>(
+        state,
+        c.env.AUTH_JWT_SECRET,
+      );
+
+      if (!stateData) {
+        return c.json(
+          {
+            error: {
+              code: "INVALID_STATE",
+              message: "Invalid or tampered state parameter",
+            },
+          },
+          400
+        );
+      }
 
       // Verify provider matches
       if (stateData.provider !== providerType) {
@@ -452,14 +481,14 @@ export function createAuthRoutes(): Hono<{ Bindings: Env }> {
       // Create SSO provider
       const provider = createSSOProvider(providerType as SSOProviderType, c.env);
 
-      // Generate state with return URL for CSRF protection
-      const state = btoa(
-        JSON.stringify({
+      // Generate HMAC-signed state for CSRF protection and integrity
+      const state = await createSignedState(
+        {
           returnUrl,
           provider: providerType,
-          // Add random nonce for additional security
           nonce: crypto.randomUUID(),
-        })
+        },
+        c.env.AUTH_JWT_SECRET,
       );
 
       // Redirect to provider authorization URL
@@ -497,15 +526,14 @@ export function createAuthRoutes(): Hono<{ Bindings: Env }> {
     }
 
     try {
-      // Decode and parse state
-      let stateData: { returnUrl: string; provider: string; nonce: string };
-      try {
-        stateData = JSON.parse(atob(state)) as {
-          returnUrl: string;
-          provider: string;
-          nonce: string;
-        };
-      } catch {
+      // Verify HMAC signature and decode state
+      const stateData = await verifySignedState<{
+        returnUrl: string;
+        provider: string;
+        nonce: string;
+      }>(state, c.env.AUTH_JWT_SECRET);
+
+      if (!stateData) {
         return c.redirect(`${appBaseUrl}/login?error=invalid_state`);
       }
 

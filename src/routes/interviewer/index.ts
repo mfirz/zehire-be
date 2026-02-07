@@ -37,6 +37,7 @@ import {
 } from "../../domain/scheduling";
 import type { Interviewer } from "../../db";
 import type { Env } from "../../types/bindings";
+import { createSignedState } from "../../lib/crypto";
 
 // Variables available in the interviewer context
 interface InterviewerVariables {
@@ -303,9 +304,11 @@ interviewerRoutes.get("/:token/connect/:provider", async (c) => {
     // Create provider and get authorization URL
     const provider = createCalendarProvider(providerType, c.env as unknown as Record<string, string>);
 
-    // State contains the magic token and provider for callback verification
-    const state = JSON.stringify({ token, provider: providerType });
-    const encodedState = btoa(state);
+    // HMAC-signed state for callback verification and integrity
+    const encodedState = await createSignedState(
+      { token, provider: providerType },
+      c.env.AUTH_JWT_SECRET,
+    );
 
     const authUrl = provider.getAuthorizationUrl(encodedState);
 

@@ -22,6 +22,7 @@ import { createDb, orgs } from "../../../db";
 import { jwtAuth } from "../../../middleware/auth";
 import type { AuthVariables, Env } from "../../../types/bindings";
 import { createVideoProvider, type VideoProviderType } from "../../../domain/video";
+import { createSignedState } from "../../../lib/crypto";
 
 const organizationsRoute = new Hono<{
   Bindings: Env;
@@ -177,9 +178,11 @@ organizationsRoute.get("/video/:provider/connect", async (c) => {
     // Create provider and get authorization URL
     const provider = createVideoProvider(providerType, c.env as unknown as Record<string, string>);
 
-    // State contains org ID and provider for callback verification
-    const state = JSON.stringify({ orgId, provider: providerType });
-    const encodedState = btoa(state);
+    // HMAC-signed state for callback verification and integrity
+    const encodedState = await createSignedState(
+      { orgId, provider: providerType },
+      c.env.AUTH_JWT_SECRET,
+    );
 
     const authUrl = provider.getAuthorizationUrl(encodedState);
 
