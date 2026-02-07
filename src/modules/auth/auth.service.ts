@@ -206,7 +206,9 @@ export class AuthService {
     // Try Authorization header first (Bearer token)
     const bearerToken = this.sessionService.extractTokenFromAuthHeader(authHeader);
     if (bearerToken) {
-      return this.sessionService.verifySession(bearerToken);
+      const claims = await this.sessionService.verifySession(bearerToken);
+      if (claims) return claims;
+      // Fall through to try cookie if Bearer verification failed
     }
 
     // Fall back to Cookie
