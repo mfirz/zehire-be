@@ -159,6 +159,13 @@ export {
   type NewSchedulingToken,
 } from "./interviews";
 
+// Rate Limits
+export {
+  rateLimits,
+  type RateLimit,
+  type NewRateLimit,
+} from "./rate-limits";
+
 // Assessments (Phase 10)
 export {
   // Tables
