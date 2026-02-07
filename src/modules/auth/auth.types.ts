@@ -139,6 +139,7 @@ export const AUTH_ERROR_CODES = [
   "TOKEN_ALREADY_USED",
   "UNAUTHORIZED",
   "FORBIDDEN",
+  "RATE_LIMITED",
 ] as const;
 
 export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[number];

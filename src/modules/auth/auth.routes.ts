@@ -39,6 +39,7 @@ import { encryptTokens } from "../../lib/crypto";
 import { createDb, orgs } from "../../db";
 import { eq } from "drizzle-orm";
 import { createSSOProvider, isSupportedSSOProvider, type SSOProviderType } from "./sso";
+import { loginRateLimiter } from "../../middleware/rate-limit";
 
 // =============================================================================
 // SCHEMAS
@@ -61,7 +62,7 @@ export function createAuthRoutes(): Hono<{ Bindings: Env }> {
   // ===========================================================================
   // POST /auth/login
   // ===========================================================================
-  auth.post("/login", async (c) => {
+  auth.post("/login", loginRateLimiter, async (c) => {
     // Parse and validate request body
     const body: unknown = await c.req.json();
     const parseResult = LoginRequestSchema.safeParse(body);
@@ -625,6 +626,7 @@ function getErrorMessage(code: string): string {
     TOKEN_ALREADY_USED: "Token has already been used",
     UNAUTHORIZED: "Not authenticated",
     FORBIDDEN: "Access denied",
+    RATE_LIMITED: "Too many requests. Please try again later.",
   };
   return messages[code] ?? "An error occurred";
 }
