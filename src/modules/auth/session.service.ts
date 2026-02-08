@@ -88,7 +88,7 @@ export class SessionService {
 
       // Check expiration
       const now = Math.floor(Date.now() / 1000);
-      if (payload.exp < now) {
+      if (payload.exp <= now) {
         return null;
       }
 
