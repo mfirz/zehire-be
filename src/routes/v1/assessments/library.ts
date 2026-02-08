@@ -10,7 +10,10 @@ const library = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 // GET /v1/assessments — List assessment definitions for the org
 library.get("/", async (c) => {
   const user = c.get("user");
-  const status = c.req.query("status") as "active" | "archived" | undefined;
+  const status = c.req.query("status");
+  if (status !== undefined && status !== "active" && status !== "archived") {
+    return c.json({ error: "Invalid status. Must be 'active' or 'archived'.", code: "VALIDATION_ERROR" }, 400);
+  }
 
   const service = new AssessmentService(c.env.DB);
   const result = await service.listAssessmentsWithCounts(user.orgId, status);
