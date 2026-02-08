@@ -66,13 +66,13 @@ export class AuthService {
    * @returns Success or error result
    */
   async login(email: string): Promise<LoginResult> {
+    // Normalize email before validation (trim whitespace, lowercase)
+    const normalizedEmail = email.toLowerCase().trim();
+
     // Validate email format
-    if (!this.isValidEmail(email)) {
+    if (!this.isValidEmail(normalizedEmail)) {
       return { success: false, error: "INVALID_EMAIL" };
     }
-
-    // Normalize email
-    const normalizedEmail = email.toLowerCase().trim();
 
     // Check if user exists
     const user = await this.findUserByEmail(normalizedEmail);
@@ -206,7 +206,9 @@ export class AuthService {
     // Try Authorization header first (Bearer token)
     const bearerToken = this.sessionService.extractTokenFromAuthHeader(authHeader);
     if (bearerToken) {
-      return this.sessionService.verifySession(bearerToken);
+      const claims = await this.sessionService.verifySession(bearerToken);
+      if (claims) return claims;
+      // Fall through to try cookie if Bearer verification failed
     }
 
     // Fall back to Cookie
