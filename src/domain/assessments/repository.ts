@@ -6,7 +6,7 @@
  */
 
 import type { D1Database } from "@cloudflare/workers-types";
-import { and, eq, inArray, lt, desc, sql } from "drizzle-orm";
+import { and, eq, inArray, like, lt, desc, sql } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 
 import {
@@ -190,12 +190,16 @@ export class AssessmentRepository {
    */
   async listDefinitionsWithPartCounts(
     orgId: string,
-    options?: { status?: "active" | "archived" }
+    options?: { status?: "active" | "archived"; search?: string }
   ): Promise<Array<AssessmentDefinition & { partsCount: number }>> {
     const conditions = [eq(assessmentDefinitions.orgId, orgId)];
 
     if (options?.status) {
       conditions.push(eq(assessmentDefinitions.status, options.status));
+    }
+
+    if (options?.search) {
+      conditions.push(like(assessmentDefinitions.name, `%${options.search}%`));
     }
 
     return this.db
