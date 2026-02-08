@@ -172,6 +172,21 @@ export class AssessmentService {
     input: UpdateAssessmentInput
   ): Promise<AssessmentServiceResult<{ definition: AssessmentDefinition; parts: AssessmentPart[] }>> {
     if (input.status === "archived") {
+      // Check current status before archiving
+      const current = await this.repo.getDefinition(id, orgId);
+      if (!current) {
+        return {
+          success: false,
+          error: { code: "ASSESSMENT_NOT_FOUND", message: "Assessment not found" },
+        };
+      }
+      if (current.status === "archived") {
+        return {
+          success: false,
+          error: { code: "ALREADY_ARCHIVED", message: "Assessment is already archived" },
+        };
+      }
+
       await this.repo.archiveDefinition(id, orgId);
 
       // Re-fetch after archiving

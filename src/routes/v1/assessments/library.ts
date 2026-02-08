@@ -82,6 +82,9 @@ library.patch("/:id", async (c) => {
     if (result.error.code === "ASSESSMENT_NOT_FOUND") {
       return c.json({ error: result.error.message, code: result.error.code }, 404);
     }
+    if (result.error.code === "ALREADY_ARCHIVED") {
+      return c.json({ error: result.error.message, code: result.error.code }, 409);
+    }
     return c.json({ error: result.error.message, code: result.error.code }, 400);
   }
 
