@@ -138,9 +138,17 @@ export class AssessmentService {
    */
   async listAssessmentsWithCounts(
     orgId: string,
-    status?: "active" | "archived"
+    status?: "active" | "archived",
+    search?: string
   ): Promise<AssessmentServiceResult<Array<AssessmentDefinition & { partsCount: number }>>> {
-    const definitions = await this.repo.listDefinitionsWithPartCounts(orgId, status ? { status } : undefined);
+    const options: { status?: "active" | "archived"; search?: string } = {};
+    if (status) options.status = status;
+    if (search) options.search = search;
+
+    const definitions = await this.repo.listDefinitionsWithPartCounts(
+      orgId,
+      Object.keys(options).length > 0 ? options : undefined
+    );
 
     const parsed = definitions.map((def) => ({
       ...def,

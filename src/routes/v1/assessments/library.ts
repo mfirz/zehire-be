@@ -11,9 +11,10 @@ const library = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 library.get("/", async (c) => {
   const user = c.get("user");
   const status = c.req.query("status") as "active" | "archived" | undefined;
+  const search = c.req.query("search");
 
   const service = new AssessmentService(c.env.DB);
-  const result = await service.listAssessmentsWithCounts(user.orgId, status);
+  const result = await service.listAssessmentsWithCounts(user.orgId, status, search);
 
   if (!result.success) {
     return c.json({ error: result.error.message, code: result.error.code }, 400);
