@@ -19,18 +19,19 @@ Zehire is a hiring platform backend built on Cloudflare Workers with:
 src/
 ├── app.ts                  # Hono app with route mounting
 ├── index.ts                # Worker entry point (fetch, queue, scheduled)
-├── config/cache.ts         # Cache configuration
+├── config/cache.ts         # Cache configuration (version-based keys, TTLs)
 ├── db/
 │   ├── client.ts           # createDb() helper
-│   ├── schema/             # Drizzle schema (sqliteTable, text IDs via nanoid)
-│   │   ├── applications.ts # Applications, answers, drafts, notes, events
-│   │   ├── assessments.ts  # Definitions, parts, job links, candidate assessments, files
-│   │   ├── billing.ts      # Billing events, pricing history, periods
-│   │   ├── custom-questions.ts # Custom questions, answers, CV data tables
-│   │   ├── interviews.ts   # Interviewers, availability, stages, scheduled interviews
-│   │   ├── jobs.ts, orgs.ts, users.ts, rate-limits.ts
-│   │   └── index.ts        # Re-exports all tables and types
-│   └── utils.ts
+│   ├── index.ts            # Re-exports db utilities
+│   ├── utils.ts            # Database utilities
+│   └── schema/             # Drizzle schema (sqliteTable, text IDs via nanoid)
+│       ├── applications.ts # Applications, answers, drafts, notes, events
+│       ├── assessments.ts  # Definitions, parts, job links, candidate assessments, files
+│       ├── billing.ts      # Billing events, pricing history, periods
+│       ├── custom-questions.ts # Custom questions, answers, CV data tables
+│       ├── interviews.ts   # Interviewers, availability, stages, scheduled interviews
+│       ├── jobs.ts, orgs.ts, users.ts, rate-limits.ts
+│       └── index.ts        # Re-exports all tables and types
 ├── domain/                 # Business logic (services + repositories)
 │   ├── applications/       # Application management, CV download
 │   ├── assessments/        # Assessment definitions, candidate lifecycle, file uploads
@@ -42,37 +43,56 @@ src/
 │   ├── interview-stages/   # Interview stage config
 │   ├── interviewers/       # Interviewer CRUD, magic tokens
 │   ├── jobs/               # Job CRUD, archetypes, question generation, pipeline advisor
+│   │   └── archetypes/     # Role templates for LLM inference (registry, inference, rendering)
 │   ├── pipeline/           # Pipeline recommendation (LLM-powered)
 │   ├── scheduling/         # Interview scheduling, tokens, feedback
 │   ├── signals/            # Signal extraction, aggregation, posture computation
 │   └── video/              # Video call providers (Zoom, calendar-native)
 ├── lib/
-│   ├── crypto/             # Token encryption (AES-256-GCM)
+│   ├── crypto/             # Token encryption (AES-256-GCM), OAuth state signing (HMAC)
 │   ├── llm/                # LLM abstraction (Workers AI, Anthropic, Groq)
-│   └── tiptap/             # Rich text rendering
+│   └── tiptap/             # Rich text validation, extraction, HTML rendering
 ├── middleware/
 │   ├── auth.ts             # jwtAuth + apiKeyAuth
 │   ├── assess-auth.ts      # Assessment token auth
 │   └── rate-limit.ts       # D1-based rate limiting
 ├── modules/
 │   ├── auth/               # Auth service, session (JWT), token, SSO (Google)
+│   │   └── sso/providers/  # SSO provider implementations
 │   └── email/              # Email gateway (AWS SES)
-├── queue/consumer.ts       # Queue message handler
+│       └── providers/ses/  # SES client implementation
+├── queue/consumer.ts       # Queue message handler (retry + exponential backoff)
 ├── routes/
 │   ├── assess/             # Candidate assessment portal (/assess/:token)
-│   ├── helpers/            # Response formatters
-│   ├── internal/           # Health check (/internal/health)
+│   ├── helpers/            # Response formatters (assessment-response.ts)
+│   ├── internal/health/    # Health check (/internal/health)
 │   ├── interviewer/        # Interviewer self-service (/i/:token)
 │   ├── oauth/              # OAuth callbacks (/oauth/callback)
-│   ├── public/             # Public job pages + apply (/public/jobs/:slug)
+│   ├── public/jobs/        # Public job pages + apply (/public/jobs/:slug)
 │   ├── schedule/           # Candidate self-scheduling (/schedule/:token)
-│   └── v1/                 # Authenticated API (jobs, applications, assessments, billing, etc.)
+│   └── v1/                 # Authenticated API
+│       ├── root/           # GET /v1
+│       ├── jobs/           # Full job lifecycle, pipeline, custom questions, assessments
+│       ├── applications/   # Application details, CV, notes, timeline, scheduling
+│       ├── assessments/    # Assessment library, file downloads
+│       ├── billing/        # Usage, preview, invoices
+│       ├── interviewers/   # Interviewer CRUD
+│       ├── organizations/  # Org settings, video provider management
+│       ├── candidates/     # Cross-application lookup
+│       ├── custom-questions/ # LLM signal suggestion
+│       └── capacity.ts     # Org capacity endpoint
 ├── scheduled/              # Cron handlers (reminders, assessment expiration)
-└── types/bindings.ts       # Env interface, queue types, status enums
+└── types/
+    ├── bindings.ts         # Env interface, queue types, status enums
+    └── index.ts            # Shared type exports
 migrations/                 # Sequential SQL migrations (0000-0010)
 seeds/seed_dev.sql          # Development seed data
 test/                       # Assessment integration tests (vitest + cloudflare pool)
-tests/edge-cases/auth/      # Auth edge-case tests
+│   ├── assessment/         # Ordered test suites (1-library through 5-resend-invite)
+│   └── helpers/            # Test seed data, time utilities
+tests/edge-cases/           # Edge-case tests
+    ├── auth/               # Auth service, routes, middleware, session, token, rate-limit, OAuth state
+    └── assessments-*.ts    # Assessment API and status validation edge cases
 ```
 
 ## API Routes
@@ -113,6 +133,7 @@ tests/edge-cases/auth/      # Auth edge-case tests
 - Files: `GET /files/:fileId` -- Download assessment file from R2
 
 **Other v1**
+- `GET /v1` -- API root
 - `GET /v1/candidates/lookup?email=` -- Cross-application lookup
 - `GET /v1/capacity` -- Org capacity (active jobs)
 - `POST /v1/custom-questions/suggest-signals` -- LLM signal suggestion
@@ -167,6 +188,12 @@ tests/edge-cases/auth/      # Auth edge-case tests
 - Email: AWS SES via custom gateway in `src/modules/email/`
 - Env bindings: `src/types/bindings.ts` -- `Env`, `AuthVariables`, queue message unions
 - `c.executionCtx.waitUntil()` for fire-and-forget cleanup (wrap in try/catch for tests)
+- LLM providers: Workers AI (free, default), Anthropic, Groq -- selected via `LLM_PROVIDER` env var
+- OAuth state: HMAC-signed to prevent CSRF (`src/lib/crypto/oauth-state.ts`)
+- OAuth tokens: AES-256-GCM encrypted at rest (`src/lib/crypto/tokens.ts`)
+- Assessment snapshots: Definitions frozen at job publish time for immutability
+- Queue consumer: Built-in retry with exponential backoff (max 3 retries)
+- Cron (hourly): Interview reminders (24h before), feedback reminders (2h after), assessment expirations
 
 ## D1 Database Optimization Guidelines
 
